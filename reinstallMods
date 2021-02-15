@@ -1,0 +1,57 @@
+#!/bin/sh
+
+# reinstalMods will reinstall customizations to Venus following a software update
+# Refer to the ReadMe for more details
+#
+
+# get the full path to this script
+scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+shortScriptName=$(basename "$scriptDir")/$(basename "$0")
+
+source "$scriptDir/LogHandler"
+
+# disable outputting log messaged to console and package log
+runningAtBoot=true
+
+pruneSetupLogFile
+
+# reinstallScriptsList is hard coded to the location below
+# if changed, it needs to atch in CommonResources, all setup scripts
+# and reinstallMods
+reinstallScriptsList="/data/reinstallScriptsList"
+
+exitReboot=123
+exitSuccess=0
+
+pruneLogFile
+
+if [ ! -f "$reinstallScriptsList" ] ; then
+    logMessage "$reinstallScriptsList file not found"
+    exit
+fi
+
+# read lines from script list file specified above
+# and call each script
+rebootNeeded=false
+while read line ; do
+    # ignore blank and comment lines
+    if [ ! -z "$line" ] && ! [[ "$line" == \#* ]]; then
+        # strip command parameters to make sure the path/command exists
+        command=$(awk '{print var $1}' <<< $line)
+        if [ -f $command ] ; then
+            $line
+            if [ $? == $exitReboot ] ; then
+                logMessage "$command requested reboot"
+                rebootNeeded=true
+            fi
+        else
+            logMessage "$command not found"
+        fi
+    fi
+done < "$reinstallScriptsList"
+
+# reboot now if any script reboots were indicated
+if $rebootNeeded ; then
+    logMessage "rebooting ..."
+    reboot
+fi

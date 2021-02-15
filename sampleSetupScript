@@ -1,0 +1,172 @@
+#!/bin/bash
+
+# this is a sample script that can be called from reinstallMods
+#
+# CommonResources provides:
+#   code to determine if it was called from reinstallMods or manually from a command line
+#   code to insert the script into scriptsList
+#   code to control exitting the program or processing by reinstallMods
+#    or prompting the user
+#
+#   functions to make it easier to install and remove modified files from Venus
+#
+#   The SetupHelper package includes CommonRewources and a script to reinstall programs
+#   after a Venus software update
+#   SetupHelper should be installed before running this script
+#
+# Refer to the SetupHelper ReadMe file for details.
+#
+# key segments are marked with ####
+
+#### following lines incorporate SetupHelper utilities into this script
+# Refer to the SetupHelper ReadMe file for details.
+    
+# CommonResources sets $okToProceed and $reinstall
+# among other varables and functions useful to this script
+
+source "/data/SetupHelper/CommonResources"
+
+if [ $scriptAction == 'EXIT' ] ; then
+    exit
+fi
+
+checkFileSets
+
+#### end of lines to include SetupHelper
+
+#### running manually and OK to proceed - prompt for input
+if [ $scriptAction == 'NONE' ] ; then
+    # display innitial message
+    echo
+    echo "explain purpose of this package"
+    echo
+    echo "Available actions:"
+    echo "  Install and activate (i)"
+    echo "  Uninstall (u) and restores all files to stock"
+    echo "  Quit (q) without further action"
+    if [ ! -z $logFile ]; then
+        echo "  Display Log (l) outputs the last 100 lines of the log"
+    fi
+    echo
+    while [ -z $userAction ] || ! ( [ $userAction == 'i' ] || [ $userAction == 'u' ]\
+                || [ $userAction == 'q' ] || [ $userAction == 'l' ] )
+    do
+        /bin/echo -n "Choose an action from the list above: "
+        read userAction
+    done
+
+    if [ $userAction == 'q' ]; then
+        exit
+    fi
+
+    # display log (if specified) and exit
+    if [ $userAction == 'l' ]; then
+        displayLog $logFile
+        exit
+    fi
+
+    #### prompt for additional parameters - do all prompting before starting any work
+    if [ $userAction == 'i' ]; then
+        scriptAction='INSTALL'
+        echo
+        echo "The widget:"
+        echo "  1) does something"
+        echo "  2) and something else"
+        echo
+        response=""
+        while [ -z $response ] || ! ( [ $response == 'y' ] || [ $response == 'n' ] )
+        do
+            /bin/echo -n "Do you wish to install the widget? (y/n): "
+            read response
+        done
+        
+        #### save parameters in persistent storage for reinstall
+        if [ $response == 'y' ]; then
+            touch $scriptDir/param1
+        else
+            rm -f $scriptDir/param1
+        fi
+        
+        foo ='bar'
+        
+        echo $foo >  $scriptDir/param2
+    fi
+    
+    # typically, the only other action is uninstall but add other options here
+    elif [ $userAction == 'u' ]; then
+        scriptAction='UNINSTALL'
+    fi
+fi
+
+#### install code goes here
+if [ $scriptAction == 'INSTALL' ] ; then
+    # get parameters from files
+    if [ -f $scriptDir/param1 ] ; then
+        param1=true
+    else
+        param1=false
+    fi
+    foo=$(cat $scriptDir/param2)
+
+    #### code to install/activate package goes here
+    # below is example code to set flags used for exiting
+
+    # sample calls to install the package files - original files are backed up for restore during uninstall
+    #   updateActiveFile $venusDirectory/activeFile1    
+    #   copyToActiveFile $someDirectory/replacementFile2 $venusDirectory/activeFile2  
+
+    # sample flags
+    something=false
+    something2=false
+    something3=false
+
+
+    # if some processing requires a reboot, set the flag then process it later
+    if $something ; then
+        rebootNeeded=true
+    fi
+
+    # if some processing requires restarting services, etc, set the flag then process it later
+    if $something2 ; then
+        restartAppsNeeded=true
+    fi
+
+    # if some processing requires running this script on the next reboot, set the flag then process it later
+    if $something3 ; then
+        runAgain=true
+    fi
+fi
+# #### uninstalling - check scriptAction again
+# if an install step failed package needs to be removed
+if [ $scriptAction == 'UNINSTALL' ] ; then
+    #### code to uninstall and deactivate package goes here
+
+    # sample calls to restore files to stock
+    #   restoreActiveFile $venusDirectory/activeFile1    
+    #   restoreActiveFile $venusDirectory/activeFile2  
+    #   restoreActiveFile $venusDirectory/activeFile3
+    
+    # set exit flags as needed
+    rebootNeeded=false
+    restartAppsNeeded=true
+    runAgain=false
+fi
+
+#### save parameters from manual run in files so next run from reinstallMods knows what to do
+if ! $reinstall ; then
+    if $param1 ;then
+        touch "$scriptDir/$param1File"
+    else
+        rm -f "$scriptDir/$param1File"
+    fi
+    # etc ....
+fi
+
+#### add code to restart apps and services here
+if $restartAppsNeeded ; then
+    echo restarting apps
+    killall foo # sample restart line(s)
+fi
+
+# thats all folks - SCRIPT EXITS INSIDE THE FUNCTION
+endScript

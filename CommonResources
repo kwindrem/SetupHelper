@@ -1,0 +1,514 @@
+# CommonResources for SetupHelper
+# contains a functions and variables necessare for a setup script to interface with reinstallMods
+#
+# Refer to the SetupHelper ReadMe file for details on how to use these resources.
+
+# get the full, unambiguous path to this script
+scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+shortScriptName=$(basename "$scriptDir")/$(basename "$0")
+fullScriptName="$scriptDir/$(basename "$0")"
+
+source "/data/SetupHelper/LogHandler"
+
+reinstallParam="reinstall"
+installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
+
+# what action the script should take:
+#  NONE - do noting
+#  INSTALL - install package components
+#  UNINSTALL - remove package components
+#  EXIT - exit script immediately
+# CommonResources may set the the action if initial checks
+# indicate a clear direction
+# otherwise, the action will set based on user input (in the script)
+# if failures occur during installation,
+# scriptAction should be changed to UNINSTALL so the installation can be cleaned up
+# and the setup script should test for UNINSTALL after it attempts installation
+
+scriptAction='NONE'
+
+# flags to control setup script exit behavior
+rebootNeeded=false
+runAgain=false
+filesUpdated=false
+restartGui=false
+
+# check for reinstall (first parameter to setup script command line)
+# set $scriptAction to control work following the source command
+if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
+    if [ -f "$installedFlag" ]; then
+        scriptAction='EXIT'
+    else
+        scriptAction='INSTALL'
+    fi
+    runningAtBoot=true
+# not a reinstall, ignore the installed flag and continue with MANUAL installation
+else
+    runningAtBoot=false
+fi
+
+
+venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
+
+fileSets="$scriptDir/FileSets"
+
+reinstallScriptsList="/data/reinstallScriptsList"
+
+configFile="/u-boot/config.txt"
+
+# defined exit codes - must be consistent between all setup scripts and reinstallMods
+exitReboot=123
+exitSuccess=0
+
+
+# standardActionPrompt provides the standard set of options for selecting script's action
+# scriptAction is set by install/uninstall
+# other actions are handled locally, including quitting from the script
+#
+# if nonstandard prompts are necessary, duplicate this code in the setup script
+# and add the additional options and do not call standardActionPrompt
+
+standardActionPrompt ()
+{
+    echo
+    echo "Available actions:"
+    echo "  Install and activate (i)"
+    echo "  Uninstall (u) and restores all files to stock"
+    echo "  Quit (q) without further action"
+    echo "  Display setup log (s) outputs the last 100 lines of the log"
+    if [ ! -z $logFile ]; then
+        echo "  Display Log (l) outputs the last 100 lines of the log"
+    fi
+    echo
+    response=''
+    while true; do
+        /bin/echo -n "Choose an action from the list above: "
+        read response
+        case $response in
+            [iI]*)
+                scriptAction='INSTALL'
+                break
+                ;;
+            [uU]*)
+                scriptAction='UNINSTALL'
+                break
+                ;;
+            [qQ]*)
+                exit
+                ;;
+            [lL]*)
+                displayLog $packageLogFile
+                ;;
+            [sS]*)
+                displayLog $setupLogFile
+                ;;
+            *)
+        esac
+    done
+
+}
+
+# yesNoPrompt provides user prompting requesting a yes/no response
+#
+# $1 is the prompt displayed when pausing for user input
+#
+# $yesResponse is set to true if the response was yes
+
+yesNoPrompt ()
+{
+    response=''
+    while true; do
+        /bin/echo -n "$*"
+        read response
+        case $response in
+            [yY]*)
+                yesResponse=true
+                break
+                ;;
+            [nN]*)
+                yesResponse=false
+                break
+                ;;
+            *)
+        esac
+    done
+}
+
+
+
+# backupActiveFile makes a copy of the active file in file.orig
+# if the original file does not exist, no backup is made
+# BUT sets a flag file that will cause restoreFile to delete the active copy
+#
+# $1 is the full path/file name to be backed up
+
+backupActiveFile ()
+{
+    backupExisted=false
+    baseName=$(basename $1)
+    if [ -e "$1.orig" ] || [ -e "$1.noOrig" ]; then
+        mayHaveBeenUpdated=true
+    elif [ ! -f "$1" ]; then
+        touch "$1.noOrig"
+    else
+        cp "$1" "$1.orig"
+        rm -f "$1.noOrig"
+    fi
+}
+
+
+# updateActiveFile first backs up the active file
+# then copies the replacement (aka source) to the active file location (aka destination)
+#
+# two variations:
+#
+# updateActiveFile activeFile
+#   an attempt is made to locate the source (replacement)
+#   in the version directory or FileSets
+#
+# updateActiveFile sourceFile activeFile
+#   a separate source (replacement) file is specified
+#     either as a full path to the actual file
+#     or as the basename of a file to be found in the version directory or FileSets
+
+updateActiveFile ()
+{
+    versionDir="$fileSets/$venusVersion"
+    sourceFound=false
+    thisFileUpdated=false
+
+    sourceFile="$1"
+
+    # separate replacement file specified
+    if [ $# == 2 ]; then
+        if [ -f "$sourceFile" ]; then
+            sourceFound=true
+        fi
+        destinationFile="$2"
+    # use active file for both source and destination
+    else
+        destinationFile="$1"
+    fi
+    
+    # look for source in FileSets
+    if ! $sourceFound ; then
+        sourceFile="$(basename "$sourceFile")"
+        # found in version directory
+        if [ -f "$versionDir/$sourceFile" ]; then
+            sourceFile="$versionDir/$sourceFile"
+            sourceFound=true
+        elif  [ -f "$fileSets/$sourceFile" ]; then
+            sourceFile="$fileSets/$sourceFile"
+            sourceFound=true
+        fi
+    fi
+
+    if [ ! -f "$sourceFile" ]; then
+        logMessage "no replacement file for $baseName - can't continue"
+        scriptAction='UNINSTALL'
+    else
+        backupActiveFile "$destinationFile"
+        # package may already have been installed - check to see
+        needToUpdate=true
+        if $mayHaveBeenUpdated ; then
+            cmp -s "$sourceFile" "$destinationFile" > /dev/null
+            # already updated - no change to active file
+            if [ $? == 0 ]; then
+                needToUpdate=false
+            fi
+        fi
+        if $needToUpdate ; then
+            cp "$sourceFile" "$destinationFile"
+            filesUpdated=true
+            thisFileUpdated=true
+        fi
+    fi
+}
+
+
+# restoreActiveFile moves the backup copy to the active location
+# if the backup copy doesn't exist BUT the noOrig flag is set
+# the active copy is deleted to restore the system to stock
+# $1 is the active name, the one to be backed up
+
+restoreActiveFile ()
+{
+    thisFileUpdated=false
+
+    baseName="$(basename $1)"
+    if [ -e "$1.orig" ]; then
+        mv "$1.orig" "$1"
+        rm -f "$1.noOrig"
+        filesUpdated=true
+        thisFileUpdated=false
+    elif [ -f "$1.noOrig" ]; then
+        rm -f "$1"
+        rm -f "$1.noOrig"
+        filesUpdated=true
+        thisFileUpdated=true
+    fi
+}
+
+
+# removeDuplicateFiles removes redundant files in the replacement file set
+#
+# It walks through the directory tree and identifies duplicate files.
+# These duplicates are replaced by symbolic links as an indication of the duplicate,
+# to make future checks faster and save file system space
+#
+# It is called for each file in 'fileList' from checkFileSets
+
+removeDuplicateFiles ()
+{
+    baseName=$(basename "$1")
+    ((index1 = -1))
+    ((lastLinkedIndex = 0))
+    while true ; do
+        ((index1++))
+        ver1=$(basename "${versionList[$index1]}")
+        # end of list
+        if [ -z $ver1 ]; then
+            break
+        fi
+        file1="$fileSets/$ver1/$baseName"
+        if [ ! -e "$file1" ]; then
+            logMessage "ERROR: $baseName does not exist in $ver1 - can't continue"
+            scriptAction='UNINSTALL'
+            break
+        # skip symbolic links
+        elif [ -L "$file1" ]; then
+            continue
+        fi
+        ((index2 = index1))
+        while true ; do
+            ((index2++))
+            ver2=$(basename "${versionList[$index2]}")
+            # end of list
+            if [ -z $ver2 ]; then
+                break
+            fi
+            file2="$fileSets/$ver2/$baseName"
+            # file in second directory doesn't exist, treat as a match so link will be created
+            if [ ! -e "$file2" ]; then
+                logMessage "$baseName in $ver2 doesn't exist - creating symbolic link"
+                filesDiffer=false
+            # recreate it an existing symbolic link
+            elif [ -L "$file2" ]; then
+                filesDiffer=false
+            # real file - compare to original
+            else
+                cmp -s "$file1" "$file2" > /dev/null
+                if [ $? != 0 ]; then
+                    filesDiffer=true
+                else
+                    filesDiffer=false
+                fi
+            fi
+            # skip ahead to this version for future cheks
+            if $filesDiffer ; then
+                break
+            else
+                rm -f "$file2"
+                ln -s "../$ver1/$baseName" "$file2"
+                ((lastLinkedIndex = index2))
+            fi
+        done
+        if [ $index1 -le $lastLinkedIndex ]; then
+            (( index1 = lastLinkedIndex))
+        fi
+    done
+}
+
+
+# addNewVersionFiles attempts to populate the replacement file version tree for the (new) current version
+# if a match is found to a previous Venus verision, the new file set is populated automatically
+# if no match in .orig files is found a new replacement file will need to be HAND EDITED
+#
+# this function sets scriptAction to UNINSTALL a new Venus version is detected
+# but the file set can not be created automatically
+
+addNewVersionFiles ()
+{
+    if [ ! -d "$fileSets/$venusVersion" ]; then
+        logMessage "creating file set for new Venus OS $venusVersion"
+        mkdir "$fileSets/$venusVersion"
+    else
+        return
+    fi
+
+    fileList=$(cat "$fileSets/fileList")
+    versionList=($(ls -d "$fileSets"/v*))
+    baseName=$(basename "$activeFile")
+    matchFound=false
+
+    for activeFile in $fileList ; do
+        # if the backup copy exists, the package is already been installed
+        # so check file set against the backup, not the active copy
+        if [ -f $activeFile.orig ]; then
+            compareFile="$activeFile.orig"
+        elif [ -f "$compareFile" ]; then
+            compareFile="$activeFile.orig"
+        else
+            logMessage "WARNING: no active file named $baseName for $venusVersion found"
+            # flag the fact that no stock file exists
+            touch "$fileSets/$venusVersion/$baseName.noOrig"
+            return
+        fi
+
+        # look for a match to the .orig in a previous version
+        ((index = -1))
+        while true ; do
+            ((index++))
+            fileSetVer=$(basename "${versionList[$index]}")
+            # end of list
+            if [ -z $fileSetVer ]; then
+                break
+            fi
+            if [ "$fileSetVer" == "$venusVersion" ]; then
+                continue
+            fi
+            fileInSet="$fileSets/$fileSetVer/$baseName"
+            # skip symbolic links
+            if [ -L "$fileInSet" ] ; then
+                continue
+            elif [ ! -f "$fileInSet" ] ; then
+                logMessage "ERROR: $baseName in $fileSetVer does not exist - can't continue"
+                scriptAction='UNINSTALL'
+                continue
+            fi
+            cmp -s "$fileInSet.orig" "$compareFile" > /dev/null
+            # files match, create symbolic links to older version
+            # for both .orig and active files !
+            if [ $? == 0 ]; then
+                logMessage "match found for $baseName linking $fileSetVer to $venusVersion"
+                ln -s "../$fileSetVer/$baseName" "$fileSets/$venusVersion"
+                ln -s "../$fileSetVer/$baseName.orig" "$fileSets/$venusVersion"
+                matchFound=true
+               break
+            fi
+        done
+        # unable to automatically create a new file set - flag it, report the condition and force package removal
+        if ! $matchFound ;then
+            # save the original file to help with manual replacement creation
+            cp "$compareFile" "$fileSets/$venusVersion/$baseName.orig"
+            logMessage "ERROR: $baseName is a new version - a replacement must be created MANUALLY for $venusVersion"
+            touch "$fileSets/$venusVersion/$baseName.NO_REPLACEMENT"
+            touch "$fileSets/$venusVersion/INCOMPLETE"
+
+            scriptAction='UNINSTALL'
+        fi
+    done
+    if [ -f "$fileSets/$venusVersion/INCOMPLETE" ]; then
+        logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
+        scriptAction='UNINSTALL'
+    fi
+}
+
+
+# checkFileSets removes redundancy from FileSets and
+# attempts to create a file set for a new Venus version
+#
+# If inconsistencies in the FileSets tree are found
+# scriptAction is changed to UNINSTALL so installation will not happen
+# and package can be removed
+
+checkFileSets ()
+{
+    # do only if there is a fileList (version-dependent files)
+    if [ ! -f "$fileSets/fileList" ]; then
+        return
+    fi
+
+    fileList=$(cat "$fileSets/fileList")
+    versionList=($(ls -d "$fileSets"/v*))
+
+    for file in $fileList ; do
+        # don't check for redundant files if reinstalling (saves time)
+        if ! $runningAtBoot ; then
+            removeDuplicateFiles "$file"
+            # do .orig files also
+            removeDuplicateFiles "$file.orig"
+        fi
+    done
+
+    # check for new Venus version and attempt to create a file set for it
+    if [ $scriptAction != 'UNINSTALL' ]; then
+        addNewVersionFiles
+    fi
+}
+
+
+# determine how startup script should exit based on $scriptAction and other flags
+# may EXIT or REBOOT within the function - DOES NOT RETURN TO CALLER
+
+endScript ()
+{
+    if $restartGui $$ !rebootNeeded ; then
+        logMessage "restarting GUI"
+        svc -t /service/gui
+    fi
+
+
+    if [ $scriptAction == 'INSTALL' ] ; then
+        # set up reinstallMods to run this script again after a VenusOS update
+        if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
+            logMessage adding "$shortScriptName" to $(basename "$reinstallScriptsList")
+            echo "$fullScriptName" "$reinstallParam" >> "$reinstallScriptsList"
+        fi
+
+        # installed flag is removed if script needs to run again
+        if $runAgain ; then
+          logMessage "script will run again at startup"
+            rm -f "$installedFlag"
+        # otherwise installed flag is set so script won't be run again at boot
+        else
+            touch "$installedFlag"
+      fi
+
+    elif [ $scriptAction == 'UNINSTALL' ] ; then
+        # remove this script from reinstallScriptsList to prevent further calls during boot
+        if [ -f "$reinstallScriptsList" ] && [ ! $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
+            logMessage removing "$shortScriptName" from $(basename "$reinstallScriptsList")    
+            sed "\:$fullScriptName:d" "$reinstallScriptsList" > "$scriptDir/tmp"
+            mv "$scriptDir/tmp" "$reinstallScriptsList"
+        fi
+
+        # clean up only - flag not used since package is being removed
+        rm -f "$installedFlag"
+    fi
+
+    # this script was called from reinstallMods
+    # set exit code based on actual code
+    if $runningAtBoot ; then
+        if $rebootNeeded ; then
+            logMessage "reboot pending"
+            exit $exitReboot
+        else
+            logMessage "completed"
+            exit $exitSuccess
+        fi
+
+    # this script was run manually
+    else
+        # if reboot needed ask user if it should be done now
+        if $rebootNeeded ; then
+
+            yesNoPrompt "Reboot system now (y) or issue a reboot manually later (n): "
+            if $yesResponse ; then
+                echo "rebooting ..."
+                reboot
+            else
+                echo "system must be rebooted to finish installation and activate components"
+            fi
+
+        elif $runAgain ; then
+            echo "$shortScriptName NOT completed"
+            echo "  run it again manually to finish"
+            echo "  or reboot the system to finish automatically"
+        else
+            logMessage "completed"
+        fi
+    fi
+}
+
+

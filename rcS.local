@@ -1,0 +1,5 @@
+#!/bin/bash
+
+# reinstall all Venus mods
+
+/data/SetupHelper/reinstallMods

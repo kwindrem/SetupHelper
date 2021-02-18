@@ -2,14 +2,24 @@ The SetupHelper package provides a set of utilities to simplfy
     installing modifications to Victron Venus Os
     and includes a mechanism to automatically reinstall them following a Venus OS update
 
-A Venus software update overwrites any modifications to the root partition.
-It is therefore necessary to reinstall the modifications following the Venus update.
+Setup:
+The easiest way to install this code IF the Venus device has internet access is to run the following command:
 
-To install this package, copy the entire directory to /data.
-You should end up with at least CommonResources and reinstallMods in
-/data/SetupHelper
+wget -qO - https://github.com/kwindrem/SetupHelper/archive/current.tar.gz | tar -xzf - -C /data
+mv /data/SetupHelper-current /data/SetupHelper
 
-Then include the following lines in the setup script:
+or
+
+wget https://github.com/kwindrem/TankRepeater/archive/current.tar.gz
+mv current.tar.gz SetupHelper.tar.gz
+
+Then move rcS.local to /data, or edit that file if it already exists and add:
+
+    /data/SetupHelper/reinstallMods
+
+You can alternatively use rc.local as explained below
+
+The following lines should be inclueded in the setup script to use the functions and variables provided here
 
 #### following lines incorporate SetupHelper utilities into this script
 # Refer to the SetupHelper ReadMe file for details.
@@ -24,7 +34,10 @@ checkFileSets
 
 #### end of lines to include SetupHelper
 
-For automatic reinstallation after a Venus update,
+A Venus software update overwrites any modifications to the root partition.
+It is therefore necessary to reinstall the modifications following the Venus update.
+
+For automatic reinstallation of any modificaitons using SetupHelper following a Venus update,
     add the following line in /data/rcS.local or /data/rc.local to call the reinstaller:
     
     /data/SetupHelper/reinstallMods

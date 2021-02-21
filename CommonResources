@@ -76,7 +76,7 @@ standardActionPrompt ()
     echo "  Uninstall (u) and restores all files to stock"
     echo "  Quit (q) without further action"
     echo "  Display setup log (s) outputs the last 100 lines of the log"
-    if [ ! -z $logFile ]; then
+    if [ ! -z $packageLogFile ]; then
         echo "  Display Log (l) outputs the last 100 lines of the log"
     fi
     echo
@@ -133,6 +133,33 @@ yesNoPrompt ()
         esac
     done
 }
+
+# yesNoPrompt provides user prompting requesting a yes/no response
+#
+# $1 is the prompt displayed when pausing for user input
+#
+# $yesResponse is set to true if the response was yes
+
+yesNoPrompt ()
+{
+    response=''
+    while true; do
+        /bin/echo -n "$*"
+        read response
+        case $response in
+            [yY]*)
+                yesResponse=true
+                break
+                ;;
+            [nN]*)
+                yesResponse=false
+                break
+                ;;
+            *)
+        esac
+    done
+}
+
 
 
 
@@ -288,10 +315,12 @@ removeDuplicateFiles ()
                 break
             fi
             file2="$fileSets/$ver2/$baseName"
+            createSymLink=false
             # file in second directory doesn't exist, treat as a match so link will be created
             if [ ! -e "$file2" ]; then
                 logMessage "$baseName in $ver2 doesn't exist - creating symbolic link"
                 filesDiffer=false
+                createSymLink=true
             # recreate it an existing symbolic link
             elif [ -L "$file2" ]; then
                 filesDiffer=false
@@ -307,7 +336,7 @@ removeDuplicateFiles ()
             # skip ahead to this version for future cheks
             if $filesDiffer ; then
                 break
-            else
+            elif $createSymLink ; then
                 rm -f "$file2"
                 ln -s "../$ver1/$baseName" "$file2"
                 ((lastLinkedIndex = index2))
@@ -338,16 +367,16 @@ addNewVersionFiles ()
 
     fileList=$(cat "$fileSets/fileList")
     versionList=($(ls -d "$fileSets"/v*))
-    baseName=$(basename "$activeFile")
     matchFound=false
 
     for activeFile in $fileList ; do
+        baseName=$(basename "$activeFile")
         # if the backup copy exists, the package is already been installed
         # so check file set against the backup, not the active copy
         if [ -f $activeFile.orig ]; then
             compareFile="$activeFile.orig"
-        elif [ -f "$compareFile" ]; then
-            compareFile="$activeFile.orig"
+        elif [ -f "$activeFile" ]; then
+            compareFile="$activeFile"
         else
             logMessage "WARNING: no active file named $baseName for $venusVersion found"
             # flag the fact that no stock file exists

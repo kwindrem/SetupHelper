@@ -37,6 +37,7 @@ checkFileSets
 A Venus software update overwrites any modifications to the root partition.
 It is therefore necessary to reinstall the modifications following the Venus update.
 
+
 For automatic reinstallation of any modificaitons using SetupHelper following a Venus update,
     add the following line in /data/rcS.local or /data/rc.local to call the reinstaller:
     
@@ -114,30 +115,22 @@ The following functions manage execution of the script and interfaces to reinsta
             scriptAction is set to INSTALL.
 
     checkFileSets
-        It checks the integrity of the replcement FileSets (discussed later)
-            and repairs anything it can.
-            If repairs can't be made automatically, scriptAction is set to UNINSTALL.
-            The startup script should not attempt installation in this case,
-            rather it should automatically remove the pacakge to allow the system to function normally,
-            but without the modifications provided by the package
-            This is not done during a reinstall to save time.
-        It also attempts to create a file set for the current Venus OS version if it does not exist yet.
-            If the original files match a previous version, the file set is created and scriptAction
-                is not updates, so the setup script may continue normally
+        Attempts to create a file set for the current Venus OS version if it does not exist yet.
+            If the original files match a previous version, the file set is created
+                so the setup script may continue normally
             However, if the original files for this new version differ from all existing versions
                 the new partial file set must not be used
-                A flag file is placed in the file set: basename.NO_REPLACEMENT
-                    indicating a new replaement verion must be created manually
-                scriptAction is set to UNINSTALL
+                Flag files ares placed in the file set:
+                    basename.NO_REPLACEMENT indicates a new replaement verion must be created manually
+                    INCOMPLETE indiates the file set can not be used until issue are corrected
+                scriptAction is also set to UNINSTALL
                 It is necessary for the user to create new replacement files manually
                     then rerun the setup script to install the package.
                     You can also revert to a previous Venus OS version until the package
                         is updated for the new version.
         Symbolic links are used in the file set to indicate redundancy between versions.
         This provides a visual indication of which versions have changes from a previous one.
-        cleanUpFileSets sets okToProceed to false if there are issues that prevent installing files
-        that could result an unworking system      
-        cleanUpFileSets should be called before any attempt is made to modify Venus files
+        checkFileSets should be called before any attempt is made to modify Venus files
 
     endScript
         Function to finish up, prompt the user (if not reinstalling) and exit the script
@@ -230,26 +223,16 @@ Two flags are set by these routines in order for the setup script to detect chan
 
 Use updateActiveFile to replace the active file with a replacement from the package
 
-Use copyToActiveFile to replace the active file when the replacement location or name differs from the norm
-
-Use editActiveFile for changes that require the stock file to be modified
-and if the changes can be made using 'sed'
-
+    updateActiveFile replacementFile activeFile
+        or
     updateActiveFile activeFile
-        First backs up the active file
+         First backs up the active file
             then copies the replacement version into the active location
-        The first parameter is the active file
-        The replacement file is automatically formed
-            from $replacementDir and the basename of the active file
-
-    copyToActiveFile replacementFile activeFile
-        First backs up the active file
-            then copies a new version into the active location
-        The first parameter is the replacement version of the file
-        The second parameter is the active file name
-        so the syntax is from to (like 'cp')
-        Use this instead ofreplaceActiveFile if the location or name
-            of the replacement file differs from the automatic syntax
+        If called with two parameters
+            the first is replacement the file (source)
+            the second is the active file (destination)
+        If called with only one parameter, it specifies the active file 
+            the replacement file is selected from FileSets
 
     restoreActiveFile activeFile
         Moves the backup copy to the active location

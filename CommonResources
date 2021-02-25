@@ -50,7 +50,9 @@ fi
 
 venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
 
-fileSets="$scriptDir/FileSets"
+# set up pointers to package files
+pkgFileSets="$scriptDir/FileSets"
+fileSet="$pkgFileSets/$venusVersion"
 
 reinstallScriptsList="/data/reinstallScriptsList"
 
@@ -173,13 +175,13 @@ backupActiveFile ()
 {
     backupExisted=false
     baseName=$(basename $1)
-    if [ -e "$1.orig" ] || [ -e "$1.noOrig" ]; then
+    if [ -e "$1.orig" ] || [ -e "$1.NO_ORIG" ]; then
         mayHaveBeenUpdated=true
     elif [ ! -f "$1" ]; then
-        touch "$1.noOrig"
+        touch "$1.NO_ORIG"
     else
         cp "$1" "$1.orig"
-        rm -f "$1.noOrig"
+        rm -f "$1.NO_ORIG"
     fi
 }
 
@@ -200,10 +202,9 @@ backupActiveFile ()
 
 updateActiveFile ()
 {
-    versionDir="$fileSets/$venusVersion"
     sourceFound=false
     thisFileUpdated=false
-
+    
     sourceFile="$1"
 
     # separate replacement file specified
@@ -221,40 +222,39 @@ updateActiveFile ()
     if ! $sourceFound ; then
         sourceFile="$(basename "$sourceFile")"
         # found in version directory
-        if [ -f "$versionDir/$sourceFile" ]; then
-            sourceFile="$versionDir/$sourceFile"
+        if [ -f "$fileSet/$sourceFile" ]; then
+            sourceFile="$fileSet/$sourceFile"
             sourceFound=true
-        elif  [ -f "$fileSets/$sourceFile" ]; then
-            sourceFile="$fileSets/$sourceFile"
+        elif [ -f "$pkgFileSets/$sourceFile" ]; then
+            sourceFile="$pkgFileSets/$sourceFile"
             sourceFound=true
         fi
     fi
 
-    if [ ! -f "$sourceFile" ]; then
-        logMessage "no replacement file for $baseName - can't continue"
-        scriptAction='UNINSTALL'
-    else
-        backupActiveFile "$destinationFile"
-        # package may already have been installed - check to see
-        needToUpdate=true
-        if $mayHaveBeenUpdated ; then
-            cmp -s "$sourceFile" "$destinationFile" > /dev/null
-            # already updated - no change to active file
-            if [ $? == 0 ]; then
-                needToUpdate=false
-            fi
+    if ! $sourceFound; then
+        logMessage "no replacement file for $baseName - nothing changed"
+        return
+    fi
+    backupActiveFile "$destinationFile"
+    # package may already have been installed - check to see
+    needToUpdate=true
+    if $mayHaveBeenUpdated ; then
+        cmp -s "$sourceFile" "$destinationFile" > /dev/null
+        # already updated - no change to active file
+        if [ $? == 0 ]; then
+            needToUpdate=false
         fi
-        if $needToUpdate ; then
-            cp "$sourceFile" "$destinationFile"
-            filesUpdated=true
-            thisFileUpdated=true
-        fi
+    fi
+    if $needToUpdate ; then
+        cp "$sourceFile" "$destinationFile"
+        filesUpdated=true
+        thisFileUpdated=true
     fi
 }
 
 
 # restoreActiveFile moves the backup copy to the active location
-# if the backup copy doesn't exist BUT the noOrig flag is set
+# if the backup copy doesn't exist BUT the NO_ORIG flag is set
 # the active copy is deleted to restore the system to stock
 # $1 is the active name, the one to be backed up
 
@@ -265,206 +265,106 @@ restoreActiveFile ()
     baseName="$(basename $1)"
     if [ -e "$1.orig" ]; then
         mv "$1.orig" "$1"
-        rm -f "$1.noOrig"
+        rm -f "$1.NO_ORIG"
         filesUpdated=true
         thisFileUpdated=false
-    elif [ -f "$1.noOrig" ]; then
+    elif [ -f "$1.NO_ORIG" ]; then
         rm -f "$1"
-        rm -f "$1.noOrig"
+        rm -f "$1.NO_ORIG"
         filesUpdated=true
         thisFileUpdated=true
     fi
 }
 
 
-# removeDuplicateFiles removes redundant files in the replacement file set
+# checkFileSets validates the file sets used install package modifications
 #
-# It walks through the directory tree and identifies duplicate files.
-# These duplicates are replaced by symbolic links as an indication of the duplicate,
-# to make future checks faster and save file system space
-#
-# It is called for each file in 'fileList' from checkFileSets
+# It attempts to create a file set for a new Venus version
+#   If the new active files for the new version all match a previous version
+#       the new file set is populated automatically and may be used with no further action
+#   If not, new version is marked for manual editing (NO_REPLACEMENT)
+#       and scriptAction is set to UNINSTALL so incompatible files are not installed
+#       and package can be removed
 
-removeDuplicateFiles ()
+checkFileSets ()
 {
-    baseName=$(basename "$1")
-    ((index1 = -1))
-    ((lastLinkedIndex = 0))
-    while true ; do
-        ((index1++))
-        ver1=$(basename "${versionList[$index1]}")
-        # end of list
-        if [ -z $ver1 ]; then
-            break
-        fi
-        file1="$fileSets/$ver1/$baseName"
-        if [ ! -e "$file1" ]; then
-            logMessage "ERROR: $baseName does not exist in $ver1 - can't continue"
-            scriptAction='UNINSTALL'
-            break
-        # skip symbolic links
-        elif [ -L "$file1" ]; then
-            continue
-        fi
-        ((index2 = index1))
-        while true ; do
-            ((index2++))
-            ver2=$(basename "${versionList[$index2]}")
-            # end of list
-            if [ -z $ver2 ]; then
-                break
-            fi
-            file2="$fileSets/$ver2/$baseName"
-            createSymLink=false
-            # file in second directory doesn't exist, treat as a match so link will be created
-            if [ ! -e "$file2" ]; then
-                logMessage "$baseName in $ver2 doesn't exist - creating symbolic link"
-                filesDiffer=false
-                createSymLink=true
-            # recreate it an existing symbolic link
-            elif [ -L "$file2" ]; then
-                filesDiffer=false
-            # real file - compare to original
-            else
-                cmp -s "$file1" "$file2" > /dev/null
-                if [ $? != 0 ]; then
-                    filesDiffer=true
-                else
-                    filesDiffer=false
-                fi
-            fi
-            # skip ahead to this version for future cheks
-            if $filesDiffer ; then
-                break
-            elif $createSymLink ; then
-                rm -f "$file2"
-                ln -s "../$ver1/$baseName" "$file2"
-                ((lastLinkedIndex = index2))
-            fi
-        done
-        if [ $index1 -le $lastLinkedIndex ]; then
-            (( index1 = lastLinkedIndex))
-        fi
-    done
-}
-
-
-# addNewVersionFiles attempts to populate the replacement file version tree for the (new) current version
-# if a match is found to a previous Venus verision, the new file set is populated automatically
-# if no match in .orig files is found a new replacement file will need to be HAND EDITED
-#
-# this function sets scriptAction to UNINSTALL a new Venus version is detected
-# but the file set can not be created automatically
-
-addNewVersionFiles ()
-{
-    if [ ! -d "$fileSets/$venusVersion" ]; then
-        logMessage "creating file set for new Venus OS $venusVersion"
-        mkdir "$fileSets/$venusVersion"
-    else
+    # do only if there is a fileList (version-dependent files)
+    if [ -z "$fileSet" ]; then
         return
     fi
 
-    fileList=$(cat "$fileSets/fileList")
-    versionList=($(ls -d "$fileSets"/v*))
-    matchFound=false
+    if [ -d "$fileSet" ]; then
+        return
+    fi
+    logMessage "creating file set for $venusVersion"
+    mkdir "$fileSet"
+    touch "$fileSet/NEW"
+
+    local fileList=$(cat "$pkgFileSets/fileList")
+    local versionList=($(ls -d "$pkgFileSets"/v*))
+    local activeFile=""
+    local baseName=""
 
     for activeFile in $fileList ; do
         baseName=$(basename "$activeFile")
-        # if the backup copy exists, the package is already been installed
-        # so check file set against the backup, not the active copy
-        if [ -f $activeFile.orig ]; then
-            compareFile="$activeFile.orig"
-        elif [ -f "$activeFile" ]; then
-            compareFile="$activeFile"
-        else
-            logMessage "WARNING: no active file named $baseName for $venusVersion found"
-            # flag the fact that no stock file exists
-            touch "$fileSets/$venusVersion/$baseName.noOrig"
-            return
-        fi
-
-        # look for a match to the .orig in a previous version
-        ((index = -1))
-        while true ; do
-            ((index++))
-            fileSetVer=$(basename "${versionList[$index]}")
-            # end of list
-            if [ -z $fileSetVer ]; then
+        # look for a match in a previous version
+        matchFound=false
+        for ver2 in ${versionList[@]} ; do
+            prevVer=$(basename $ver2)
+            prevVersionDir="$pkgFileSets/$prevVersion"
+            prevVerFile="$pkgFileSets/$prevVer/$baseName"
+            # only look at previous versions
+            if [ "$prevVer" == "$venusVersion" ]; then
                 break
             fi
-            if [ "$fileSetVer" == "$venusVersion" ]; then
-                continue
-            fi
-            fileInSet="$fileSets/$fileSetVer/$baseName"
             # skip symbolic links
-            if [ -L "$fileInSet" ] ; then
+            if [ -L "$prevVerFile.orig" ] ; then
                 continue
-            elif [ ! -f "$fileInSet" ] ; then
-                logMessage "ERROR: $baseName in $fileSetVer does not exist - can't continue"
-                scriptAction='UNINSTALL'
+            elif [ ! -f "$prevVerFile.orig" ] ; then
                 continue
             fi
-            cmp -s "$fileInSet.orig" "$compareFile" > /dev/null
-            # files match, create symbolic links to older version
-            # for both .orig and active files !
-            if [ $? == 0 ]; then
-                logMessage "match found for $baseName linking $fileSetVer to $venusVersion"
-                ln -s "../$fileSetVer/$baseName" "$fileSets/$venusVersion"
-                ln -s "../$fileSetVer/$baseName.orig" "$fileSets/$venusVersion"
+            cmp -s "$activeFile" "$prevVerFile.orig" > /dev/null
+            # files match
+            if [ $? -eq 0 ]; then
                 matchFound=true
-               break
+                break
             fi
-        done
-        # unable to automatically create a new file set - flag it, report the condition and force package removal
-        if ! $matchFound ;then
-            # save the original file to help with manual replacement creation
-            cp "$compareFile" "$fileSets/$venusVersion/$baseName.orig"
-            logMessage "ERROR: $baseName is a new version - a replacement must be created MANUALLY for $venusVersion"
-            touch "$fileSets/$venusVersion/$baseName.NO_REPLACEMENT"
-            touch "$fileSets/$venusVersion/INCOMPLETE"
+        done # for prevVer
+        
+        # previous and "this" version content matches
+        # replace existing orig and replacement files with symlinks
+        if $matchFound ;then
+            if [ ! -L "$fileSet/$baseName.orig" ]; then
+                logMessage "$baseName linking $venusVersion to $prevVer"
+            fi
+            rm -f "$fileSet/$baseName.orig"
+            rm -f "$fileSet/$baseName"
+            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
 
-            scriptAction='UNINSTALL'
+            ln -s "../$prevVer/$baseName.orig" "$fileSet/$baseName.orig"
+            ln -s "../$prevVer/$baseName" "$fileSet/$baseName"
+        # no match to a previous verison
+        else
+            # attempt to fill in a new version from the actual system
+            if [ ! -f "$activeFile" ]; then
+                logMessage "fetching $baseName for original file for $venusVersion from Venus"
+                cp "$activeFile.orig" "$fileSet/$baseName.orig"
+            else
+                logMessage "ERROR no $baseName original file for $venusVersion"
+                touch "$fileSet/$baseName.NO_ORIG"
+                touch "$fileSet/INCOMPLETE"
+            fi
+            logMessage "WARNING $venusVersion $baseName requires manual editing"
+            touch "$fileSet/$baseName.NO_REPLACEMENT"
+            touch "$fileSet/INCOMPLETE"
         fi
-    done
-    if [ -f "$fileSets/$venusVersion/INCOMPLETE" ]; then
+    done # for activeFile
+    if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
         scriptAction='UNINSTALL'
     fi
 }
 
-
-# checkFileSets removes redundancy from FileSets and
-# attempts to create a file set for a new Venus version
-#
-# If inconsistencies in the FileSets tree are found
-# scriptAction is changed to UNINSTALL so installation will not happen
-# and package can be removed
-
-checkFileSets ()
-{
-    # do only if there is a fileList (version-dependent files)
-    if [ ! -f "$fileSets/fileList" ]; then
-        return
-    fi
-
-    fileList=$(cat "$fileSets/fileList")
-    versionList=($(ls -d "$fileSets"/v*))
-
-    for file in $fileList ; do
-        # don't check for redundant files if reinstalling (saves time)
-        if ! $runningAtBoot ; then
-            removeDuplicateFiles "$file"
-            # do .orig files also
-            removeDuplicateFiles "$file.orig"
-        fi
-    done
-
-    # check for new Venus version and attempt to create a file set for it
-    if [ $scriptAction != 'UNINSTALL' ]; then
-        addNewVersionFiles
-    fi
-}
 
 
 # determine how startup script should exit based on $scriptAction and other flags

@@ -116,14 +116,14 @@ The following functions manage execution of the script and interfaces to reinsta
 
     checkFileSets
         Attempts to create a file set for the current Venus OS version if it does not exist yet.
-            If the original files match a previous version, the file set is created
+            If the original files match another version, the file set is created
                 so the setup script may continue normally
             However, if the original files for this new version differ from all existing versions
                 the new partial file set must not be used
                 Flag files ares placed in the file set:
                     basename.NO_REPLACEMENT indicates a new replaement verion must be created manually
                     INCOMPLETE indiates the file set can not be used until issue are corrected
-                scriptAction is also set to UNINSTALL
+                scriptAction is also set to EXIT
                 It is necessary for the user to create new replacement files manually
                     then rerun the setup script to install the package.
                     You can also revert to a previous Venus OS version until the package
@@ -282,4 +282,5 @@ LogHandler is a logging and log display mechanism. It is sourced by CommonResour
             $packageLogFile
         The latter must be initialized in setup script code
         If no package log file exists, $packageLogFile shoudl remain null ""
+
 

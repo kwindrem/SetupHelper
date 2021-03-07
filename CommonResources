@@ -14,16 +14,19 @@ reinstallParam="reinstall"
 installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
 
 # what action the script should take:
-#  NONE - do noting
+#  NONE - do noting - signals script to prompt for user input on how to proceed
 #  INSTALL - install package components
 #  UNINSTALL - remove package components
-#  EXIT - exit script immediately
+#  EXIT - exit script without taking any action
 # CommonResources may set the the action if initial checks
-# indicate a clear direction
+#  indicate a clear direction
 # otherwise, the action will set based on user input (in the script)
 # if failures occur during installation,
 # scriptAction should be changed to UNINSTALL so the installation can be cleaned up
 # and the setup script should test for UNINSTALL after it attempts installation
+# A file set error indicates the file set for the current verion is not usable
+#  and installation should not occur
+# checkFileSets sets the script action to EXIT to prevent an installation from occurring
 
 scriptAction='NONE'
 
@@ -135,34 +138,6 @@ yesNoPrompt ()
         esac
     done
 }
-
-# yesNoPrompt provides user prompting requesting a yes/no response
-#
-# $1 is the prompt displayed when pausing for user input
-#
-# $yesResponse is set to true if the response was yes
-
-yesNoPrompt ()
-{
-    response=''
-    while true; do
-        /bin/echo -n "$*"
-        read response
-        case $response in
-            [yY]*)
-                yesResponse=true
-                break
-                ;;
-            [nN]*)
-                yesResponse=false
-                break
-                ;;
-            *)
-        esac
-    done
-}
-
-
 
 
 # backupActiveFile makes a copy of the active file in file.orig
@@ -280,25 +255,24 @@ restoreActiveFile ()
 # checkFileSets validates the file sets used install package modifications
 #
 # It attempts to create a file set for a new Venus version
-#   If the new active files for the new version all match a previous version
+#   If the new active files for the new version all match another version
 #       the new file set is populated automatically and may be used with no further action
 #   If not, new version is marked for manual editing (NO_REPLACEMENT)
-#       and scriptAction is set to UNINSTALL so incompatible files are not installed
-#       and package can be removed
+#       and scriptAction is set to EXIT so incompatible files are not installed
 
 checkFileSets ()
 {
-    # do only if there is a fileList (version-dependent files)
-    if [ -z "$fileSet" ]; then
+    # nothing to do if there is no fileList (version-dependent files)
+    if [ ! -f "$pkgFileSets/fileList" ]; then
         return
     fi
 
+    # nothing to do if fileSet directory already exists
     if [ -d "$fileSet" ]; then
         return
     fi
     logMessage "creating file set for $venusVersion"
     mkdir "$fileSet"
-    touch "$fileSet/NEW"
 
     local fileList=$(cat "$pkgFileSets/fileList")
     local versionList=($(ls -d "$pkgFileSets"/v*))
@@ -307,64 +281,54 @@ checkFileSets ()
 
     for activeFile in $fileList ; do
         baseName=$(basename "$activeFile")
-        # look for a match in a previous version
+        # can't process if no Venus file
+        if [ ! -f "$activeFile" ]; then
+            logMessage "ERROR $venusVersion $baseName no replacement file"
+            touch "$fileSet/$baseName.NO_ORIG"
+            touch "$fileSet/$baseName.NO_REPLACEMENT"
+            touch "$fileSet/INCOMPLETE"
+            continue
+        fi
+        # look for a match in another version
         matchFound=false
-        for ver2 in ${versionList[@]} ; do
-            prevVer=$(basename $ver2)
-            prevVersionDir="$pkgFileSets/$prevVersion"
-            prevVerFile="$pkgFileSets/$prevVer/$baseName"
-            # only look at previous versions
-            if [ "$prevVer" == "$venusVersion" ]; then
-                break
-            fi
-            # skip symbolic links
-            if [ -L "$prevVerFile.orig" ] ; then
-                continue
-            elif [ ! -f "$prevVerFile.orig" ] ; then
+        for v2 in ${versionList[@]} ; do
+            otherVersion=$(basename $v2)
+            otherVersionDir="$pkgFileSets/$otherVersion"
+            otherFile="$pkgFileSets/$otherVersion/$baseName"
+
+            if [ "$otherVersion" == "$venusVersion" ]; then
                 continue
             fi
-            cmp -s "$activeFile" "$prevVerFile.orig" > /dev/null
+            # skip symbolic links and nonexistent originals
+            if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
+                continue
+            fi
+            cmp -s "$activeFile" "$otherFile.orig" > /dev/null
             # files match
             if [ $? -eq 0 ]; then
                 matchFound=true
                 break
             fi
-        done # for prevVer
+        done
         
-        # previous and "this" version content matches
-        # replace existing orig and replacement files with symlinks
         if $matchFound ;then
-            if [ ! -L "$fileSet/$baseName.orig" ]; then
-                logMessage "$baseName linking $venusVersion to $prevVer"
-            fi
-            rm -f "$fileSet/$baseName.orig"
-            rm -f "$fileSet/$baseName"
-            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
-
-            ln -s "../$prevVer/$baseName.orig" "$fileSet/$baseName.orig"
-            ln -s "../$prevVer/$baseName" "$fileSet/$baseName"
-        # no match to a previous verison
+            logMessage "$baseName linking $venusVersion to $otherVersion"
+            ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
+            ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
+        # no match to a previous verison - can't create file set automatically
+        # but copy original file to aid manual editing
         else
-            # attempt to fill in a new version from the actual system
-            if [ ! -f "$activeFile" ]; then
-                logMessage "fetching $baseName for original file for $venusVersion from Venus"
-                cp "$activeFile.orig" "$fileSet/$baseName.orig"
-            else
-                logMessage "ERROR no $baseName original file for $venusVersion"
-                touch "$fileSet/$baseName.NO_ORIG"
-                touch "$fileSet/INCOMPLETE"
-            fi
-            logMessage "WARNING $venusVersion $baseName requires manual editing"
+            logMessage "ERROR $venusVersion $baseName no replacement file"
+            cp "$activeFile" "$fileSet/$baseName.orig"
             touch "$fileSet/$baseName.NO_REPLACEMENT"
             touch "$fileSet/INCOMPLETE"
         fi
-    done # for activeFile
+    done
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
-        scriptAction='UNINSTALL'
+        scriptAction='EXIT'
     fi
 }
-
 
 
 # determine how startup script should exit based on $scriptAction and other flags
@@ -376,7 +340,6 @@ endScript ()
         logMessage "restarting GUI"
         svc -t /service/gui
     fi
-
 
     if [ $scriptAction == 'INSTALL' ] ; then
         # set up reinstallMods to run this script again after a VenusOS update

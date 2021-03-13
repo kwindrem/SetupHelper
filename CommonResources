@@ -8,7 +8,8 @@ scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
 fullScriptName="$scriptDir/$(basename "$0")"
 
-source "/data/SetupHelper/LogHandler"
+setupHelperDir="/data/SetupHelper"
+source "$setupHelperDir/LogHandler"
 
 reinstallParam="reinstall"
 installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
@@ -48,6 +49,7 @@ if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
 # not a reinstall, ignore the installed flag and continue with MANUAL installation
 else
     runningAtBoot=false
+    pruneSetupLogFile
 fi
 
 
@@ -60,6 +62,10 @@ fileSet="$pkgFileSets/$venusVersion"
 reinstallScriptsList="/data/reinstallScriptsList"
 
 configFile="/u-boot/config.txt"
+
+# rc local file that calls reinstallMods
+# use /data/rc.local if some scripts need resources not available at time rcS.local runs
+rcLocal="/data/rcS.local"
 
 # defined exit codes - must be consistent between all setup scripts and reinstallMods
 exitReboot=123
@@ -344,8 +350,17 @@ endScript ()
     if [ $scriptAction == 'INSTALL' ] ; then
         # set up reinstallMods to run this script again after a VenusOS update
         if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
-            logMessage adding "$shortScriptName" to $(basename "$reinstallScriptsList")
+            logMessage "adding $shortScriptName" to $(basename "$reinstallScriptsList")
             echo "$fullScriptName" "$reinstallParam" >> "$reinstallScriptsList"
+        fi
+        
+        if [ ! -f "$rcLocal" ]; then
+            logMessage "creating $rcLocal"
+            cat "$setupHelperDir/rcS.local" > "$rcLocal"
+            chmod +x "$rcLocal"
+        elif  [ $(grep -c "SetupHelper" "$rcLocal") == 0 ]; then
+            logMessage "adding SetupHelper reinstall script to $rcLocal"
+            sed -e '1d' "$setupHelperDir/rcS.local" >> $rcLocal
         fi
 
         # installed flag is removed if script needs to run again

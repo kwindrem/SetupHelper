@@ -109,7 +109,7 @@ The following functions manage execution of the script and interfaces to reinsta
     and sets $scriptAction based on what is found.
         If this is a boot-time reinstall, AND the installed flag is set,
             scriptAction is set to EXIT.
-        The setup script should test scription immmediately afger sourcing CommonResources
+        The setup script should test scripAction immmediately afger sourcing CommonResources
             and skip furter processing if it is 'EXIT'
         If this a boot-time reinstall but the installed flag is NOT set,
             scriptAction is set to INSTALL.
@@ -252,6 +252,13 @@ The following functions simplify the task of getting user input
         It sets scriptAction accordingly and returns
         It also handles displaying setup and package logs then asks for an action again
         It also handles quitting with no action - the fuction EXITS without returning in this case
+        The basic action prompt includes install, reinstall, quit, display logs (2 choices)
+        A reinstall option is enabled by including 'enableReinstall' as the first parameter
+        When reinstall is enabled, selecting install, returns a scriptAction of PROMPT
+        indicating additional prompting may be needed to complete the install
+        At the end of these prompts, the main script should set scriptAction to INSTALL
+        If reinstall is selected, the script action is set to INSTALL and the main script
+        can then skip additional prompts and allow options set previously to control the install
 
     yesNoPrompt "question"
         Asks the user to answer yes or no to the question

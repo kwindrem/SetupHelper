@@ -17,6 +17,7 @@ installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
 # what action the script should take:
 #  NONE - do noting - signals script to prompt for user input on how to proceed
 #  INSTALL - install package components
+#  PROMPT - prompt user for additional installation options
 #  UNINSTALL - remove package components
 #  EXIT - exit script without taking any action
 # CommonResources may set the the action if initial checks
@@ -78,12 +79,38 @@ exitSuccess=0
 #
 # if nonstandard prompts are necessary, duplicate this code in the setup script
 # and add the additional options and do not call standardActionPrompt
+#
+# if $1 == 'enableReinstall' indicates if reinstall is a permitted choice
+#
+# if it is enabled and the user selects install, then scriptAction is set to PROMPT
+# indicating the main script should proceed with additional user prompts
+# then change the scriptAction to INSTALL after all prompts have been addressed
+#
+# choosing if it's enabled and the user selectes reinstall, then
+# the scriptAction is set to INSTALL, indicating the main script should skip
+# additional user prompts and proceed with installation based on flag files
+# from a preveious installaiton
+#
+# if standandardActionPrompt is called without enableReinstall
+# the reinstall option is not allowed
+# actionPrompt is set to INSTALL or UNINSTALL
+#
+# this logic is somewhat convoluted but provides backward compatibility
 
 standardActionPrompt ()
 {
+    if [ $# -gt 0 ] && [ "$1" == 'enableReinstall' ]; then
+        enableReinstall=true
+    else
+        enableReinstall=true
+    fi
+
     echo
     echo "Available actions:"
     echo "  Install and activate (i)"
+    if $enableRinstall ; then
+        echo "  Reinstall (r) based on options provided at last install"
+    fi
     echo "  Uninstall (u) and restores all files to stock"
     echo "  Quit (q) without further action"
     echo "  Display setup log (s) outputs the last 100 lines of the log"
@@ -97,8 +124,18 @@ standardActionPrompt ()
         read response
         case $response in
             [iI]*)
-                scriptAction='INSTALL'
+                if $enableReinstall ; then
+                    scriptAction='PROMPT'
+                else
+                    scriptAction='INSTALL'
+                fi
                 break
+                ;;
+            [rR]*)
+                if $enableReinstall ; then
+                    scriptAction='INSTALL'
+                    break
+                fi
                 ;;
             [uU]*)
                 scriptAction='UNINSTALL'

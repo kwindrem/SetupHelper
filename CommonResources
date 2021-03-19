@@ -102,13 +102,13 @@ standardActionPrompt ()
     if [ $# -gt 0 ] && [ "$1" == 'enableReinstall' ]; then
         enableReinstall=true
     else
-        enableReinstall=true
+        enableReinstall=false
     fi
 
     echo
     echo "Available actions:"
     echo "  Install and activate (i)"
-    if $enableRinstall ; then
+    if $enableReinstall ; then
         echo "  Reinstall (r) based on options provided at last install"
     fi
     echo "  Uninstall (u) and restores all files to stock"

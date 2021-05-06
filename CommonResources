@@ -40,11 +40,14 @@ restartGui=false
 
 # check for reinstall (first parameter to setup script command line)
 # set $scriptAction to control work following the source command
+# if second parameter is "force" then the installedFlag is not checked
 if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
-    if [ -f "$installedFlag" ]; then
-        scriptAction='EXIT'
-    else
+    if [ $# -ge 2 ] && [ $2 == "force" ]; then
+        scriptAction='INSTALL'        
+    elif [ ! -f "$installedFlag" ]; then
         scriptAction='INSTALL'
+    else
+        scriptAction='EXIT'
     fi
     runningAtBoot=true
 # not a reinstall, ignore the installed flag and continue with MANUAL installation
@@ -217,6 +220,8 @@ backupActiveFile ()
 #   a separate source (replacement) file is specified
 #     either as a full path to the actual file
 #     or as the basename of a file to be found in the version directory or FileSets
+#
+# if the update fails, scriptAction is changed to UNINSTALL
 
 updateActiveFile ()
 {
@@ -250,7 +255,9 @@ updateActiveFile ()
     fi
 
     if ! $sourceFound; then
-        logMessage "no replacement file for $baseName - nothing changed"
+        logMessage "ERROR: no replacement file for $sourceFile"
+        thisFileUpdated=false
+        scriptAction='UNINSTALL'
         return
     fi
     backupActiveFile "$destinationFile"
@@ -310,63 +317,65 @@ checkFileSets ()
         return
     fi
 
-    # nothing to do if fileSet directory already exists
-    if [ -d "$fileSet" ]; then
-        return
-    fi
-    logMessage "creating file set for $venusVersion"
-    mkdir "$fileSet"
+    # attempt to create file set if it doesn't exist
+    if [ ! -d "$fileSet" ]; then
+        logMessage "creating file set for $venusVersion"
+        mkdir "$fileSet"
 
-    local fileList=$(cat "$pkgFileSets/fileList")
-    local versionList=($(ls -d "$pkgFileSets"/v*))
-    local activeFile=""
-    local baseName=""
+        local fileList=$(cat "$pkgFileSets/fileList")
+        local versionList=($(ls -d "$pkgFileSets"/v*))
+        local activeFile=""
+        local baseName=""
 
-    for activeFile in $fileList ; do
-        baseName=$(basename "$activeFile")
-        # can't process if no Venus file
-        if [ ! -f "$activeFile" ]; then
-            logMessage "ERROR $venusVersion $baseName no replacement file"
-            touch "$fileSet/$baseName.NO_ORIG"
-            touch "$fileSet/$baseName.NO_REPLACEMENT"
-            touch "$fileSet/INCOMPLETE"
-            continue
-        fi
-        # look for a match in another version
-        matchFound=false
-        for v2 in ${versionList[@]} ; do
-            otherVersion=$(basename $v2)
-            otherVersionDir="$pkgFileSets/$otherVersion"
-            otherFile="$pkgFileSets/$otherVersion/$baseName"
-
-            if [ "$otherVersion" == "$venusVersion" ]; then
+        for activeFile in $fileList ; do
+            baseName=$(basename "$activeFile")
+            # can't process if no Venus file
+            if [ ! -f "$activeFile" ]; then
+                logMessage "ERROR $venusVersion $baseName no original file"
+                touch "$fileSet/$baseName.NO_ORIG"
+                touch "$fileSet/$baseName.NO_REPLACEMENT"
+                touch "$fileSet/INCOMPLETE"
                 continue
             fi
-            # skip symbolic links and nonexistent originals
-            if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
-                continue
-            fi
-            cmp -s "$activeFile" "$otherFile.orig" > /dev/null
-            # files match
-            if [ $? -eq 0 ]; then
-                matchFound=true
-                break
+            # look for a match in another version
+            matchFound=false
+            for v2 in ${versionList[@]} ; do
+                otherVersion=$(basename $v2)
+                otherVersionDir="$pkgFileSets/$otherVersion"
+                otherFile="$pkgFileSets/$otherVersion/$baseName"
+
+                if [ "$otherVersion" == "$venusVersion" ]; then
+                    continue
+                fi
+                # skip symbolic links and nonexistent originals
+                if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
+                    continue
+                fi
+                cmp -s "$activeFile" "$otherFile.orig" > /dev/null
+                # files match
+                if [ $? -eq 0 ]; then
+                    matchFound=true
+                    break
+                fi
+            done
+            
+            if $matchFound ;then
+                logMessage "$baseName linking $venusVersion to $otherVersion"
+                ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
+                ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
+                rm -f "$fileSet/$baseName.NO_ORIG"
+                rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+            # no match to a previous verison - can't create file set automatically
+            # but copy original file to aid manual editing
+            else
+                logMessage "ERROR $venusVersion $baseName no replacement file"
+                cp "$activeFile" "$fileSet/$baseName.orig"
+                touch "$fileSet/$baseName.NO_REPLACEMENT"
+                touch "$fileSet/INCOMPLETE"
             fi
         done
-        
-        if $matchFound ;then
-            logMessage "$baseName linking $venusVersion to $otherVersion"
-            ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
-            ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
-        # no match to a previous verison - can't create file set automatically
-        # but copy original file to aid manual editing
-        else
-            logMessage "ERROR $venusVersion $baseName no replacement file"
-            cp "$activeFile" "$fileSet/$baseName.orig"
-            touch "$fileSet/$baseName.NO_REPLACEMENT"
-            touch "$fileSet/INCOMPLETE"
-        fi
-    done
+    fi
+
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
         scriptAction='EXIT'

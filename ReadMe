@@ -8,10 +8,17 @@ The easiest way to install this code IF the Venus device has internet access is 
 wget -qO - https://github.com/kwindrem/SetupHelper/archive/current.tar.gz | tar -xzf - -C /data
 mv /data/SetupHelper-current /data/SetupHelper
 
-or
+If not, do the following a computer that does have internet access
 
-wget https://github.com/kwindrem/TankRepeater/archive/current.tar.gz
-mv current.tar.gz SetupHelper.tar.gz
+click on this link in a web browser:
+https://github.com/kwindrem/SetupHelper/archive/current.tar.gz
+
+rename the resulting .tar.gz file to venus-data.tar.gz
+copy the venus-data.tar.gz to a USB stick,
+put the stick in the Venus device and reboot.
+When Venus boots, it will unarchive the file to /data/SetupHelper-current
+
+mv /data/SetupHelper-current /data/SetupHelper
 
 Then move rcS.local to /data, or edit that file if it already exists and add:
 

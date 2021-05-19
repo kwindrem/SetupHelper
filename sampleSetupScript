@@ -10,8 +10,8 @@
 #
 #   functions to make it easier to install and remove modified files from Venus
 #
-#   The SetupHelper package includes CommonRewources and a script to reinstall programs
-#   after a Venus software update
+#   The SetupHelper package includes CommonResources 
+#   and a script to reinstall programs after a Venus software update
 #   SetupHelper should be installed before running this script
 #
 # Refer to the SetupHelper ReadMe file for details.
@@ -20,17 +20,8 @@
 
 #### following lines incorporate SetupHelper utilities into this script
 # Refer to the SetupHelper ReadMe file for details.
-    
-# CommonResources sets $okToProceed and $reinstall
-# among other varables and functions useful to this script
 
 source "/data/SetupHelper/CommonResources"
-
-if [ $scriptAction == 'EXIT' ] ; then
-    exit
-fi
-
-checkFileSets
 
 #### end of lines to include SetupHelper
 
@@ -39,35 +30,19 @@ if [ $scriptAction == 'NONE' ] ; then
     # display innitial message
     echo
     echo "explain purpose of this package"
-    echo
-    echo "Available actions:"
-    echo "  Install and activate (i)"
-    echo "  Uninstall (u) and restores all files to stock"
-    echo "  Quit (q) without further action"
-    if [ ! -z $logFile ]; then
-        echo "  Display Log (l) outputs the last 100 lines of the log"
-    fi
-    echo
-    while [ -z $userAction ] || ! ( [ $userAction == 'i' ] || [ $userAction == 'u' ]\
-                || [ $userAction == 'q' ] || [ $userAction == 'l' ] )
-    do
-        /bin/echo -n "Choose an action from the list above: "
-        read userAction
-    done
 
-    if [ $userAction == 'q' ]; then
-        exit
-    fi
+    # prompt for standard actions (install, reinstall, uninstall, etc)
+    # include MORE_PROMPTS if additional prompts are needed for installation
+    # scriptAction is set to INSTALL for reinstalls and UNINSTALL for uninstalls
+    # function exits for quit action
+    # log display is handled in function and remains there for other actions
+    standardActionPrompt 'MORE_PROMPTS'
 
-    # display log (if specified) and exit
-    if [ $userAction == 'l' ]; then
-        displayLog $logFile
-        exit
-    fi
+    # If nonstandard action prompts are required, duplicate the standardActionPrompt code here
+    # and modify it as needed
 
     #### prompt for additional parameters - do all prompting before starting any work
-    if [ $userAction == 'i' ]; then
-        scriptAction='INSTALL'
+    if [ $scriptAction == 'NONE' ]; then
         echo
         echo "The widget:"
         echo "  1) does something"
@@ -82,31 +57,30 @@ if [ $scriptAction == 'NONE' ] ; then
         
         #### save parameters in persistent storage for reinstall
         if [ $response == 'y' ]; then
-            touch $scriptDir/param1
+            touch $setupOptionsDir/param1
         else
-            rm -f $scriptDir/param1
+            rm -f $setupOptionsDir/param1
         fi
         
-        foo ='bar'
-        
-        echo $foo >  $scriptDir/param2
+        # ask user for a value to be added to /Settings
+        # typeset -i inverterPeakPower
+        read -p "Enter value for Widget X: " param2
+        echo $param2 >  $setupOptionsDir/param2
     fi
     
-    # typically, the only other action is uninstall but add other options here
-    elif [ $userAction == 'u' ]; then
-        scriptAction='UNINSTALL'
-    fi
+    # next step is to install
+    scriptAction='INSTALL'
 fi
 
 #### install code goes here
 if [ $scriptAction == 'INSTALL' ] ; then
     # get parameters from files
-    if [ -f $scriptDir/param1 ] ; then
+    if [ -f $setupOptionsDir/param1 ] ; then
         param1=true
     else
         param1=false
     fi
-    foo=$(cat $scriptDir/param2)
+    param2=$(cat $setupOptionsDir/param2)
 
     #### code to install/activate package goes here
     # below is example code to set flags used for exiting
@@ -115,10 +89,27 @@ if [ $scriptAction == 'INSTALL' ] ; then
     #   updateActiveFile $venusDirectory/activeFile1    
     #   copyToActiveFile $someDirectory/replacementFile2 $venusDirectory/activeFile2  
 
+    # install optional parameters if param is set, otherwise uninstall them
+    # if param1 ; then
+    #       updateActiveFile $venusDirectory/activeFile3
+    # else
+    #       restoreActiveFile $venusDirectory/activeFile3
+    # fi
+
     # sample flags
     something=false
     something2=false
     something3=false
+
+    # sample code to create dBus settings
+    # dbus -y com.victronenergy.settings /Settings AddSettings\
+    #        '%[{"path": "/category/paramA", "type":"int", "default":0},\
+    #        {"path":"/category/paramB", "type":"float", "default":0},\
+    #        {"path":"/category/paramC", "type":"float", "default":0},\
+    #        {"path":"/category/paramD", "type":"float", "default":0}]'  > /dev/null
+
+    # sample code to set dBus settings
+    # dbus -y com.victronenergy.settings /Settings/category/paramA SetValue $param2 > /dev/null
 
 
     # if some processing requires a reboot, set the flag then process it later
@@ -136,6 +127,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
         runAgain=true
     fi
 fi
+
 # #### uninstalling - check scriptAction again
 # if an install step failed package needs to be removed
 if [ $scriptAction == 'UNINSTALL' ] ; then
@@ -145,27 +137,25 @@ if [ $scriptAction == 'UNINSTALL' ] ; then
     #   restoreActiveFile $venusDirectory/activeFile1    
     #   restoreActiveFile $venusDirectory/activeFile2  
     #   restoreActiveFile $venusDirectory/activeFile3
-    
+
+    # remove any dBus settings
+    # dbus -y com.victronenergy.settings /Settings RemoveSettings\
+    #        '%["category/paramA", "category/paramB",\
+    #        "category/paramC", "category/paramD"]' > /dev/null
+
     # set exit flags as needed
     rebootNeeded=false
     restartAppsNeeded=true
     runAgain=false
 fi
 
-#### save parameters from manual run in files so next run from reinstallMods knows what to do
-if ! $reinstall ; then
-    if $param1 ;then
-        touch "$scriptDir/$param1File"
-    else
-        rm -f "$scriptDir/$param1File"
-    fi
-    # etc ....
-fi
 
 #### add code to restart apps and services here
+# gui is handled in endScript so it's not necessary to restart it here
 if $restartAppsNeeded ; then
     echo restarting apps
-    killall foo # sample restart line(s)
+    # killall foo # sample restart line(s)
+    # svc -t "/service/bar"    
 fi
 
 # thats all folks - SCRIPT EXITS INSIDE THE FUNCTION

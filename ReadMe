@@ -33,17 +33,10 @@ The following lines should be inclueded in the setup script to use the functions
     
 source "/data/SetupHelper/CommonResources"
 
-if [ $scriptAction == 'EXIT' ] ; then
-    exit
-fi
-
-checkFileSets
-
 #### end of lines to include SetupHelper
 
 A Venus software update overwrites any modifications to the root partition.
 It is therefore necessary to reinstall the modifications following the Venus update.
-
 
 For automatic reinstallation of any modificaitons using SetupHelper following a Venus update,
     add the following line in /data/rcS.local or /data/rc.local to call the reinstaller:
@@ -92,6 +85,11 @@ Therefore, installed flag files are stored in /etc/venus since a Venus OS update
 
 The installed flag file should be tested early in the script to save time.
 
+Installation choice may be required to control the installation of optional parameters.
+These options are stored in /data/setupOpitons/[package]
+This maintains the options through a reinstallation of the package.
+optionsSet is set after an installation is successful. This enables package reinstallation.
+
 A setup script needs to run manually to perform the initial installation or removal of the package.
 In this case, user interaction is necessary at least to choose to install or uninstall.
 The setup script also needs to run unattended when called from reinstallMods during system boot.
@@ -115,13 +113,12 @@ The following functions manage execution of the script and interfaces to reinsta
     Sourcing CommonResources checks the setup script command line and the installed flag
     and sets $scriptAction based on what is found.
         If this is a boot-time reinstall, AND the installed flag is set,
-            scriptAction is set to EXIT.
-        The setup script should test scripAction immmediately afger sourcing CommonResources
-            and skip furter processing if it is 'EXIT'
+            the script exits inside CommonResources.
+        It is no longer necessary to test scriptAction for EXIT. In fact that value will never be used 
         If this a boot-time reinstall but the installed flag is NOT set,
             scriptAction is set to INSTALL.
 
-    checkFileSets
+    checkFileSets has been decommissioned - file set checks are now handled when CommonResources is sourced
         Attempts to create a file set for the current Venus OS version if it does not exist yet.
             If the original files match another version, the file set is created
                 so the setup script may continue normally
@@ -137,7 +134,7 @@ The following functions manage execution of the script and interfaces to reinsta
                         is updated for the new version.
         Symbolic links are used in the file set to indicate redundancy between versions.
         This provides a visual indication of which versions have changes from a previous one.
-        checkFileSets should be called before any attempt is made to modify Venus files
+        checkFileSets no longer needs to be called in the setup script
 
     endScript
         Function to finish up, prompt the user (if not reinstalling) and exit the script
@@ -186,9 +183,14 @@ The following functions manage execution of the script and interfaces to reinsta
         equivalent to #scriptDir/FileSets
         Version-dependent replacements are stored in version subdirectories
         Version-INDEPENDENT replacements are stored in FileSets
+    $pkgFileSets - is the locaiton of version-dependent files for the current Venus version
+        equivalent to  $fileSets/$venusVersion
     $runningAtBoot - true if the script was called from reinstallMods (at boot time)
         signifying this is to be an unattended (automatic) installation
         CommonResoures sets this variable based on command line options
+    $setupOptionsDir - the location of any files that control installation
+        These options are maintained in a separate directory so reinsalling the package
+        does not remove them so that a reinstall can proceed without prompting again
 
 The following functions update or restore Venus files to activate a package
 they are intended to simplify common tasks, generally reducing many lines
@@ -216,6 +218,9 @@ will preven installation until the file set is complete and the INCOMPLETE flag 
 fileList contains a list of Venus files to be managed by this package. 
 Packages may also contain files that do not exist in the stock Venus image.
 These are NOT included in fileList!
+
+The special file NOT_COMPATIBLE in a file set indicates the package is not compatible with this Venus version
+    CommonResources will prevent the package installation or force an uninstall if it already has been
 
 Use full paths/name for all files to avoid problems when running the script from other locations
 such as the boot code, and quote them in case the names contain spaces.
@@ -260,12 +265,12 @@ The following functions simplify the task of getting user input
         It also handles displaying setup and package logs then asks for an action again
         It also handles quitting with no action - the fuction EXITS without returning in this case
         The basic action prompt includes install, reinstall, quit, display logs (2 choices)
-        A reinstall option is enabled by including 'enableReinstall' as the first parameter
-        When reinstall is enabled, selecting install, returns a scriptAction of PROMPT
+        A reinstall option is enabled if the optionsSet option exists
+        When reinstall is enabled, selecting install, returns a scriptAction of NONE
         indicating additional prompting may be needed to complete the install
         At the end of these prompts, the main script should set scriptAction to INSTALL
         If reinstall is selected, the script action is set to INSTALL and the main script
-        can then skip additional prompts and allow options set previously to control the install
+        should then skip additional prompts and allow options set previously to control the install
 
     yesNoPrompt "question"
         Asks the user to answer yes or no to the question

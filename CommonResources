@@ -3,61 +3,21 @@
 #
 # Refer to the SetupHelper ReadMe file for details on how to use these resources.
 
+
+######## skip to bottom of file for code executed when script is called
+
+setupHelperDir="/data/SetupHelper"
+source "$setupHelperDir/LogHandler"
+reinstallParam="reinstall"
+
 # get the full, unambiguous path to this script
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
 fullScriptName="$scriptDir/$(basename "$0")"
 
-setupHelperDir="/data/SetupHelper"
-source "$setupHelperDir/LogHandler"
-
-reinstallParam="reinstall"
-installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
-
-# what action the script should take:
-#  NONE - do noting - signals script to prompt for user input on how to proceed
-#  INSTALL - install package components
-#  PROMPT - prompt user for additional installation options
-#  UNINSTALL - remove package components
-#  EXIT - exit script without taking any action
-# CommonResources may set the the action if initial checks
-#  indicate a clear direction
-# otherwise, the action will set based on user input (in the script)
-# if failures occur during installation,
-# scriptAction should be changed to UNINSTALL so the installation can be cleaned up
-# and the setup script should test for UNINSTALL after it attempts installation
-# A file set error indicates the file set for the current verion is not usable
-#  and installation should not occur
-# checkFileSets sets the script action to EXIT to prevent an installation from occurring
-
-scriptAction='NONE'
-
-# flags to control setup script exit behavior
-rebootNeeded=false
-runAgain=false
-filesUpdated=false
-restartGui=false
-
-# check for reinstall (first parameter to setup script command line)
-# set $scriptAction to control work following the source command
-# if second parameter is "force" then the installedFlag is not checked
-if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
-    if [ $# -ge 2 ] && [ $2 == "force" ]; then
-        scriptAction='INSTALL'        
-    elif [ ! -f "$installedFlag" ]; then
-        scriptAction='INSTALL'
-    else
-        scriptAction='EXIT'
-    fi
-    runningAtBoot=true
-# not a reinstall, ignore the installed flag and continue with MANUAL installation
-else
-    runningAtBoot=false
-    pruneSetupLogFile
-fi
-
-
 venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
+
+installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
 
 # set up pointers to package files
 pkgFileSets="$scriptDir/FileSets"
@@ -75,6 +35,36 @@ rcLocal="/data/rcS.local"
 exitReboot=123
 exitSuccess=0
 
+# directory that holds script's options
+# options were removed from the script directory so they are preserved when the package is reinstalled
+setupOptionsRoot="/data/setupOptions"
+setupOptionsDir="$setupOptionsRoot"/$(basename "$scriptDir")
+
+
+# what action the script should take:
+#  NONE - do noting - signals script to prompt for user input on how to proceed
+#  INSTALL - install package components
+#  (decommissioned) PROMPT - prompt user for additional installation options
+#  UNINSTALL - remove package components
+#  (decommissioned) EXIT - exit script without taking any action (now exits in-line)
+# CommonResources may set the the action if initial checks
+#  indicate a clear direction
+# otherwise, the action will be set based on user input (in the script)
+# if failures occur during installation,
+# scriptAction should be changed to UNINSTALL so the installation can be cleaned up
+# and the setup script should test for UNINSTALL after it attempts installation
+# A file set error indicates the file set for the current verion is not usable
+#  and installation should not occur
+#  checkFileSets EXITS locally
+
+scriptAction='NONE'
+
+# flags to control setup script exit behavior
+rebootNeeded=false
+runAgain=false
+filesUpdated=false
+restartGui=false
+
 
 # standardActionPrompt provides the standard set of options for selecting script's action
 # scriptAction is set by install/uninstall
@@ -83,29 +73,27 @@ exitSuccess=0
 # if nonstandard prompts are necessary, duplicate this code in the setup script
 # and add the additional options and do not call standardActionPrompt
 #
-# if $1 == 'enableReinstall' indicates if reinstall is a permitted choice
+# the reinstall option is permitted only if setup options were previously set
+# if the the reinstall action is choosen, the script action is set to INSTALL
+# the setup script can then test this to skip further prompts
 #
-# if it is enabled and the user selects install, then scriptAction is set to PROMPT
-# indicating the main script should proceed with additional user prompts
-# then change the scriptAction to INSTALL after all prompts have been addressed
+# $1 indicates if there are additional prompts needed during installaiton
+# if this parameter is 'MORE_PROMPTS', installaiton does NOT change scriptAction
+# if this parameter does not exist, installation WILL change scriptAction to install
+# this provides backaward compatibility with scripts written prior to the reinstall logic
 #
-# choosing if it's enabled and the user selectes reinstall, then
-# the scriptAction is set to INSTALL, indicating the main script should skip
-# additional user prompts and proceed with installation based on flag files
-# from a preveious installaiton
-#
-# if standandardActionPrompt is called without enableReinstall
-# the reinstall option is not allowed
-# actionPrompt is set to INSTALL or UNINSTALL
-#
-# this logic is somewhat convoluted but provides backward compatibility
 
 standardActionPrompt ()
 {
-    if [ $# -gt 0 ] && [ "$1" == 'enableReinstall' ]; then
+    if [ -f "$setupOptionsDir/optionsSet" ]; then
         enableReinstall=true
     else
         enableReinstall=false
+    fi
+    if [ $# -gt 0 ] && [ $1 == 'MORE_PROMPTS' ]; then
+        updateScriptAction=false
+    else
+        updateScriptAction=true
     fi
 
     echo
@@ -127,9 +115,7 @@ standardActionPrompt ()
         read response
         case $response in
             [iI]*)
-                if $enableReinstall ; then
-                    scriptAction='PROMPT'
-                else
+                if $updateScriptAction ; then
                     scriptAction='INSTALL'
                 fi
                 break
@@ -292,7 +278,7 @@ restoreActiveFile ()
         mv "$1.orig" "$1"
         rm -f "$1.NO_ORIG"
         filesUpdated=true
-        thisFileUpdated=false
+        thisFileUpdated=true
     elif [ -f "$1.NO_ORIG" ]; then
         rm -f "$1"
         rm -f "$1.NO_ORIG"
@@ -310,10 +296,34 @@ restoreActiveFile ()
 #   If not, new version is marked for manual editing (NO_REPLACEMENT)
 #       and scriptAction is set to EXIT so incompatible files are not installed
 
+# dummy routine for backward compatibility
+# the actual work is now done in-line when CommonResources is sourced
+
 checkFileSets ()
+{
+    return
+}
+
+_checkFileSets ()
 {
     # nothing to do if there is no fileList (version-dependent files)
     if [ ! -f "$pkgFileSets/fileList" ]; then
+        return
+    fi
+
+    # check to see if package is compatible with this Venus version
+    if [ -f "$fileSet/NOT_COMPATIBLE" ]; then
+        if [ -f "$installedFlag" ]; then
+            logMessage "$shortScriptName not compatible with Venus $venusVersion - uninstalling"
+            scriptAction='UNINSTALL'
+        else
+            logMessage "$shortScriptName not compatible with Venus $venusVersion - can't install"
+            exit
+        fi
+    fi
+
+    # skip checks if uninstalling 
+    if [ $scriptAction == 'UNINSTALL' ];then
         return
     fi
 
@@ -378,7 +388,7 @@ checkFileSets ()
 
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
-        scriptAction='EXIT'
+        exit
     fi
 }
 
@@ -394,6 +404,8 @@ endScript ()
     fi
 
     if [ $scriptAction == 'INSTALL' ] ; then
+        # indicate installation was successful, so reinstalls can use the existing options in the future
+        touch "$setupOptionsDir/optionsSet"
         # set up reinstallMods to run this script again after a VenusOS update
         if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
             logMessage "adding $shortScriptName" to $(basename "$reinstallScriptsList")
@@ -463,5 +475,39 @@ endScript ()
         fi
     fi
 }
+
+######## this code is executed in-line when CommonResources is sourced
+
+# check for reinstall (first parameter to setup script command line)
+# set $scriptAction to control work following the source command
+# if second parameter is "force" then the installedFlag is not checked
+if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
+    if [ $# -ge 2 ] && [ $2 == "force" ]; then
+        scriptAction='INSTALL'        
+    elif [ ! -f "$installedFlag" ]; then
+        scriptAction='INSTALL'
+    else
+        exit
+    fi
+    runningAtBoot=true
+# not a reinstall, ignore the installed flag and continue with MANUAL installation
+else
+    runningAtBoot=false
+    pruneSetupLogFile
+fi
+
+_checkFileSets
+
+if [ scriptAction != 'UNINSTALL' ];then
+    if [ ! -d "$setupOptionsRoot" ]; then
+        logMessage "creating root setup options directory $setupOptionsRoot"
+        mkdir $setupOptionsRoot
+    fi
+
+    if [ ! -d "$setupOptionsDir" ]; then
+        logMessage "creating package options directory to $setupOptionsDir"
+        mkdir $setupOptionsDir
+    fi
+fi
 
 

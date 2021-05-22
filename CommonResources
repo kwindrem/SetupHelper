@@ -286,17 +286,28 @@ restoreActiveFile ()
     fi
 }
 
-# converts a Venus version string to a version number and beta number
+# converts a Venus version string to a version number
+#
 # beta numbers are handled in a special way. 
-# "00" is the released verison which is LATER than any other beta number
+# the released verison has no beta string
+#  it's number would be less than a beta version
+#  we bump the version number by 999
+#  so the release is always greater than any beta
+#
+# the "-large-n" portion is discarded so those versions
+# can be compared to non-large versions
+#
 # the version string is passed as $1
 # the number is returned in versionNumber
 
 function versionStringToNumber ()
 {
-    read versionNumber versionBeta <<< $(echo $1 | awk -v FS='[v.~-]' '{printf "%02d%02d%02d %02d\n", $2, $3, $4, $4}')
+    local versionBeta=""
+
+    read versionNumber versionBeta <<< $(echo $1 | sed -e 's/v//' -e 's/-.*$//' | \
+                awk -v FS='[v.~-]' '{printf "%d%03d%03d %d\n", $1, $2, $3, $3}')
     if (( $versionBeta == 0 )); then
-        ((versionNumber += 99))
+        ((versionNumber += 999))
     fi
 }
 

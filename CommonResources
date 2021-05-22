@@ -3,7 +3,6 @@
 #
 # Refer to the SetupHelper ReadMe file for details on how to use these resources.
 
-
 ######## skip to bottom of file for code executed when script is called
 
 setupHelperDir="/data/SetupHelper"
@@ -287,6 +286,20 @@ restoreActiveFile ()
     fi
 }
 
+# converts a Venus version string to a version number and beta number
+# beta numbers are handled in a special way. 
+# "00" is the released verison which is LATER than any other beta number
+# the version string is passed as $1
+# the number is returned in versionNumber
+
+function versionStringToNumber ()
+{
+    read versionNumber versionBeta <<< $(echo $1 | awk -v FS='[v.~-]' '{printf "%02d%02d%02d %02d\n", $2, $3, $4, $4}')
+    if (( $versionBeta == 0 )); then
+        ((versionNumber += 99))
+    fi
+}
+
 
 # checkFileSets validates the file sets used install package modifications
 #
@@ -295,6 +308,9 @@ restoreActiveFile ()
 #       the new file set is populated automatically and may be used with no further action
 #   If not, new version is marked for manual editing (NO_REPLACEMENT)
 #       and scriptAction is set to EXIT so incompatible files are not installed
+#
+# Replacement files that have no original specify an "alternate original" that is used
+# for version comparisons that locate an appropriate replacement
 
 # dummy routine for backward compatibility
 # the actual work is now done in-line when CommonResources is sourced
@@ -312,13 +328,20 @@ _checkFileSets ()
     fi
 
     # check to see if package is compatible with this Venus version
-    if [ -f "$fileSet/NOT_COMPATIBLE" ]; then
-        if [ -f "$installedFlag" ]; then
-            logMessage "$shortScriptName not compatible with Venus $venusVersion - uninstalling"
-            scriptAction='UNINSTALL'
-        else
-            logMessage "$shortScriptName not compatible with Venus $venusVersion - can't install"
-            exit
+    if [ ! -z $obsoleteVersion ]; then
+        versionStringToNumber $obsoleteVersion
+        obsoleteVersion=$versionNumber
+    
+        versionStringToNumber $venusVersion
+
+        if (( $versionNumber >= $obsoleteVersion )); then
+            if [ -f "$installedFlag" ]; then
+                logMessage "$(basename $scriptDir) not compatible with Venus $venusVersion - uninstalling"
+                scriptAction='UNINSTALL'
+            else
+                logMessage "$(basename $scriptDir) not compatible with Venus $venusVersion - can't install"
+                exit
+            fi
         fi
     fi
 
@@ -336,9 +359,19 @@ _checkFileSets ()
         local versionList=($(ls -d "$pkgFileSets"/v*))
         local activeFile=""
         local baseName=""
+        local file=""
 
-        for activeFile in $fileList ; do
-            baseName=$(basename "$activeFile")
+        for file in $fileList ; do
+            baseName=$(basename "$file")
+            activeFile=$file
+            if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
+                activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
+            fi
+            # package already installed, use .orig file for comparisons
+            if [ -f "$activeFile.orig" ]; then
+                activeFile="$activeFile.orig"
+            fi
+
             # can't process if no Venus file
             if [ ! -f "$activeFile" ]; then
                 logMessage "ERROR $venusVersion $baseName no original file"

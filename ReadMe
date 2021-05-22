@@ -132,8 +132,6 @@ The following functions manage execution of the script and interfaces to reinsta
                     then rerun the setup script to install the package.
                     You can also revert to a previous Venus OS version until the package
                         is updated for the new version.
-        Symbolic links are used in the file set to indicate redundancy between versions.
-        This provides a visual indication of which versions have changes from a previous one.
         checkFileSets no longer needs to be called in the setup script
 
     endScript
@@ -191,6 +189,8 @@ The following functions manage execution of the script and interfaces to reinsta
     $setupOptionsDir - the location of any files that control installation
         These options are maintained in a separate directory so reinsalling the package
         does not remove them so that a reinstall can proceed without prompting again
+    $obsoleteVersion - if the package is obsolete, it can be prevented from installation
+        at a specified Venus OS version
 
 The following functions update or restore Venus files to activate a package
 they are intended to simplify common tasks, generally reducing many lines

@@ -414,7 +414,6 @@ _checkFileSets ()
             done
             
             if $matchFound ;then
-                logMessage "$baseName linking $venusVersion to $otherVersion"
                 ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
                 rm -f "$fileSet/$baseName.NO_ORIG"

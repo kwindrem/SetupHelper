@@ -28,18 +28,20 @@ getFromUsb ()
     local archiveTimeStamp=""
     local lastUpdate=""
 
-    # archive found on USB stick - process it
-    if [ -f "$packageArchive" ]; then
-        tar -xzf "$packageArchive" -C /data
-        if [ ! -d "$packageDir-$gitHubBranch" ]; then
-            logMessage "ERROR: $packageArchive did not contain $package"
-            return 0
-        fi
+    # no archive found on USB stick - process it
+    if [ ! -f "$packageArchive" ]; then
+        return 0
+    fi
+
+    tar -xzf "$packageArchive" -C /data
+    if [ ! -d "$packageDir-$gitHubBranch" ]; then
+        logMessage "ERROR: $packageArchive did not contain $package"
+        return 0
     fi
 
     # get the timeStamp from local copy of package
     if [ -f "$packageDir/timeStamp" ]; then
-        lastUpdate=$(cat "$packageDir/gitHubTimeStamp")
+        lastUpdate=$(cat "$packageDir/timeStamp")
     else
         lastUpdate=""
     fi
@@ -108,12 +110,13 @@ getFromGitHub ()
 
 # install the archive and run setup script
 #
-# $1 is the flag to allow running the script with user interaction
+# $1 is the package name
+# $2 is the flag to allow running the script with user interaction
 
 doUpdate ()
 {
-    local pkgService="/service/$package"
-    local pkgServiceDir="$packageDir/service"
+    local package=$1
+    local packageDir="/data/$package"
 
     if [ $# > 0 ] && [ $1 == 'prompting' ]; then
         installOk=true

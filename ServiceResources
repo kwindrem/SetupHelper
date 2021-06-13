@@ -10,55 +10,74 @@
 # ONLY if there are changes. This leaves other files managed by supervise untouched.
 #
 # For all functions, $1 specifies the package name
+#
+# functions that begin with _ skip checks and do not log activity
 
 
-# startService and stopService start and stop the service, respectively
-# the 'down' flag is also cleared/set to control service runs in the future
-# startService will cause the service to stop then start again !!!
-
-startService ()
-{
-    # no service to remove
-    if [ ! -e "/service/$pkg" ]; then
-        return
-    fi
-    # no package specified
-    if [ $# -lt 1 ]; then
-        return
-    fi
-
-    local pkg=$1
-
-    rm -f "/service/$pkg/down"
-    svc -t "/service/$pkg"
-}
-
-
-stopService ()
-{
-    # no service to remove
-    if [ ! -e "/service/$pkg" ]; then
-        return
-    fi
-    # no package specified
-    if [ $# -lt 1 ]; then
-        return
-    fi
-
-    local pkg=$1
-
-    touch "/service/$pkg/down"
-    svc -d "/service/$pkg"
-}
-
-# killServiceProcesses makes sure there are no services 
-# internal function only !!!!
+# _killServiceProcesses makes sure there are no service processes running
+# The intent is to force supervise to run the new version 
 # must be called from other functions that have already made the necessary checks
 
 _killServiceProcesses ()
 {
     local pkg=$1
-    ps -l | grep $pkg | grep -v -e grep -e $$  | awk '{print $3}' | xargs kill > /dev/null 2>&1
+    ps -lw | grep $pkg | grep -v -e grep -e $$  | awk '{print $3}' | xargs kill > /dev/null 2>&1
+}
+
+# startService and stopService start and stop the service, respectively
+# the 'down' flag is also cleared/set to control service runs in the future
+# startService will cause the service to stop then start again !!!
+
+_startService ()
+{
+    local pkg=$1
+    rm -f "/service/$pkg/down"
+    svc -u "/service/$pkg"
+    if [ -e "/service/$pkg/log" ]; then
+        rm -f "/service/$pkg/log/down"
+        svc -u "/service/$pkg/log"
+    fi
+}
+
+startService ()
+{
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+    local pkg=$1
+
+    if [ -e "/service/$pkg" ]; then
+        logMessage "starting $pkg service"
+        _startService $pkg
+    fi
+}
+
+
+_stopService ()
+{
+    local pkg=$1
+    touch "/service/$pkg/down"
+    svc -d "/service/$pkg"
+    if [ -e "/service/$pkg/log" ]; then
+        touch "/service/$pkg/log/down"
+        svc -d "/service/$pkg/log"
+    fi
+    _killServiceProcesses $pkg
+}
+
+stopService ()
+{
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+    local pkg=$1
+
+    if [ -e "/service/$pkg" ]; then
+        logMessage "stopping $pkg service"
+        _stopService $pkg
+    fi
 }
 
 #
@@ -67,6 +86,7 @@ _killServiceProcesses ()
 
 _removeService ()
 {
+    local pkg=$1
     # stop the service
     svc -d "/service/$pkg"
 
@@ -79,19 +99,16 @@ _removeService ()
 
 removeService ()
 {
-    # no service to remove
-    if [ ! -e "/service/$pkg" ]; then
-        return
-    fi
     # no package specified
     if [ $# -lt 1 ]; then
         return
     fi
-
     local pkg=$1
 
-    logMessage "removing $pkg service"
-    _removeService $pkg
+    if [ -e "/service/$pkg" ]; then
+        logMessage "removing $pkg service"
+        _removeService $pkg
+    fi
 }
 
 
@@ -107,12 +124,12 @@ removeService ()
 
 installService ()
 {
-    # no service to install
-    if [ ! -e "$scriptDir/service" ]; then
-        return
-    fi
     # no package specified
     if [ $# -lt 1 ]; then
+        return
+    fi
+    # no service to install
+    if [ ! -e "$scriptDir/service" ]; then
         return
     fi
 
@@ -127,33 +144,22 @@ installService ()
     if [ ! -e "/service/$pkg" ]; then
         logMessage "$pkg installing service"
         cp -R "$scriptDir/service" "/service/$pkg"
-    # service already installed - only copy changed files
+    # service already installed - only copy changed files, then restart service
     else
+        logMessage "restarting $pkg service"
         if [ -f "$scriptDir/service/run" ]; then
             cmp -s "$scriptDir/service/run" "/service/$pkg/run" > /dev/null
             if [ $? != 0 ]; then
                 cp "$scriptDir/service/run" "/service/$pkg/run"
-                serviceRestartNeeded=true
             fi
         fi
         if [ -f "$scriptDir/service/log/run" ]; then
             cmp -s "$scriptDir/service/log/run" "/service/$pkg/log/run" > /dev/null
             if [ $? != 0 ]; then
                 cp "$scriptDir/service/log/run" "/service/$pkg/log/run"
-                 serviceRestartNeeded=true
            fi
         fi
-        if $serviceRestartNeeded ; then
-            logMessage "$pkg updated service - restarting"
-            # stop the service
-            svc -d "/service/$pkg"
-            # kill related processes
-            _killServiceProcesses $pkg
-            # bring service back up
-            if [ ! -f "/service/down" ]; then
-                svc -u "/service/$pkg"
-            fi
-        fi
+        _killServiceProcesses $pkg
     fi
 }
 

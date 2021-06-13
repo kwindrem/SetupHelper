@@ -1,5 +1,3 @@
-Caution: bugs found in automatic updater. Do not use for now
-
 The SetupHelper package provides:
     a set of utilities to simplfy installing modifications to Victron Venus Os
     a mechanism to automatically reinstall them following a Venus OS update

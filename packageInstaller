@@ -114,7 +114,7 @@ for package in $allPackages; do
             updateSetupHelper=true
         # update the package with user interaction if it is needed to do a full install (not reinstall)
         else
-            doUpdate 'propmting'
+            doUpdate $package 'propmting'
         fi
     else
         rm -rf "$packageDir-$gitHubBranch"
@@ -125,7 +125,7 @@ done
 # this prevents stepping on SetupHelper resources
 # (this script will complete even if it's replaced)
 if $updateSetupHelper ; then
-    doUpdate "SetupHelper"
+    doUpdate "SetupHelper" 'propmting'
 fi
 if $rebootNeeded ; then
     echo

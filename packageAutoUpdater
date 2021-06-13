@@ -13,7 +13,7 @@
 
 # get the full, unambiguous path to this script
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
-packageName=$(basename "$scriptDir")
+packageame=$(basename "$scriptDir")
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
 
 source "/data/SetupHelper/LogHandler"

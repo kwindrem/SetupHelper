@@ -143,11 +143,4 @@ doUpdate ()
             logMessage "$package can't reinstall - options from previous install not found"
         fi
     fi
-    if [ -e "$pkgServiceDir" ]; then
-        if [ ! -f "$pkgService" ]; then
-            ln -s "$pkgServiceDir" "$pkgService"
-            logMessage "restarting $package service"
-            svc -u "$pkgService"
-        fi
-    fi
 }

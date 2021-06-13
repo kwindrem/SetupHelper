@@ -345,24 +345,6 @@ checkFileSets ()
 
 _checkFileSets ()
 {
-    # check to see if package is compatible with this Venus version
-    if [ -f "$scriptDir/obsoleteVersion" ]; then
-        versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
-        obsoleteVersion=$versionNumber
-    
-        versionStringToNumber $venusVersion
-
-        if (( $versionNumber >= $obsoleteVersion )); then
-            if [ -f "$installedFlag" ]; then
-                logMessage "$(basename $scriptDir) not compatible with Venus $venusVersion - uninstalling"
-                scriptAction='UNINSTALL'
-            else
-                logMessage "$(basename $scriptDir) not compatible with Venus $venusVersion - can't install"
-                exit
-            fi
-        fi
-    fi
-
     # skip checks if uninstalling 
     if [ $scriptAction == 'UNINSTALL' ];then
         return
@@ -597,14 +579,33 @@ else
     runningAtBoot=false
 fi
 
-if [ ! -d "$setupOptionsRoot" ]; then
-    logMessage "creating root setup options directory $setupOptionsRoot"
-    mkdir $setupOptionsRoot
+# check to see if package is compatible with this Venus version
+notCompatible=false
+if [ -f "$scriptDir/obsoleteVersion" ]; then
+    versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
+    obsoleteVersion=$versionNumber
+
+    versionStringToNumber $venusVersion
+
+    if (( $versionNumber >= $obsoleteVersion )); then
+        notCompatible=true
+    fi
 fi
 
-if [ ! -d "$setupOptionsDir" ]; then
-    logMessage "creating package options directory to $setupOptionsDir"
-    mkdir $setupOptionsDir
+if $notCompatible ; then
+    pkg="$(basename $scriptDir)"
+    logMessage "$pkg not compatible with Venus $venusVersion"
+    scriptAction='UNINSTALL'
+else
+    if [ ! -d "$setupOptionsRoot" ]; then
+        logMessage "creating root setup options directory $setupOptionsRoot"
+        mkdir $setupOptionsRoot
+    fi
+
+    if [ ! -d "$setupOptionsDir" ]; then
+        logMessage "creating package options directory to $setupOptionsDir"
+        mkdir $setupOptionsDir
+    fi
 fi
 
 _checkFileSets

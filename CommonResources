@@ -5,12 +5,9 @@
 
 ######## skip to bottom of file for code executed when script is called
 
-setupHelperDir="/data/SetupHelper"
-source "$setupHelperDir/LogHandler"
-reinstallParam="reinstall"
-
 # get the full, unambiguous path to this script
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+packageName=$(basename "$scriptDir")
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
 fullScriptName="$scriptDir/$(basename "$0")"
 
@@ -21,6 +18,15 @@ installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
 # set up pointers to package files
 pkgFileSets="$scriptDir/FileSets"
 fileSet="$pkgFileSets/$venusVersion"
+
+# GitHub account
+gitHubUser="kwindrem"
+
+setupHelperDir="/data/SetupHelper"
+source "$setupHelperDir/LogHandler"
+source "$setupHelperDir/ServiceResources"
+reinstallParam="reinstall"
+
 
 reinstallScriptsList="/data/reinstallScriptsList"
 
@@ -63,6 +69,32 @@ rebootNeeded=false
 runAgain=false
 filesUpdated=false
 restartGui=false
+
+# yesNoPrompt provides user prompting requesting a yes/no response
+#
+# $1 is the prompt displayed when pausing for user input
+#
+# $yesResponse is set to true if the response was yes
+
+yesNoPrompt ()
+{
+    response=''
+    while true; do
+        /bin/echo -n "$*"
+        read response
+        case $response in
+            [yY]*)
+                yesResponse=true
+                break
+                ;;
+            [nN]*)
+                yesResponse=false
+                break
+                ;;
+            *)
+        esac
+    done
+}
 
 
 # standardActionPrompt provides the standard set of options for selecting script's action
@@ -141,35 +173,7 @@ standardActionPrompt ()
             *)
         esac
     done
-
 }
-
-# yesNoPrompt provides user prompting requesting a yes/no response
-#
-# $1 is the prompt displayed when pausing for user input
-#
-# $yesResponse is set to true if the response was yes
-
-yesNoPrompt ()
-{
-    response=''
-    while true; do
-        /bin/echo -n "$*"
-        read response
-        case $response in
-            [yY]*)
-                yesResponse=true
-                break
-                ;;
-            [nN]*)
-                yesResponse=false
-                break
-                ;;
-            *)
-        esac
-    done
-}
-
 
 # backupActiveFile makes a copy of the active file in file.orig
 # if the original file does not exist, no backup is made
@@ -240,9 +244,17 @@ updateActiveFile ()
     fi
 
     if ! $sourceFound; then
-        logMessage "ERROR: no replacement file for $sourceFile"
-        thisFileUpdated=false
-        scriptAction='UNINSTALL'
+        # replacement files are not be needed for some versions
+        # if so marked, leave original untouched
+        if [ -f "$fileSet/$(basename $sourceFile).NO_REPLACEMENT" ]; then
+echo "#### no replacement flaged for $sourceFile"
+            return
+        # if not flagged, this is a fatal error
+        else
+            logMessage "ERROR: no replacement file for $sourceFile"
+            thisFileUpdated=false
+            scriptAction='UNINSTALL'
+        fi
         return
     fi
     backupActiveFile "$destinationFile"
@@ -333,14 +345,9 @@ checkFileSets ()
 
 _checkFileSets ()
 {
-    # nothing to do if there is no fileList (version-dependent files)
-    if [ ! -f "$pkgFileSets/fileList" ]; then
-        return
-    fi
-
     # check to see if package is compatible with this Venus version
-    if [ ! -z $obsoleteVersion ]; then
-        versionStringToNumber $obsoleteVersion
+    if [ -f "$scriptDir/obsoleteVersion" ]; then
+        versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
         obsoleteVersion=$versionNumber
     
         versionStringToNumber $venusVersion
@@ -361,73 +368,92 @@ _checkFileSets ()
         return
     fi
 
+    # nothing to do if there is no fileList (version-dependent files)
+    if [ ! -f "$pkgFileSets/fileList" ]; then
+        return
+    fi
+
     # attempt to create file set if it doesn't exist
     if [ ! -d "$fileSet" ]; then
         logMessage "creating file set for $venusVersion"
         mkdir "$fileSet"
+    fi
 
-        local fileList=$(cat "$pkgFileSets/fileList")
-        local versionList=($(ls -d "$pkgFileSets"/v*))
-        local activeFile=""
-        local baseName=""
-        local file=""
+    local fileList=$(cat "$pkgFileSets/fileList")
+    local versionList=($(ls -d "$pkgFileSets"/v*))
+    local activeFile=""
+    local baseName=""
+    local file=""
 
-        for file in $fileList ; do
-            baseName=$(basename "$file")
-            activeFile=$file
-            if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
-                activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
-            fi
-            # package already installed, use .orig file for comparisons
-            if [ -f "$activeFile.orig" ]; then
-                activeFile="$activeFile.orig"
-            fi
+    for file in $fileList ; do
+        baseName=$(basename "$file")
+        activeFile=$file
+        if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
+            activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
+        fi
+        # package already installed, use .orig file for comparisons
+        if [ -f "$activeFile.orig" ]; then
+            activeFile="$activeFile.orig"
+        fi
 
-            # can't process if no Venus file
-            if [ ! -f "$activeFile" ]; then
-                logMessage "ERROR $venusVersion $baseName no original file"
-                touch "$fileSet/$baseName.NO_ORIG"
-                touch "$fileSet/$baseName.NO_REPLACEMENT"
-                touch "$fileSet/INCOMPLETE"
+        # can't process if no Venus file
+        if [ ! -f "$activeFile" ]; then
+            logMessage "ERROR $venusVersion $baseName no original file"
+            touch "$fileSet/$baseName.NO_ORIG"
+            touch "$fileSet/$baseName.NO_REPLACEMENT"
+            touch "$fileSet/INCOMPLETE"
+            continue
+        fi
+
+        # skip checks if replacement file already exists in file set
+        if [ -f "$fileSet/$baseName" ]; then
+            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+            continue
+        fi
+
+        # look for a match in another version
+        matchFound=false
+        for v2 in ${versionList[@]} ; do
+            otherVersion=$(basename $v2)
+            otherVersionDir="$pkgFileSets/$otherVersion"
+            otherFile="$pkgFileSets/$otherVersion/$baseName"
+
+            if [ "$otherVersion" == "$venusVersion" ]; then
                 continue
             fi
-            # look for a match in another version
-            matchFound=false
-            for v2 in ${versionList[@]} ; do
-                otherVersion=$(basename $v2)
-                otherVersionDir="$pkgFileSets/$otherVersion"
-                otherFile="$pkgFileSets/$otherVersion/$baseName"
-
-                if [ "$otherVersion" == "$venusVersion" ]; then
-                    continue
-                fi
-                # skip symbolic links and nonexistent originals
-                if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
-                    continue
-                fi
-                cmp -s "$activeFile" "$otherFile.orig" > /dev/null
-                # files match
-                if [ $? -eq 0 ]; then
-                    matchFound=true
-                    break
-                fi
-            done
-            
-            if $matchFound ;then
-                ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
-                ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
-                rm -f "$fileSet/$baseName.NO_ORIG"
-                rm -f "$fileSet/$baseName.NO_REPLACEMENT"
-            # no match to a previous verison - can't create file set automatically
-            # but copy original file to aid manual editing
-            else
-                logMessage "ERROR $venusVersion $baseName no replacement file"
-                cp "$activeFile" "$fileSet/$baseName.orig"
-                touch "$fileSet/$baseName.NO_REPLACEMENT"
-                touch "$fileSet/INCOMPLETE"
+            # skip symbolic links and nonexistent originals
+            if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
+                continue
+            fi
+            cmp -s "$activeFile" "$otherFile.orig" > /dev/null
+            # files match
+            if [ $? -eq 0 ]; then
+                matchFound=true
+                break
             fi
         done
-    fi
+        
+        if $matchFound ;then
+            ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
+            rm -f "$fileSet/$baseName.NO_ORIG"
+            # if other file set contains a replacement file, link to it
+            if [ -f "$otherFile" ]; then
+                ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
+                rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+            # if other file set does not contain a replacement, this one will not either
+            # this IS permitted and handled in the updateActiveFile and restoreActiveFile functions
+            elif [ -f "$otherFile.NO_REPLACEMENT" ]; then
+                touch "$fileSet/$baseName.NO_REPLACEMENT"
+            fi
+        # no match to a previous verison - can't create file set automatically
+        # but copy original file to aid manual editing
+        else
+            logMessage "ERROR $venusVersion $baseName no replacement file"
+            cp "$activeFile" "$fileSet/$baseName.orig"
+            touch "$fileSet/$baseName.NO_REPLACEMENT"
+            touch "$fileSet/INCOMPLETE"
+        fi
+    done
 
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
@@ -449,6 +475,7 @@ endScript ()
     if [ $scriptAction == 'INSTALL' ] ; then
         # indicate installation was successful, so reinstalls can use the existing options in the future
         touch "$setupOptionsDir/optionsSet"
+
         # set up reinstallMods to run this script again after a VenusOS update
         if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
             logMessage "adding $shortScriptName" to $(basename "$reinstallScriptsList")
@@ -500,57 +527,84 @@ endScript ()
     else
         # if reboot needed ask user if it should be done now
         if $rebootNeeded ; then
-
-            yesNoPrompt "Reboot system now (y) or issue a reboot manually later (n): "
-            if $yesResponse ; then
-                echo "rebooting ..."
-                reboot
+            if $deferReboot ; then
+                exit $exitReboot
             else
-                echo "system must be rebooted to finish installation and activate components"
+                yesNoPrompt "Reboot system now (y) or issue a reboot manually later (n): "
+                if $yesResponse ; then
+                    echo "rebooting ..."
+                    reboot
+                else
+                    echo "system must be rebooted to finish installation and activate components"
+                fi
             fi
 
         elif $runAgain ; then
             echo "$shortScriptName NOT completed"
             echo "  run it again manually to finish"
             echo "  or reboot the system to finish automatically"
+            exit $exitSuccess
         else
             logMessage "completed"
+            exit $exitSuccess
         fi
     fi
 }
 
 ######## this code is executed in-line when CommonResources is sourced
 
-# check for reinstall (first parameter to setup script command line)
+# check for reinstall parameter
 # set $scriptAction to control work following the source command
-# if second parameter is "force" then the installedFlag is not checked
-if [ $# -gt 0 ] && [ $1 == $reinstallParam ] ; then
-    if [ $# -ge 2 ] && [ $2 == "force" ]; then
-        scriptAction='INSTALL'        
+# if "force" is also provided on the command line, then the installedFlag is not checked
+# we assume a reinstall is always run without benefit of a console (runningAtBoot will be true)
+# so there will be no prompts and all actions will be automatic
+# "deferReboot" signals that endScript should not prompt for a user reboot, but return exitReboot
+# This is used by the manual package install called from SetupHelper setup script
+# command line parameters may appear in any order
+
+reinstall=false
+force=false
+deferReboot=false
+while [ $# -gt 0 ]; do
+        case $1 in
+            $reinstallParam)
+                reinstall=true
+                ;;
+            "force")
+                force=true
+                ;;
+            "deferReboot")
+                deferReboot=true
+                ;;
+            *)
+        esac
+    shift
+done
+
+if $reinstall ; then
+    if $force ; then
+        scriptAction='INSTALL'
     elif [ ! -f "$installedFlag" ]; then
         scriptAction='INSTALL'
     else
         exit
     fi
     runningAtBoot=true
-# not a reinstall, ignore the installed flag and continue with MANUAL installation
+    logToConsole=false
+
+# not a reinstall, continue with MANUAL installation
 else
     runningAtBoot=false
-    pruneSetupLogFile
+fi
+
+if [ ! -d "$setupOptionsRoot" ]; then
+    logMessage "creating root setup options directory $setupOptionsRoot"
+    mkdir $setupOptionsRoot
+fi
+
+if [ ! -d "$setupOptionsDir" ]; then
+    logMessage "creating package options directory to $setupOptionsDir"
+    mkdir $setupOptionsDir
 fi
 
 _checkFileSets
-
-if [ scriptAction != 'UNINSTALL' ];then
-    if [ ! -d "$setupOptionsRoot" ]; then
-        logMessage "creating root setup options directory $setupOptionsRoot"
-        mkdir $setupOptionsRoot
-    fi
-
-    if [ ! -d "$setupOptionsDir" ]; then
-        logMessage "creating package options directory to $setupOptionsDir"
-        mkdir $setupOptionsDir
-    fi
-fi
-
-

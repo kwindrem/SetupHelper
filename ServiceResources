@@ -1,0 +1,161 @@
+# ServiceManager for SetupHelper
+# contains a functions to install, remove, start and stop a package's service
+
+# managing a normal package's service is straight forward
+#
+# normally, services are connected via a symbolic link, but to avoid issues with
+# updating package files, the service directory is COPIED to the /service directory instead.
+#
+# If the active copy of the service already exists, the run and log/run files are updated
+# ONLY if there are changes. This leaves other files managed by supervise untouched.
+#
+# For all functions, $1 specifies the package name
+
+
+# startService and stopService start and stop the service, respectively
+# the 'down' flag is also cleared/set to control service runs in the future
+# startService will cause the service to stop then start again !!!
+
+startService ()
+{
+    # no service to remove
+    if [ ! -e "/service/$pkg" ]; then
+        return
+    fi
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+
+    local pkg=$1
+
+    rm -f "/service/$pkg/down"
+    svc -t "/service/$pkg"
+}
+
+
+stopService ()
+{
+    # no service to remove
+    if [ ! -e "/service/$pkg" ]; then
+        return
+    fi
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+
+    local pkg=$1
+
+    touch "/service/$pkg/down"
+    svc -d "/service/$pkg"
+}
+
+# killServiceProcesses makes sure there are no services 
+# internal function only !!!!
+# must be called from other functions that have already made the necessary checks
+
+_killServiceProcesses ()
+{
+    local pkg=$1
+    ps -l | grep $pkg | grep -v -e grep -e $$  | awk '{print $3}' | xargs kill > /dev/null 2>&1
+}
+
+#
+# removeService cleanly removes the service
+#
+
+_removeService ()
+{
+    # stop the service
+    svc -d "/service/$pkg"
+
+    # remove the active service directory
+    rm -rf "/service/$pkg"
+
+    # kill related processes
+    _killServiceProcesses $pkg
+}
+
+removeService ()
+{
+    # no service to remove
+    if [ ! -e "/service/$pkg" ]; then
+        return
+    fi
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+
+    local pkg=$1
+
+    logMessage "removing $pkg service"
+    _removeService $pkg
+}
+
+
+# installService adds the service to the /service directory or updates an existing one
+#
+# If the service does not yet exist, it will start immediately unless 
+# it includes the 'down' flag file. This behavior is up to the service writer.
+#
+# If the service already exists, installService will stop it,
+# update the service files and stop all child processes
+# Then restart the service unless the down flag is set
+#
+
+installService ()
+{
+    # no service to install
+    if [ ! -e "$scriptDir/service" ]; then
+        return
+    fi
+    # no package specified
+    if [ $# -lt 1 ]; then
+        return
+    fi
+
+    local pkg=$1
+    local serviceRestartNeeded=false
+
+    if [ -L "/service/$pkg" ]; then
+        logMessage "$pkg removing old service (was symbolic link)"
+        _removeService $pkg
+    fi
+    # service not yet installed, COPY service directory to the active locaiton
+    if [ ! -e "/service/$pkg" ]; then
+        logMessage "$pkg installing service"
+        cp -R "$scriptDir/service" "/service/$pkg"
+    # service already installed - only copy changed files
+    else
+        if [ -f "$scriptDir/service/run" ]; then
+            cmp -s "$scriptDir/service/run" "/service/$pkg/run" > /dev/null
+            if [ $? != 0 ]; then
+                cp "$scriptDir/service/run" "/service/$pkg/run"
+                serviceRestartNeeded=true
+            fi
+        fi
+        if [ -f "$scriptDir/service/log/run" ]; then
+            cmp -s "$scriptDir/service/log/run" "/service/$pkg/log/run" > /dev/null
+            if [ $? != 0 ]; then
+                cp "$scriptDir/service/log/run" "/service/$pkg/log/run"
+                 serviceRestartNeeded=true
+           fi
+        fi
+        if $serviceRestartNeeded ; then
+            logMessage "$pkg updated service - restarting"
+            # stop the service
+            svc -d "/service/$pkg"
+            # kill related processes
+            _killServiceProcesses $pkg
+            # bring service back up
+            if [ ! -f "/service/down" ]; then
+                svc -u "/service/$pkg"
+            fi
+        fi
+    fi
+}
+
+
+

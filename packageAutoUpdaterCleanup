@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# This script keeps cleans up at the end of packageAutoUpdater processing
+# It is called as a nohup (no hang up) process so that the main script can terminate cleanly
+# Mainly, this script will run SetupHelper's setup script to reinstall itself
+# which can't be done from packageAutoUpdater. Doing so would abort the installation prematurely.
+# This script also reboots the system if needed.
+
+# get parameters from command line
+updateSetupHelper=$1
+rebootNeeded=$2
+    
+# get the full, unambiguous path to this script
+scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+shortScriptName=$(basename "$scriptDir")/$(basename "$0")
+
+source "/data/SetupHelper/LogHandler"
+
+# this flag is tested by LogHandler to determine if messages should be output to the console
+logToConsole=false
+
+source "/data/SetupHelper/UpdateResources"
+
+# give calling script time to stop SetupHelper service
+sleep 2
+
+if $updateSetupHelper ; then
+    logMessage "running SetupHelper setup script to reinstall"
+    doUpdate "SetupHelper"
+fi
+
+# reboot now if any script reboots were indicated
+if $rebootNeeded ; then
+    logMessage "rebooting ..."
+    reboot
+fi

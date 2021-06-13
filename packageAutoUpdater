@@ -1,0 +1,138 @@
+#!/bin/sh
+
+# This script keeps Venus modification packages up to date
+# It looks on GitHub for package updates
+# The timestamp of the current tag on GitHub is compatred to the one that was last installed
+# if GitHub is newer, the local copy is updated and the package is reinstalled
+#
+# This script also checks for updates on a USB stick and gives priority to that location
+#
+# An automatic update will only occur if the package is installed and the autoUpdate setup option is set
+#
+# the script runs as a service so any updates that also update this script will restart automatically
+
+# get the full, unambiguous path to this script
+scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+packageName=$(basename "$scriptDir")
+shortScriptName=$(basename "$scriptDir")/$(basename "$0")
+
+source "/data/SetupHelper/LogHandler"
+
+# this flag is tested by LogHandler to determine if messages should be output to the console
+logToConsole=false
+
+source "/data/SetupHelper/UpdateResources"
+
+
+#### main code starts here
+
+logMessage "starting up"
+
+checkUSB=true
+lastUpdateTime=0
+checkingPackage=false
+updateSetupHelper=false
+
+# 10 minutes between GitHub checks to minimize network traffic
+gitHubCheckDelay=600
+
+# loop forever
+while true ; do
+    rebootNeeded=false
+    updatedFromUsb=false
+
+    # loop through packages, but don't look at new package until time has expired
+    # this loop will run every 5 seconds even if waiting to access GitHub again
+    # this permits detection of USB media during the long wait for the next GitHub check
+    i=0
+    pkgArray=($allPackages)
+    while (( i < ${#pkgArray[@]} )); do
+        # look for new package
+        if ! $checkingPackage ; then
+            package=${pkgArray[i]}
+            packageDir="/data/$package"
+            doUpdate=false
+            setupOptionsDir="$setupOptionsRoot"/$package
+            # package has been installed, look for it's archives
+            if [ -f "$setupOptionsDir/optionsSet" ]; then
+                checkingPackage=true
+            fi
+        fi
+        # if no removable media is present allow usbUpdates to occur next time there is
+        # this prevents repeated processing of same files
+        mediaList=($(ls /media))
+        if [ -z $mediaList ] ; then
+            checkUSB=true
+        fi
+        if $checkingPackage ; then
+            # media found, look for package archives
+            if $checkUSB && [ ! -z $mediaList ]; then
+                for dir in ${mediaList[@]} ; do
+                    getFromUsb $package
+                    if [ $? -eq 1 ]; then
+                        logMessage "found $package on USB"
+                        updatedFromUsb=true
+                        doUpdate=true
+                        if [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
+                            logMessage "USB update disables GitHub updates - must be reenabled manually !!"
+                            rm -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate"
+                        fi
+                        break;
+                    fi
+                done
+                checkingPackage=false
+            fi
+            if [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
+                currentTime=$(date '+%s')
+                # wait between GitHub updates to minimize traffic
+                if (( $currentTime >= $lastUpdateTime + $gitHubCheckDelay )) ; then
+                    lastUpdateTime=$currentTime
+                    getFromGitHub $package
+                    if [ $? -eq 1 ]; then
+                        logMessage "found $package on GitHub"
+                        doUpdate=true
+                    fi
+                    checkingPackage=false
+                fi
+            fi
+            if $doUpdate ; then
+                # defer updating SetupHelper since this would terminate this script before all actions have been completed
+                if [ $package == "SetupHelper" ]; then
+                    updateSetupHelper=true
+                # update the package with user interaction if it is needed to do a full install (not reinstall)
+                else
+                    # update via unattended reinstall only
+                    logMessage "updating $package"
+                    doUpdate $package
+                fi
+            else
+                rm -rf "$packageDir-$gitHubBranch"
+            fi
+        fi
+        # current package was checked - move on to the next one
+        # if checking was deferred, say on this package
+        if ! $checkingPackage ; then
+            ((i++))
+        fi
+        sleep 1
+    done
+
+    # prevent further USB updates until media is removed and reinserted
+    if $updatedFromUsb ; then
+        checkUSB=false
+    fi
+
+    # continue execution in packageAutoUpdateCleanup
+    # so that this script and the service can exit cleanly
+    if $updateSetupHelper || $rebootNeeded ; then
+        logMessage "continuing in cleanup script - $packageName exiting"
+        
+        nohup "$scriptDir/packageAutoUpdateCleanup" $updateSetupHleper $rebootNeeded 2>&1 | awk '{print "packageAutoUpdater" $0}'| tai64n >> /var/log/SetupHelper &
+        
+        # shutdown the service which runs this script - this will end this script
+        svc -d "/service/SetupHelper"
+
+        # wait here for service to end the script
+        sleep 10000
+    fi
+done

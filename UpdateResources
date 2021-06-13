@@ -1,0 +1,153 @@
+
+# This file provides utilities for automatic and manual package updates/installation
+#
+# Include the following lines in the update scripts
+# source "/data/SetupHelper/LogHandler"
+# source "/data/SetupHelper/UpdateResources"
+
+allPackages="GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater SetupHelper"
+
+gitHubUser="kwindrem"
+gitHubBranch="current"
+
+# directory that holds script's options
+setupOptionsRoot="/data/setupOptions"
+
+exitReboot=123
+
+# get the package from a USB file
+# The package is left in $package-$gitHubBranch for processing later
+# $1 is the name of the package
+# returns 0 if updated should NOT occur or 1 if update is acceptable for update
+
+getFromUsb ()
+{
+    local package=$1
+    local packageArchive="/media/$dir/$package"-$gitHubBranch.tar.gz
+    local packageDir="/data/$package"
+    local archiveTimeStamp=""
+    local lastUpdate=""
+
+    # archive found on USB stick - process it
+    if [ -f "$packageArchive" ]; then
+        tar -xzf "$packageArchive" -C /data
+        if [ ! -d "$packageDir-$gitHubBranch" ]; then
+            logMessage "ERROR: $packageArchive did not contain $package"
+            return 0
+        fi
+    fi
+
+    # get the timeStamp from local copy of package
+    if [ -f "$packageDir/timeStamp" ]; then
+        lastUpdate=$(cat "$packageDir/gitHubTimeStamp")
+    else
+        lastUpdate=""
+    fi
+    
+    # get archive timeStamp
+    archiveTimeStamp=$(cat "/data/$package-$gitHubBranch/timeStamp")
+    if [ -z $archiveTimeStamp ]; then
+        logMessage "ERROR: No timestamp in $package archive - can't update"
+        return 0
+    elif [ -z $lastUpdate ]; then
+        logMessage "WARNING: no timestamp for $package current installation - proceeding"
+        return 1
+    elif (( $lastUpdate >= $archiveTimeStamp )); then
+        if $logToConsole ; then
+            echo "$package is up to date"
+        fi
+        return 0
+    # archive is newer
+    else
+        return 1
+    fi
+}
+
+
+# get the package from a GitHub
+# The package is left in $package-$gitHubBranch for processing later
+# $1 is the name of the package
+# returns 0 if updated should NOT occur or 1 if update is acceptable for update
+
+getFromGitHub ()
+{
+    local package=$1
+    local packageDir="/data/$package"
+    local archiveTimeStamp=""
+    local lastUpdate=""
+    # get the timeStamp from local copy of package
+    if [ -f "$packageDir/timeStamp" ]; then
+        lastUpdate=$(cat "$packageDir/timeStamp")
+    else
+        lastUpdate=""
+    fi
+    
+    # fetch archive timeStamp
+    archiveTimeStamp=$(wget -qO - https://raw.githubusercontent.com/$gitHubUser/$package/$gitHubBranch/timeStamp)
+    if [ -z $archiveTimeStamp ]; then
+        logMessage "ERROR: Can't access GitHub archive or no timestamp for $package - can't update"
+        return 0
+    elif [ -z $lastUpdate ]; then
+        logMessage "WARNING: no timestamp for $package current installation - proceeding"
+    elif (( $lastUpdate >= $archiveTimeStamp )); then
+        if $logToConsole ; then
+            echo "$package is up to date"
+        fi
+        return 0
+    fi
+    # update the package and reinstall it
+    wget -qO - https://github.com/$gitHubUser/$package/archive/$gitHubBranch.tar.gz | tar -xzf - -C /data
+    if [ ! -d "$packageDir-$gitHubBranch" ]; then
+        logMessage "ERROR: $packageArchive did not contain $package"
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+# install the archive and run setup script
+#
+# $1 is the flag to allow running the script with user interaction
+
+doUpdate ()
+{
+    local pkgService="/service/$package"
+    local pkgServiceDir="$packageDir/service"
+
+    if [ $# > 0 ] && [ $1 == 'prompting' ]; then
+        installOk=true
+    else
+        installOk=false
+    fi
+
+    rm -rf "$packageDir"
+    mv "$packageDir-$gitHubBranch" "$packageDir"
+    if [ -f "$packageDir/setup" ]; then
+        # if options have been set previously, reinstall automatically
+        if [ -f "$setupOptionsRoot/$package/optionsSet" ]; then
+            logMessage "reinstalling $package"
+            "$packageDir/setup" "reinstall" "force"
+            # defer reboot until all updates and reinstalls have been done
+            if [ $? == $exitReboot ] ; then
+                rebootNeeded=true
+            fi
+        # no options set, run manual setup - but defer reboot until all scripts have been run
+        elif $installOk ; then
+            logMessage "running $package setup script - choose install to complete installation"
+            "$packageDir/setup" "deferReboot"
+            if [ $? == $exitReboot ] ; then
+                rebootNeeded=true
+            fi
+        else
+            logMessage "$package can't reinstall - options from previous install not found"
+        fi
+    fi
+    if [ -e "$pkgServiceDir" ]; then
+        if [ ! -f "$pkgService" ]; then
+            ln -s "$pkgServiceDir" "$pkgService"
+            logMessage "restarting $package service"
+            svc -u "$pkgService"
+        fi
+    fi
+}

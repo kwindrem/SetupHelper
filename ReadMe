@@ -1,14 +1,23 @@
-The SetupHelper package provides a set of utilities to simplfy
-    installing modifications to Victron Venus Os
-    and includes a mechanism to automatically reinstall them following a Venus OS update
+The SetupHelper package provides:
+    a set of utilities to simplfy installing modifications to Victron Venus Os
+    a mechanism to automatically reinstall them following a Venus OS update
+    an automatic update mechanism to keep packages up to date
+        from GitHub archives or USB stick
+    a manual package installation mechanism from GitHub archives or USB stick
+
+Supported pacages are:
+    SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater
+
+More information is provided below.
 
 Setup:
-The easiest way to install this code IF the Venus device has internet access is to run the following command:
+There are two methods to fetch a package archive.
+
+IF the Venus device has internet access is to run the following command:
 
 wget -qO - https://github.com/kwindrem/SetupHelper/archive/current.tar.gz | tar -xzf - -C /data
-mv /data/SetupHelper-current /data/SetupHelper
 
-If not, do the following a computer that does have internet access
+If the Venus device does not have internet access, you will need to fetch the archive using a computer that does have internet access:
 
 click on this link in a web browser:
 https://github.com/kwindrem/SetupHelper/archive/current.tar.gz
@@ -18,41 +27,132 @@ copy the venus-data.tar.gz to a USB stick,
 put the stick in the Venus device and reboot.
 When Venus boots, it will unarchive the file to /data/SetupHelper-current
 
+Move the directory into it's active locaiton:
+rm -rf /data/SetupHelper
 mv /data/SetupHelper-current /data/SetupHelper
 
-Then move rcS.local to /data, or edit that file if it already exists and add:
+Finally, run the setup script to complete the installation
+/data/SetupHelper/setup
 
-    /data/SetupHelper/reinstallMods
+Use the manual or automatic update mechnism for future updates
 
-You can alternatively use rc.local as explained below
+Description:
 
-The following lines should be inclueded in the setup script to use the functions and variables provided here
+There are two parts to SetupHelper:
+1) Install and update utilities help a user manage packages.
+
+2) CommonResources helps in writing scripts to perform the installation.
+
+The latter is of concern only to those writing new Venus modificaitons
+or modifying an existing setup script.
+These are described in detail later in the document.
+
+SetupHelper package management:
+
+The intent of this part of SetupHelper is to minimize the effort needed
+to install and update packages.
+
+packageAutoUpdater handles automatic package updates. 
+
+There are two methods and they should NOT be used at the same time: USB and GitHub.
+
+GitHub updates are enabled from the setup menu (g) option.
+
+If enabled, automatic GitHub update checks will download and install the GitHub version
+if it is newer than the current version.
+
+One update check is made every 10 minutes, so it takes up to an hour check all packages.
+
+If you are experimenting with modificaitons and wish to avoid GitHub updates overriding your work,
+disable automatic updates.
+
+
+USB updates are handy when the Venus device is not connected to the internet.
+
+To use the USB update process:
+    Navigate to the GitHub, repo, click on tags and select "current". 
+    Choose the .tar.gz download link.
+    (Do not download from the Code tab or download the .zip file. These won't work.)
+    Copy the archive files to a USB memory stick.
+    Insert the stick in the Venus device.
+
+Regardless the update source (USB or GitHub),
+packageAutoUpdater replaces the current copy on the Venus device with the archive contents.
+Then the package's setup script is run to reinstall the modificaitons.
+No user interaction is needed in this process.
+
+A USB package update disables automatic GitHub updates to avoid conflicts.
+(GitHub and files on a USB stick could have different timestamps.)
+
+packageAutoUpdater runs in the background (as a service).
+
+
+packageInstaller provides the opportunity to install packages for the first time, or reinstall them.
+For each package, packageInstaller prompts the user to install that package.
+Reinstallation is not allowed if automatic updates are enabled.
+Those packages are skipped.
+The user is prompted to disable automaitc updates while running packageInstaller
+before checking for packages.
+
+Packages can be installed from eithera USB memory stick or from GitHub.
+After the package is copied to the Venus device it's setup script is run
+and the user must answer the prompts to complete the instalation.
+
+The method of putting an archive on a USB stick for manaul install is the same as the one for automatic updates.
+
+As with package updates, GitHub is the desired source if your Venus device has an internet connection.
+
+packageInstaller is called from the SetupHelper setup script by choosing the package (p) option at the main prompt.
+The packageInstaller is a shell script and can also be run manually:
+/data/SetupHelper/manualUpdate
+
+
+
+Setup script aids:
+
+SetupHelper provides a number of functions and variables that simplfy scripts written to
+install Venus OS mods. The remainder of this ReadMe describes the resources available and
+how to incorporate them into a setup script. 
+
+Read on if you are intersting in writing a package setup script (or modifying an existing one) 
+or understanding how the mechanism works.
+
+To use SetupHelper, the script must be written to include CommonResources, 
+then use the functions included in CommonResources to carry out the modiciations.
 
 #### following lines incorporate SetupHelper utilities into this script
 # Refer to the SetupHelper ReadMe file for details.
     
-source "/data/SetupHelper/CommonResources"
+source "/data/SetupHelper/CommonResources" 
 
 #### end of lines to include SetupHelper
 
 A Venus software update overwrites any modifications to the root partition.
 It is therefore necessary to reinstall the modifications following the Venus update.
 
-For automatic reinstallation of any modificaitons using SetupHelper following a Venus update,
-    add the following line in /data/rcS.local or /data/rc.local to call the reinstaller:
-    
-    /data/SetupHelper/reinstallMods
+Running setup for any package using SetupHelper will install the necessary code to reinstall packages
+during system boot
 
 Typically, rcS.local is used because it runs prior to starting services
    so conflicts with running services can be avoided
    (services don't need to be restarted after they've been modified)
    and if a reboot is required, it happens faster
 
-If your setup script needs resources launched later in boot, use /data/rc.local
+If your setup script needs resources launched later in boot, change the following line in CommonResources
+
+rcLocal="/data/rcS.local"
+
+to
+
+rcLocal="/data/rc.local"
+
+If you have already run any setup scripts and want to make this change, make sure to edit /data/rcS.local
+to remove the call to reinstallMods or it will be called twice during boot!
 
 reinstallScriptsList is a list of setup scripts, one per line that will be called from reinstallMods.
 Scripts in this list are called EVERY time the system boots. 
 The script must avoid repeating work if it can be avoided.
+SetupHelper tools (CommonResources) handles this for the script write.
 
 reinstallScriptsList is hard-coded to reside in the /data directory.
 The location must match in CommonResources, and in reinstallMods
@@ -219,8 +319,9 @@ fileList contains a list of Venus files to be managed by this package.
 Packages may also contain files that do not exist in the stock Venus image.
 These are NOT included in fileList!
 
-The special file NOT_COMPATIBLE in a file set indicates the package is not compatible with this Venus version
-    CommonResources will prevent the package installation or force an uninstall if it already has been
+obsoleteVersion is a file optionally contained in the package directory. 
+It indicates a Venus OS version at which the package is no longer compatible. 
+CommonResources prevents the package from being installed for the specified version and all those following it.
 
 Use full paths/name for all files to avoid problems when running the script from other locations
 such as the boot code, and quote them in case the names contain spaces.
@@ -301,5 +402,4 @@ LogHandler is a logging and log display mechanism. It is sourced by CommonResour
             $packageLogFile
         The latter must be initialized in setup script code
         If no package log file exists, $packageLogFile shoudl remain null ""
-
 

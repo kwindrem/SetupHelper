@@ -1,0 +1,138 @@
+#!/bin/bash
+
+# This script prompts for manual installation of packages from the allPackages list
+# it is called from SetupHelper/setup or can be run from the command line
+# Packages are installed either from GitHub or from a USB stick
+#
+
+source "/data/SetupHelper/CommonResources"
+source "/data/SetupHelper/UpdateResources"
+
+echo
+echo "This script allows Venus modificaiton packages to be installed"
+echo "Previously installed packages are updated automatically, not from this script"
+echo "If updating from USB stick, insert it now before proceeding"
+echo
+while true ; do
+    read -p "Select the package source GitHub (g) or USB (u): " response
+    case $response in
+        [gG]*)
+            updateFromUsb=false
+            break;;
+        [uU]*)
+            updateFromUsb=true
+            break;;
+        *)
+            ;;
+    esac
+done
+
+if $updateFromUsb ; then
+    # wait up to 20 seconds for USB stick
+    timeoutCount=20
+    /bin/echo -n "Waiting for USB media"
+    while true ; do
+        mediaList=($(ls /media))
+        if [ ! -z $mediaList ] ; then
+            break;
+        elif ((timeoutCount-- == 0)); then
+            echo
+            echo "no usb media found - exiting"
+            exit
+        else
+            /bin/echo -n "."
+            sleep 1
+        fi
+    done
+    echo
+fi
+
+# allow reinstallations if auto updates are not enabled
+# or if they are disabled here
+reinstallOk=false
+if [ ! -f "$setupOptionsRoot/SetupHelper/$setupOptionsRoot/SetupHelper" ]; then
+    reinstallOk=true
+else
+    echo "manual package reinstallation may conflict with automatic updates"
+    echo "automatic must be disabled to manually reinstall packages"
+    yesNoPrompt "Do you wish to disable automatic updates? (y/n): "
+    if $yesResponse ; then
+        logMessage "Disabling automatic package updates"
+        echo "package reinstallation is now possible"
+        rm -rf "$setupOptionsRoot/SetupHelper/$setupOptionsRoot/SetupHelper"
+        reinstallOk=true
+    fi
+fi
+
+
+
+rebootNeeded=false
+updateSetupHelper=false
+for package in $allPackages; do
+    doUpdate=false
+    packageDir="/data/$package"
+    
+    # if automatic updates are enabled, skip packages that have alreay been installed
+    if [ -e $packageDir ] && [ -f "$setupOptionsRoot/$package/optionsSet" ]; then
+        if ! $reinstallOk ; then
+            echo "$package found on but has already been installed - skipping"
+            continue
+        fi
+        installText="reinstall"
+    else
+        installText="install"
+    fi
+
+
+    if $updateFromUsb ; then
+        for dir in ${mediaList[@]} ; do
+            getFromUsb $package
+            if [ $? -eq 1 ]; then
+                echo
+                yesNoPrompt "$installText $package from USB? (y/n): "
+                if $yesResponse ; then
+                    doUpdate=true
+                fi
+                break;
+            fi
+        done
+
+    # check GitHub
+    else
+        getFromGitHub $package
+        if [ $? -eq 1 ]; then
+            echo
+            yesNoPrompt "$installText $package from GitHub? (y/n): "
+            if $yesResponse ; then
+                doUpdate=true
+            fi
+        fi
+    fi
+    if $doUpdate ; then
+        # defer updating SetupHelper
+        if [ $package == "SetupHelper" ]; then
+            updateSetupHelper=true
+        # update the package with user interaction if it is needed to do a full install (not reinstall)
+        else
+            doUpdate 'propmting'
+        fi
+    else
+        rm -rf "$packageDir-$gitHubBranch"
+    fi
+done
+
+# if an update was found for SetupHelper, update it now
+# this prevents stepping on SetupHelper resources
+# (this script will complete even if it's replaced)
+if $updateSetupHelper ; then
+    doUpdate "SetupHelper"
+fi
+if $rebootNeeded ; then
+    echo
+    yesNoPrompt "Reboot needed to complete installation, do it now? (y/n): "
+    if $yesResponse ; then
+        echo "rebooting ..."
+    else
+        echo "You must reboot manually to complete installation"
+    fi
+fi

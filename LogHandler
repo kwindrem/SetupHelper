@@ -11,6 +11,11 @@
 
 setupLogFile="/var/log/SetupHelper"
 
+# enable logging to console
+# scripts can disable logging by setting 
+# logToConsole to false AFTER sourcing LogHandler
+logToConsole=true
+
 # output the last 100 lines of the log file to the console
 # the full path to the log file should be passed in $1
 # converts the tai64 time stamp to human readable form
@@ -38,7 +43,7 @@ displayLog ()
 logMessage ()
 {
     # to console
-    if ! $runningAtBoot ; then
+    if $logToConsole ; then
         echo "$*"
     fi
 
@@ -55,19 +60,5 @@ logMessage ()
             mkdir -p $(dirname "$packageLogFile")
         fi
         echo "$shortScriptName: $*" | tai64n >> $packageLogFile
-    fi
-}
-
-
-# truncates the log file if it's larger than 2000 lines
-# it is called from the initialization code in CommonResources
-# if NOT running at boot time
-
-pruneSetupLogFile ()
-{
-    if [ $(wc -l $setupLogFile | awk '{print $1}') -gt 2000 ]; then
-        tail -1000 $setupLogFile > $setupLogFile.tmp
-        mv $setupLogFile.tmp $setupLogFile
-        logMessage "log file truncated to last 1000 lines"
     fi
 }

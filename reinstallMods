@@ -13,8 +13,6 @@ source "$scriptDir/LogHandler"
 # disable outputting log messaged to console and package log
 runningAtBoot=true
 
-pruneSetupLogFile
-
 # reinstallScriptsList is hard coded to the location below
 # if changed, it needs to atch in CommonResources, all setup scripts
 # and reinstallMods

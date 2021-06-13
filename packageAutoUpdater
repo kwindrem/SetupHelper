@@ -127,7 +127,7 @@ while true ; do
     if $updateSetupHelper || $rebootNeeded ; then
         logMessage "continuing in cleanup script - $packageName exiting"
         
-        nohup "$scriptDir/packageAutoUpdateCleanup" $updateSetupHleper $rebootNeeded 2>&1 | awk '{print "packageAutoUpdater " $0}'| tai64n >> /var/log/SetupHelper &
+        nohup "$scriptDir/packageAutoUpdaterCleanup" $updateSetupHleper $rebootNeeded 2>&1 | awk '{print "packageAutoUpdater " $0}'| tai64n >> /var/log/SetupHelper &
         
         # shutdown the service which runs this script - this will end this script
         svc -d "/service/SetupHelper"

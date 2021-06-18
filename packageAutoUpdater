@@ -105,7 +105,7 @@ while true ; do
                     logMessage "updating $package"
                     doUpdate $package
                 fi
-            else
+            elif [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
                 rm -rf "$packageDir-$gitHubBranch"
             fi
         fi

@@ -5,7 +5,8 @@
 # source "/data/SetupHelper/LogHandler"
 # source "/data/SetupHelper/UpdateResources"
 
-allPackages="GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater SetupHelper"
+# SetupHelper must be first so it updates resources used by other packages before they are updated
+allPackages="SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater"
 
 gitHubUser="kwindrem"
 gitHubBranch="current"
@@ -124,8 +125,6 @@ doUpdate ()
         installOk=false
     fi
 
-    rm -rf "$packageDir"
-    mv "$packageDir-$gitHubBranch" "$packageDir"
     if [ -f "$packageDir/setup" ]; then
         # if options have been set previously, reinstall automatically
         if [ -f "$setupOptionsRoot/$package/optionsSet" ]; then

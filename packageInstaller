@@ -109,7 +109,11 @@ for package in $allPackages; do
         fi
     fi
     if $doUpdate ; then
-        # defer updating SetupHelper
+        # move unpacked archive into position
+        local packageDir="/data/$package"
+        rm -rf "$packageDir"
+        mv "$packageDir-$gitHubBranch" "$packageDir"
+        # defer running SetupHelper script
         if [ $package == "SetupHelper" ]; then
             updateSetupHelper=true
         # update the package with user interaction if it is needed to do a full install (not reinstall)
@@ -121,7 +125,7 @@ for package in $allPackages; do
     fi
 done
 
-# if an update was found for SetupHelper, update it now
+# if an update was found for SetupHelper, run it's setup script now
 # this prevents stepping on SetupHelper resources
 # (this script will complete even if it's replaced)
 if $updateSetupHelper ; then

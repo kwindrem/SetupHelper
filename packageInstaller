@@ -110,7 +110,7 @@ for package in $allPackages; do
     fi
     if $doUpdate ; then
         # move unpacked archive into position
-        local packageDir="/data/$package"
+        packageDir="/data/$package"
         rm -rf "$packageDir"
         mv "$packageDir-$gitHubBranch" "$packageDir"
         # defer running SetupHelper script

@@ -97,7 +97,7 @@ while true ; do
             fi
             if $doUpdate ; then
                 # move unpacked archive into position
-                local packageDir="/data/$package"
+                packageDir="/data/$package"
                 rm -rf "$packageDir"
                 mv "$packageDir-$gitHubBranch" "$packageDir"
                 # defer updating SetupHelper since this would terminate this script before all actions have been completed

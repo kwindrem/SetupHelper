@@ -247,7 +247,6 @@ updateActiveFile ()
         # replacement files are not be needed for some versions
         # if so marked, leave original untouched
         if [ -f "$fileSet/$(basename $sourceFile).USE_ORIGINAL" ]; then
-echo "#### no replacement flaged for $sourceFile"
             return
         # if not flagged, this is a fatal error
         else

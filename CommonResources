@@ -246,7 +246,7 @@ updateActiveFile ()
     if ! $sourceFound; then
         # replacement files are not be needed for some versions
         # if so marked, leave original untouched
-        if [ -f "$fileSet/$(basename $sourceFile).NO_REPLACEMENT" ]; then
+        if [ -f "$fileSet/$(basename $sourceFile).USE_ORIGINAL" ]; then
 echo "#### no replacement flaged for $sourceFile"
             return
         # if not flagged, this is a fatal error
@@ -366,10 +366,13 @@ _checkFileSets ()
     local activeFile=""
     local baseName=""
     local file=""
+    
+    rm -f "$pkgFileSets/INCOMPLETE"
 
     for file in $fileList ; do
         baseName=$(basename "$file")
-        activeFile=$file
+        activeFile=$file        
+
         if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
             activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
         fi
@@ -380,60 +383,68 @@ _checkFileSets ()
 
         # can't process if no Venus file
         if [ ! -f "$activeFile" ]; then
-            logMessage "ERROR $venusVersion $baseName no original file"
-            touch "$fileSet/$baseName.NO_ORIG"
-            touch "$fileSet/$baseName.NO_REPLACEMENT"
-            touch "$fileSet/INCOMPLETE"
+            logMessage "WARNING $venusVersion $baseName no active file"
+            touch "$fileSet/$baseName.NO_ACTIVE_FILE"
             continue
         fi
 
         # skip checks if replacement file already exists in file set
-        if [ -f "$fileSet/$baseName" ]; then
+        # or if there is no replacement file for this version
+        if [ -f "$fileSet/$baseName" ] || [ -f "$pkgFileSets/$baseName.USE_ORIGINAL" ]; then
+            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+            continue
+        fi
+        if [ -f "$fileSet/$baseName" ] || [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
             rm -f "$fileSet/$baseName.NO_REPLACEMENT"
             continue
         fi
 
-        # look for a match in another version
-        matchFound=false
-        for v2 in ${versionList[@]} ; do
-            otherVersion=$(basename $v2)
-            otherVersionDir="$pkgFileSets/$otherVersion"
-            otherFile="$pkgFileSets/$otherVersion/$baseName"
+        # if an active file exists, look for a match in other file sets
+        if [ ! -z "$activeFile" ]; then
+            # look for a match in another version
+            matchFound=false
+            for v2 in ${versionList[@]} ; do
+                otherVersion=$(basename $v2)
+                otherVersionDir="$pkgFileSets/$otherVersion"
+                otherFile="$pkgFileSets/$otherVersion/$baseName"
 
-            if [ "$otherVersion" == "$venusVersion" ]; then
-                continue
-            fi
-            # skip symbolic links and nonexistent originals
-            if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
-                continue
-            fi
-            cmp -s "$activeFile" "$otherFile.orig" > /dev/null
-            # files match
-            if [ $? -eq 0 ]; then
-                matchFound=true
-                break
-            fi
-        done
-        
-        if $matchFound ;then
-            ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
-            rm -f "$fileSet/$baseName.NO_ORIG"
-            # if other file set contains a replacement file, link to it
-            if [ -f "$otherFile" ]; then
-                ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
-                rm -f "$fileSet/$baseName.NO_REPLACEMENT"
-            # if other file set does not contain a replacement, this one will not either
-            # this IS permitted and handled in the updateActiveFile and restoreActiveFile functions
-            elif [ -f "$otherFile.NO_REPLACEMENT" ]; then
+                if [ "$otherVersion" == "$venusVersion" ]; then
+                    continue
+                fi
+                # skip symbolic links and nonexistent originals
+                if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
+                    continue
+                fi
+                cmp -s "$activeFile" "$otherFile.orig" > /dev/null
+                # files match
+                if [ $? -eq 0 ]; then
+                    matchFound=true
+                    break
+                fi
+            done
+            
+            if $matchFound ;then
+                ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
+                rm -f "$fileSet/$baseName.NO_ORIG"
+                # if other file set contains a replacement file, link to it
+                if [ -f "$otherFile" ]; then
+                    ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
+                    rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+                    rm -f "$fileSet/$baseName.USE_ORIGINAL"
+                # if other file set does not contain a replacement, this one will not either
+                # this IS permitted and handled in the updateActiveFile and restoreActiveFile functions
+                elif [ -f "$otherFile.USE_ORIGINAL" ]; then
+                    touch "$fileSet/$baseName.USE_ORIGINAL"
+                    rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+                fi
+            # no match to a previous verison - can't create file set automatically
+            # but copy original file to aid manual editing
+            else
+                logMessage "ERROR $venusVersion $baseName no replacement file"
+                cp "$activeFile" "$fileSet/$baseName.orig"
                 touch "$fileSet/$baseName.NO_REPLACEMENT"
+                touch "$fileSet/INCOMPLETE"
             fi
-        # no match to a previous verison - can't create file set automatically
-        # but copy original file to aid manual editing
-        else
-            logMessage "ERROR $venusVersion $baseName no replacement file"
-            cp "$activeFile" "$fileSet/$baseName.orig"
-            touch "$fileSet/$baseName.NO_REPLACEMENT"
-            touch "$fileSet/INCOMPLETE"
         fi
     done
 

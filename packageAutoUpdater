@@ -34,7 +34,9 @@ checkingPackage=false
 updateSetupHelper=false
 
 # 10 minutes between GitHub checks to minimize network traffic
-gitHubCheckDelay=600
+gitHubSlowCheckDelay=600
+# 30 seconds for first pass
+gitHubCheckDelay=30
 
 # loop forever
 while true ; do
@@ -100,10 +102,12 @@ while true ; do
                 packageDir="/data/$package"
                 rm -rf "$packageDir"
                 mv "$packageDir-$gitHubBranch" "$packageDir"
-                # defer updating SetupHelper since this would terminate this script before all actions have been completed
+                # do SetupHelper update now since other setup scripts depend on it's resources
+                # will end this script which will start up again via supervise
                 if [ $package == "SetupHelper" ]; then
                     updateSetupHelper=true
-                # update the package with user interaction if it is needed to do a full install (not reinstall)
+                    break
+                # reinstall the package without user interactionl
                 else
                     # update via unattended reinstall only
                     logMessage "updating $package"
@@ -139,4 +143,6 @@ while true ; do
         # wait here for service to end the script
         sleep 10000
     fi
+
+    gitHubCheckDelay=$gitHubSlowCheckDelay
 done

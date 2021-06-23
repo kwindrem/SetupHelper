@@ -389,10 +389,6 @@ _checkFileSets ()
 
         # skip checks if replacement file already exists in file set
         # or if there is no replacement file for this version
-        if [ -f "$fileSet/$baseName" ] || [ -f "$fileSets/$baseName.USE_ORIGINAL" ]; then
-            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
-            continue
-        fi
         if [ -f "$fileSet/$baseName" ] || [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
             rm -f "$fileSet/$baseName.NO_REPLACEMENT"
             continue

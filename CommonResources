@@ -394,16 +394,22 @@ _checkFileSets ()
             continue
         fi
 
-        # if an active file exists, look for a match in other file sets
+        # if an active file exists
+        # find the LATEST match in PREVOUS file sets
         if [ ! -z "$activeFile" ]; then
             # look for a match in another version
             matchFound=false
-            for v2 in ${versionList[@]} ; do
-                otherVersion=$(basename $v2)
+            # search the version list backwards so the first match is the latest one
+            local i=${#versionList[@]}
+            while (( i > 0 )); do
+                (( i-- ))
+                otherVersion=$(basename ${versionList[i]})
+                versionStringToNumber $otherVersion
                 otherVersionDir="$pkgFileSets/$otherVersion"
                 otherFile="$pkgFileSets/$otherVersion/$baseName"
 
-                if [ "$otherVersion" == "$venusVersion" ]; then
+                # skip future versions
+                if (( $versionNumber > $venusVersionNumber )); then
                     continue
                 fi
                 # skip symbolic links and nonexistent originals
@@ -585,15 +591,18 @@ else
     runningAtBoot=false
 fi
 
+# initialze integer version number for venus version
+# used below and in _checkFileSets
+versionStringToNumber $venusVersion
+venusVersionNumber=$versionNumber
+
 # check to see if package is compatible with this Venus version
 notCompatible=false
 if [ -f "$scriptDir/obsoleteVersion" ]; then
     versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
     obsoleteVersion=$versionNumber
 
-    versionStringToNumber $venusVersion
-
-    if (( $versionNumber >= $obsoleteVersion )); then
+    if (( $venusVersionNumber >= $obsoleteVersion )); then
         notCompatible=true
     fi
 fi

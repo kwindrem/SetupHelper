@@ -92,6 +92,9 @@ for package in $allPackages; do
                 yesNoPrompt "$installText $package from USB? (y/n): "
                 if $yesResponse ; then
                     doUpdate=true
+                else
+                    echo "#### removing $packageDir"
+                    rm -rf "$packageDir-$gitHubBranch"
                 fi
                 break;
             fi
@@ -105,6 +108,9 @@ for package in $allPackages; do
             yesNoPrompt "$installText $package from GitHub? (y/n): "
             if $yesResponse ; then
                 doUpdate=true
+            else
+                echo "#### removing $packageDir"
+                rm -rf "$packageDir-$gitHubBranch"
             fi
         fi
     fi
@@ -118,10 +124,8 @@ for package in $allPackages; do
             updateSetupHelper=true
         # update the package with user interaction if it is needed to do a full install (not reinstall)
         else
-            doUpdate $package 'propmting'
+            doUpdate $package 'prompting'
         fi
-    else
-        rm -rf "$packageDir-$gitHubBranch"
     fi
 done
 

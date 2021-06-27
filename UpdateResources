@@ -49,7 +49,12 @@ getFromUsb ()
     
     # get archive timeStamp
     archiveTimeStamp=$(cat "/data/$package-$gitHubBranch/timeStamp")
-    if [ -z $archiveTimeStamp ]; then
+    if [ ! -e "$packageDir" ]; then
+        if $logToConsole ; then
+            echo "$package not yet installed"
+        fi
+        return 1
+    elif [ -z $archiveTimeStamp ]; then
         logMessage "ERROR: No timestamp in $package archive - can't update"
         return 0
     elif [ -z $lastUpdate ]; then
@@ -87,7 +92,11 @@ getFromGitHub ()
     
     # fetch archive timeStamp
     archiveTimeStamp=$(wget -qO - https://raw.githubusercontent.com/$gitHubUser/$package/$gitHubBranch/timeStamp)
-    if [ -z $archiveTimeStamp ]; then
+    if [ ! -e "$packageDir" ]; then
+        if $logToConsole ; then
+            echo "$package not yet installed"
+        fi
+    elif [ -z $archiveTimeStamp ]; then
         logMessage "ERROR: Can't access GitHub archive or no timestamp for $package - can't update"
         return 0
     elif [ -z $lastUpdate ]; then
@@ -119,7 +128,7 @@ doUpdate ()
     local package=$1
     local packageDir="/data/$package"
 
-    if [ $# > 0 ] && [ $1 == 'prompting' ]; then
+    if [ $# > 1 ] && [ $2 == 'prompting' ]; then
         installOk=true
     else
         installOk=false

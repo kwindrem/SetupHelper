@@ -97,6 +97,9 @@ if [ $scriptAction == 'NONE' ] ; then
             *)
         esac
     done
+
+    # next step is to install
+    scriptAction='INSTALL'
 fi
 
 if [ $scriptAction == 'INSTALL' ] ; then

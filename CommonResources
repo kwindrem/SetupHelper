@@ -30,8 +30,6 @@ reinstallParam="reinstall"
 
 reinstallScriptsList="/data/reinstallScriptsList"
 
-configFile="/u-boot/config.txt"
-
 # rc local file that calls reinstallMods
 # use /data/rc.local if some scripts need resources not available at time rcS.local runs
 rcLocal="/data/rcS.local"

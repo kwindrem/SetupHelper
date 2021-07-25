@@ -131,7 +131,7 @@ doUpdate ()
     local package=$1
     local packageDir="/data/$package"
 
-    if [ $# > 1 ] && [ $2 == 'prompting' ]; then
+    if [ $# -gt 1 ] && [ $2 == 'prompting' ]; then
         installOk=true
     else
         installOk=false
@@ -145,7 +145,7 @@ doUpdate ()
         mv "$packageDir-backup1" "$packageDir-backup2"
     fi
     if [ -e "$packageDir" ]; then
-        mv "$packageDir""$package-backup1" 
+        mv "$packageDir" "$package-backup1" 
     fi
     # move new version into active position
     mv "$packageDir-$gitHubBranch" "$packageDir"

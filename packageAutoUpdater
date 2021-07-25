@@ -88,7 +88,7 @@ while true ; do
                         logMessage "found $package on USB"
                         updatedFromUsb=true
                         doUpdate=true
-                        if [ $autoUpdateSetting == 1 ]; then
+                    if (( $autoUpdateSetting == 1 )); then
                             logMessage "USB update disables GitHub updates - must be reenabled manually !!"
                             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
                             autoUpdateSetting=0
@@ -98,7 +98,7 @@ while true ; do
                 done
                 checkingPackage=false
             fi
-            if [ $autoUpdateSetting == 1 ]; then
+            if (( $autoUpdateSetting == 1 )); then
                 currentTime=$(date '+%s')
                 # wait between GitHub updates to minimize traffic
                 if (( $currentTime >= $lastUpdateTime + $gitHubCheckDelay )) ; then

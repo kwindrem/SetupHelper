@@ -120,6 +120,9 @@ getFromGitHub ()
 
 # install the archive and run setup script
 #
+# backup the last 2 versions in case
+# it is necessary to revert to a previous verion
+#
 # $1 is the package name
 # $2 is the flag to allow running the script with user interaction
 
@@ -133,6 +136,19 @@ doUpdate ()
     else
         installOk=false
     fi
+    
+    # backup last 2 versions
+    if [ -e "$packageDir-backup2" ]; then
+        rm -rf "$packageDir-backup2"
+    fi
+    if [ -e "$packageDir-backup1" ]; then
+        mv "$packageDir-backup1" "$packageDir-backup2"
+    fi
+    if [ -e "$packageDir" ]; then
+        mv "$packageDir""$package-backup1" 
+    fi
+    # move new version into active position
+    mv "$packageDir-$gitHubBranch" "$packageDir"
 
     if [ -f "$packageDir/setup" ]; then
         # if options have been set previously, reinstall automatically

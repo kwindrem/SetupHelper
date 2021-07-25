@@ -23,6 +23,17 @@ logToConsole=false
 
 source "/data/SetupHelper/UpdateResources"
 
+# set dbus setting
+# $1 is new value
+# $2 is the dbus path
+setSetting ()
+{
+    local newValue=$1
+    local dbusPath=$2
+    if [ ! -z $newValue ]; then
+        dbus -y com.victronenergy.settings $dbusPath SetValue $newValue > /dev/null
+    fi
+}
 
 #### main code starts here
 
@@ -67,6 +78,8 @@ while true ; do
             checkUSB=true
         fi
         if $checkingPackage ; then
+            autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
             # media found, look for package archives
             if $checkUSB && [ ! -z $mediaList ]; then
                 for dir in ${mediaList[@]} ; do
@@ -75,16 +88,17 @@ while true ; do
                         logMessage "found $package on USB"
                         updatedFromUsb=true
                         doUpdate=true
-                        if [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
+                        if [ $autoUpdateSetting == 1 ]; then
                             logMessage "USB update disables GitHub updates - must be reenabled manually !!"
-                            rm -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate"
+                            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+                            autoUpdateSetting=0
                         fi
                         break;
                     fi
                 done
                 checkingPackage=false
             fi
-            if [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
+            if [ $autoUpdateSetting == 1 ]; then
                 currentTime=$(date '+%s')
                 # wait between GitHub updates to minimize traffic
                 if (( $currentTime >= $lastUpdateTime + $gitHubCheckDelay )) ; then
@@ -98,10 +112,6 @@ while true ; do
                 fi
             fi
             if $doUpdate ; then
-                # move unpacked archive into position
-                packageDir="/data/$package"
-                rm -rf "$packageDir"
-                mv "$packageDir-$gitHubBranch" "$packageDir"
                 # do SetupHelper update now since other setup scripts depend on it's resources
                 # will end this script which will start up again via supervise
                 if [ $package == "SetupHelper" ]; then

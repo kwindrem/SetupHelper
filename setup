@@ -13,6 +13,26 @@ source "/data/SetupHelper/CommonResources"
 
 #### running manually and OK to proceed - prompt for input
 if [ $scriptAction == 'NONE' ] ; then
+    # create dbus Settings if they haven't been set previously
+    # if one setting exists, assume they are all there
+    # NOTE: if new settings are added in the future, change test for that one
+    # to avoid creating that new parameter !!!!
+    autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+            com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+    if [ -z $autoUpdateSetting ]; then
+        logMessage "creating SetupHelper Settings"
+        dbus -y com.victronenergy.settings /Settings AddSettings\
+            '%[{"path": "/GuiMods/GitHubAutoUpdate", "default":0} ]'  > /dev/null
+        # move setup option flag to dbus setting
+        if [ -f "$setupOptionsDir/autoGitHubUpdate" ]; then
+            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+            rm -f "$setupOptionsDir/autoGitHubUpdate"
+        else
+            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+        fi
+        
+    fi
+
     # display innitial message
     echo
     echo "This package provides support functions and utilities for Venus modificaiton packages"
@@ -74,7 +94,10 @@ if [ $scriptAction == 'NONE' ] ; then
                 displayLog $setupLogFile
                 ;;
             [gG]*)
-                if [ -f "$setupOptionsDir/autoGitHubUpdate" ]; then
+                autoUpdate=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
+                        /Settings/GuiMods/GitHubAutoUpdate\
+                        com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+                if [ $autoUpdate == '1' ] ; then
                     echo "Automatic GitHub updates are currently ENABLED"
                 else
                     echo "Automatic GitHub updates are currently disabled"
@@ -83,11 +106,11 @@ if [ $scriptAction == 'NONE' ] ; then
                 if [ ! -z $response ]; then
                     if [ $response == 'e' ] || [ $response == 'E' ]; then
                         logMessage "enabling automatic GitHub package updates"
-                        touch "$setupOptionsDir/autoGitHubUpdate"
+                        setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
                     elif [ $response == 'd' ] || [ $response == 'D' ]; then 
                         logMessage "disabling automatic GitHub package updates"
-                        rm -f "$setupOptionsDir/autoGitHubUpdate"
-                    fi
+                        setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+                   fi
                 fi
                 ;;
             [pP]*)

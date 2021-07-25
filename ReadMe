@@ -58,6 +58,9 @@ There are two methods and they should NOT be used at the same time: USB and GitH
 
 GitHub updates are enabled from the setup menu (g) option.
 
+if GuiMods is up to date, auto updates can also be controlled from 
+    Device List / Settings / Display & language / GuiMods / Auto update packages ...
+
 If enabled, automatic GitHub update checks will download and install the GitHub version
 if it is newer than the current version.
 
@@ -106,7 +109,11 @@ packageInstaller is called from the SetupHelper setup script by choosing the pac
 The packageInstaller is a shell script and can also be run manually:
 /data/SetupHelper/manualUpdate
 
-
+When a package is updated from GitHub or a USB stick, the currently installed package is moved to a backup directory
+so that the package can be returned to a previous verison should this be necessary.
+Two complete backups plus the current installation are saved.
+Backups are in /data and are named with -backup1 and -backup2 appended to the package name.
+    -backup2 is the oldest
 
 Setup script aids:
 

@@ -50,7 +50,9 @@ fi
 # allow reinstallations if auto updates are not enabled
 # or if they are disabled here
 reinstallOk=false
-if [ ! -f "$setupOptionsRoot/SetupHelper/$setupOptionsRoot/SetupHelper" ]; then
+autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+if [ $autoUpdateSetting == 1 ]; then
     reinstallOk=true
 else
     echo "manual package reinstallation may conflict with automatic updates"
@@ -59,7 +61,7 @@ else
     if $yesResponse ; then
         logMessage "Disabling automatic package updates"
         echo "package reinstallation is now possible"
-        rm -rf "$setupOptionsRoot/SetupHelper/$setupOptionsRoot/SetupHelper"
+        setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
         reinstallOk=true
     fi
 fi
@@ -115,10 +117,6 @@ for package in $allPackages; do
         fi
     fi
     if $doUpdate ; then
-        # move unpacked archive into position
-        packageDir="/data/$package"
-        rm -rf "$packageDir"
-        mv "$packageDir-$gitHubBranch" "$packageDir"
         # defer running SetupHelper script
         if [ $package == "SetupHelper" ]; then
             updateSetupHelper=true

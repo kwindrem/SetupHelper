@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # This script keeps Venus modification packages up to date
 # It looks on GitHub for package updates

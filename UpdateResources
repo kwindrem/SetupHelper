@@ -145,7 +145,7 @@ doUpdate ()
         mv "$packageDir-backup1" "$packageDir-backup2"
     fi
     if [ -d "$packageDir" ]; then
-        mv "$packageDir" "$package-backup1" 
+        mv "$packageDir" "$packageDir-backup1" 
     fi
     # move new version into active position
     mv "$packageDir-$gitHubBranch" "$packageDir"

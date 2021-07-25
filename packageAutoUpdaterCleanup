@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 # This script keeps cleans up at the end of packageAutoUpdater processing
 # It is called as a nohup (no hang up) process so that the main script can terminate cleanly

@@ -138,13 +138,13 @@ doUpdate ()
     fi
     
     # backup last 2 versions
-    if [ -e "$packageDir-backup2" ]; then
+    if [ -d "$packageDir-backup2" ]; then
         rm -rf "$packageDir-backup2"
     fi
-    if [ -e "$packageDir-backup1" ]; then
+    if [ -d "$packageDir-backup1" ]; then
         mv "$packageDir-backup1" "$packageDir-backup2"
     fi
-    if [ -e "$packageDir" ]; then
+    if [ -d "$packageDir" ]; then
         mv "$packageDir" "$package-backup1" 
     fi
     # move new version into active position

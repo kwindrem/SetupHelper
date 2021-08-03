@@ -5,6 +5,10 @@ The SetupHelper package provides:
         from GitHub archives or USB stick
     a manual package installation mechanism from GitHub archives or USB stick
 
+NOTE: Starting with v2.80~10, the root partition is mounted read only
+    This package and those that use these resources rely on a writable /root partition
+    so CommonResources runs the remount-rw.sh script to make it writable
+
 Supported pacages are:
     SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater
 

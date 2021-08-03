@@ -88,7 +88,8 @@ while true ; do
                         logMessage "found $package on USB"
                         updatedFromUsb=true
                         doUpdate=true
-                    if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 1 )); then
+                        checkingPackage=false
+                        if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 1 )); then
                             logMessage "USB update disables GitHub updates - must be reenabled manually !!"
                             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
                             autoUpdateSetting=0
@@ -96,7 +97,6 @@ while true ; do
                         break;
                     fi
                 done
-                checkingPackage=false
             fi
             if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 1 )); then
                 currentTime=$(date '+%s')

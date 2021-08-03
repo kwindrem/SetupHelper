@@ -254,6 +254,7 @@ updateActiveFile ()
         fi
         return
     fi
+    mayHaveBeenUpdated=false
     backupActiveFile "$destinationFile"
     # package may already have been installed - check to see
     needToUpdate=true
@@ -592,6 +593,9 @@ endScript ()
 # "deferReboot" signals that endScript should not prompt for a user reboot, but return exitReboot
 # This is used by the manual package install called from SetupHelper setup script
 # command line parameters may appear in any order
+
+# make sure rootfs is mounted R/W
+/opt/victronenergy/swupdate-scripts/remount-rw.sh
 
 reinstall=false
 force=false

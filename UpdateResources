@@ -29,7 +29,7 @@ getFromUsb ()
     local archiveTimeStamp=""
     local lastUpdate=""
 
-    # no archive found on USB stick - process it
+    # archive not found on USB stick
     if [ ! -f "$packageArchive" ]; then
         return 0
     fi

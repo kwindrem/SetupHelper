@@ -128,11 +128,11 @@ while true ; do
             fi
         fi
         # current package was checked - move on to the next one
-        # if checking was deferred, say on this package
+        # if checking was deferred, stay on this package
         if ! $checkingPackage ; then
             ((i++))
         fi
-        sleep 1
+        sleep 5
     done
 
     # prevent further USB updates until media is removed and reinserted

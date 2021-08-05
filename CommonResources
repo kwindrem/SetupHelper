@@ -13,7 +13,7 @@ fullScriptName="$scriptDir/$(basename "$0")"
 
 venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
 
-installedFlag=/etc/venus/isInstalled-$(basename "$scriptDir")
+installedFlag=/etc/venus/isInstalled-$packageName
 
 # set up pointers to package files
 pkgFileSets="$scriptDir/FileSets"
@@ -41,7 +41,7 @@ exitSuccess=0
 # directory that holds script's options
 # options were removed from the script directory so they are preserved when the package is reinstalled
 setupOptionsRoot="/data/setupOptions"
-setupOptionsDir="$setupOptionsRoot"/$(basename "$scriptDir")
+setupOptionsDir="$setupOptionsRoot"/$packageName
 
 
 # what action the script should take:
@@ -331,7 +331,7 @@ setSetting ()
     local newValue=$1
     local dbusPath=$2
     if [ ! -z $newValue ]; then
-        dbus -y com.victronenergy.settings $dbusPath SetValue $newValue > /dev/null
+        dbus -y com.victronenergy.settings $dbusPath SetValue $newValue &> /dev/null
     fi
 }
 
@@ -357,7 +357,7 @@ moveSetting ()
         oldSetting=""
     fi
     if [ ! -z $oldSetting ] && [ ! -z "$newDbusPath" ]; then
-        dbus -y com.victronenergy.settings $newDbusPath SetValue $oldSetting > /dev/null
+        dbus -y com.victronenergy.settings $newDbusPath SetValue $oldSetting &> /dev/null
     fi
 }
 
@@ -544,6 +544,39 @@ endScript ()
         rm -f "$installedFlag"
     fi
 
+    # create/update dbus version setting
+    # do only if not running as a boot-time reinstall
+    # dbus services won't be up if running from rcS.local
+    if $force || ! $reinstall ; then
+        if [ $scriptAction == 'INSTALL' ] ; then
+            # create the version setting if it doesn't exist yet
+            packageVersion=$(dbus-send --system --print-reply=literal\
+                    --dest=com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName\
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+            if [ -z $packageVersion ]; then
+                logMessage "creating $packageName version Setting"
+                dbus -y com.victronenergy.settings /Settings AddSettings\
+                    "%[ {\"path\":\"/GuiMods/PackageVersions/$packageName\", \"default\":\"unknown\"} ]" &> /dev/null
+            fi
+        fi
+        if [ -f "$scriptDir/version" ]; then
+            packageVersion=$(cat "$scriptDir/version")
+        # if no version, use package timestamp instead
+        elif [ -f "$scriptDir/timeStamp" ]; then
+            timeStamp=$(cat "$scriptDir/timeStamp")
+            packageVersion=$(date --date=@$timeStamp)
+        else
+            packageVersion="unknown"
+        fi
+        # flag verison not installed
+        if [ $scriptAction == 'UNINSTALL' ] ; then
+            packageVersion="("$packageVersion")"
+        fi
+        # update version Setting - will fail silently if dbus setting doesn't exist
+        dbus -y com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName SetValue "$packageVersion" &> /dev/null
+    fi
+
+
     # this script was called from reinstallMods
     # set exit code based on actual code
     if $runningAtBoot ; then
@@ -595,7 +628,9 @@ endScript ()
 # command line parameters may appear in any order
 
 # make sure rootfs is mounted R/W
-/opt/victronenergy/swupdate-scripts/remount-rw.sh
+if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
+    /opt/victronenergy/swupdate-scripts/remount-rw.sh
+fi
 
 reinstall=false
 force=false
@@ -649,8 +684,7 @@ if [ -f "$scriptDir/obsoleteVersion" ]; then
 fi
 
 if $notCompatible ; then
-    pkg="$(basename $scriptDir)"
-    logMessage "$pkg not compatible with Venus $venusVersion"
+    logMessage "$packageName not compatible with Venus $venusVersion"
     scriptAction='UNINSTALL'
 else
     if [ ! -d "$setupOptionsRoot" ]; then

@@ -552,7 +552,7 @@ endScript ()
             # create the version setting if it doesn't exist yet
             packageVersion=$(dbus-send --system --print-reply=literal\
                     --dest=com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName\
-                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}')
             if [ -z $packageVersion ]; then
                 logMessage "creating $packageName version Setting"
                 dbus -y com.victronenergy.settings /Settings AddSettings\

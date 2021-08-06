@@ -18,6 +18,18 @@
 # The intent is to force supervise to run the new version 
 # must be called from other functions that have already made the necessary checks
 
+# starting with v2.80~10, services are stored in this directory which is overlayed onto /service
+# all services need to be added there rather than /service
+# Note: service calls (eg svc) are still made on /service/...
+
+victronServicesDir="/opt/victronenergy/service"
+if [ -d "$victronServicesDir" ]; then
+    serviceDir="$victronServicesDir"
+else
+    serviceDir="/service"
+fi
+echo "#### serviceDir $serviceDir"
+
 _killServiceProcesses ()
 {
     local pkg=$1
@@ -31,10 +43,10 @@ _killServiceProcesses ()
 _startService ()
 {
     local pkg=$1
-    rm -f "/service/$pkg/down"
+    rm -f "$serviceDir/$pkg/down"
     svc -u "/service/$pkg"
-    if [ -e "/service/$pkg/log" ]; then
-        rm -f "/service/$pkg/log/down"
+    if [ -e "$serviceDir/$pkg/log" ]; then
+        rm -f "$serviceDir/$pkg/log/down"
         svc -u "/service/$pkg/log"
     fi
 }
@@ -47,7 +59,7 @@ startService ()
     fi
     local pkg=$1
 
-    if [ -e "/service/$pkg" ]; then
+    if [ -e "$serviceDir/$pkg" ]; then
         logMessage "starting $pkg service"
         _startService $pkg
     fi
@@ -57,10 +69,10 @@ startService ()
 _stopService ()
 {
     local pkg=$1
-    touch "/service/$pkg/down"
+    touch "$serviceDir/$pkg/down"
     svc -d "/service/$pkg"
-    if [ -e "/service/$pkg/log" ]; then
-        touch "/service/$pkg/log/down"
+    if [ -e "$serviceDir/$pkg/log" ]; then
+        touch "$serviceDir/$pkg/log/down"
         svc -d "/service/$pkg/log"
     fi
     _killServiceProcesses $pkg
@@ -74,7 +86,7 @@ stopService ()
     fi
     local pkg=$1
 
-    if [ -e "/service/$pkg" ]; then
+    if [ -e "$serviceDir/$pkg" ]; then
         logMessage "stopping $pkg service"
         _stopService $pkg
     fi
@@ -91,7 +103,7 @@ _removeService ()
     svc -d "/service/$pkg"
 
     # remove the active service directory
-    rm -rf "/service/$pkg"
+    rm -rf "$serviceDir/$pkg"
 
     # kill related processes
     _killServiceProcesses $pkg
@@ -105,7 +117,7 @@ removeService ()
     fi
     local pkg=$1
 
-    if [ -e "/service/$pkg" ]; then
+    if [ -e "$serviceDir/$pkg" ]; then
         logMessage "removing $pkg service"
         _removeService $pkg
     fi
@@ -136,27 +148,27 @@ installService ()
     local pkg=$1
     local serviceRestartNeeded=false
 
-    if [ -L "/service/$pkg" ]; then
+    if [ -L "$serviceDir/$pkg" ]; then
         logMessage "$pkg removing old service (was symbolic link)"
         _removeService $pkg
     fi
     # service not yet installed, COPY service directory to the active locaiton
-    if [ ! -e "/service/$pkg" ]; then
+    if [ ! -e "$serviceDir/$pkg" ]; then
         logMessage "$pkg installing service"
-        cp -R "$scriptDir/service" "/service/$pkg"
+        cp -R "$scriptDir/service" "$serviceDir/$pkg"
     # service already installed - only copy changed files, then restart service
     else
         logMessage "restarting $pkg service"
         if [ -f "$scriptDir/service/run" ]; then
-            cmp -s "$scriptDir/service/run" "/service/$pkg/run" > /dev/null
+            cmp -s "$scriptDir/service/run" "$serviceDir/$pkg/run" > /dev/null
             if [ $? != 0 ]; then
-                cp "$scriptDir/service/run" "/service/$pkg/run"
+                cp "$scriptDir/service/run" "$serviceDir/$pkg/run"
             fi
         fi
         if [ -f "$scriptDir/service/log/run" ]; then
-            cmp -s "$scriptDir/service/log/run" "/service/$pkg/log/run" > /dev/null
+            cmp -s "$scriptDir/service/log/run" "$serviceDir/$pkg/log/run" > /dev/null
             if [ $? != 0 ]; then
-                cp "$scriptDir/service/log/run" "/service/$pkg/log/run"
+                cp "$scriptDir/service/log/run" "$serviceDir/$pkg/log/run"
            fi
         fi
         _killServiceProcesses $pkg

@@ -21,14 +21,17 @@
 # starting with v2.80~10, services are stored in this directory which is overlayed onto /service
 # all services need to be added there rather than /service
 # Note: service calls (eg svc) are still made on /service/...
+# there is an unknown interaction between /service and the overlay source
+# so code here operates on both directories
 
 victronServicesDir="/opt/victronenergy/service"
 if [ -d "$victronServicesDir" ]; then
     serviceDir="$victronServicesDir"
+    serviceOverlay=true
 else
     serviceDir="/service"
+    serviceOverlay=false
 fi
-echo "#### serviceDir $serviceDir"
 
 _killServiceProcesses ()
 {
@@ -44,9 +47,15 @@ _startService ()
 {
     local pkg=$1
     rm -f "$serviceDir/$pkg/down"
+    if $serviceOverlay ; then
+        rm -f "/service/$pkg/down"
+    fi
     svc -u "/service/$pkg"
     if [ -e "$serviceDir/$pkg/log" ]; then
         rm -f "$serviceDir/$pkg/log/down"
+        if $serviceOverlay ; then
+            rm -f "/service/$pkg/log/down"
+        fi
         svc -u "/service/$pkg/log"
     fi
 }
@@ -103,8 +112,12 @@ _removeService ()
     svc -d "/service/$pkg"
 
     # remove the active service directory
-    rm -rf "$serviceDir/$pkg"
-
+    # removing the service in the overlayed service directory doesn't remove it from /service
+    # so that needs to be removed FIRST
+    rm -rf "/service/$pkg"
+    if $serviceOverlay ; then
+        rm -rf "$serviceDir/$pkg"
+    fi
     # kill related processes
     _killServiceProcesses $pkg
 }

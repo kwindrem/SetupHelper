@@ -68,7 +68,16 @@ if GuiMods is up to date, auto updates can also be controlled from
 If enabled, automatic GitHub update checks will download and install the GitHub version
 if it is newer than the current version.
 
-One update check is made every 10 minutes, so it takes up to an hour check all packages.
+Version numbers use the same syntax as Venus OS:
+    v<major>.<minor>~<test>
+    v2.45 would replace v2.45~68 as test versions lead up to an eventual release
+
+Automatic updates can be controlled via the GuiMods menu or options in the SetupHelper setup script
+    Normal checks GitHub for a package once every 10 minutes
+    Fast checks GitHub for a package once every 10 seconds
+    Once checks GitHub for a package once every 10 minutes, but only once, then updates are turned off
+    Disable disables GitHub updates
+Updates from USB/SD media disable Git Hub updates to avoid conflicts
 
 If you are experimenting with modificaitons and wish to avoid GitHub updates overriding your work,
 disable automatic updates.
@@ -89,7 +98,7 @@ Then the package's setup script is run to reinstall the modificaitons.
 No user interaction is needed in this process.
 
 A USB package update disables automatic GitHub updates to avoid conflicts.
-(GitHub and files on a USB stick could have different timestamps.)
+(GitHub and files on a USB stick could have different versions.)
 
 packageAutoUpdater runs in the background (as a service).
 
@@ -107,7 +116,7 @@ and the user must answer the prompts to complete the instalation.
 
 The method of putting an archive on a USB stick for manaul install is the same as the one for automatic updates.
 
-As with package updates, GitHub is the desired source if your Venus device has an internet connection.
+As with package automatic updates, GitHub is the desired source if your Venus device has an internet connection.
 
 packageInstaller is called from the SetupHelper setup script by choosing the package (p) option at the main prompt.
 The packageInstaller is a shell script and can also be run manually:

@@ -46,8 +46,12 @@ updateSetupHelper=false
 
 # 10 minutes between GitHub checks to minimize network traffic
 gitHubSlowCheckDelay=600
-# 30 seconds for first pass
-gitHubCheckDelay=30
+# 10 seconds for first pass
+gitHubFastCheckDelay=10
+gitHubCheckDelay=0
+skipEndProcessing=false
+
+lastGitHubUpdateSetting=0
 
 # loop forever
 while true ; do
@@ -60,26 +64,33 @@ while true ; do
     i=0
     pkgArray=($allPackages)
     while (( i < ${#pkgArray[@]} )); do
+        skipEndProcessing=false
         doUpdate=false
-        # look for new package
-        if ! $checkingPackage ; then
-            package=${pkgArray[i]}
-            packageDir="/data/$package"
-            setupOptionsDir="$setupOptionsRoot"/$package
-            # package has been installed, look for it's archives
-            if [ -f "$setupOptionsDir/optionsSet" ]; then
-                checkingPackage=true
-            fi
-        fi
         # if no removable media is present allow usbUpdates to occur next time there is
         # this prevents repeated processing of same files
         mediaList=($(ls /media))
         if [ -z $mediaList ] ; then
             checkUSB=true
         fi
+        # look for new package
+        if ! $checkingPackage ; then
+            package=${pkgArray[i]}
+            packageDir="/data/$package"
+            setupOptionsDir="$setupOptionsRoot"/$package
+            if [ ! -f "$setupOptionsDir/optionsSet" ]; then
+                sleep 1
+                continue
+            # package has been installed, look for it's archives
+            else
+                checkingPackage=true
+            fi
+        fi
         if $checkingPackage ; then
             autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+            if [ -z $autoUpdateSetting ]; then
+                autoUpdateSetting=0
+            fi
             # media found, look for package archives
             if $checkUSB && [ ! -z $mediaList ]; then
                 for dir in ${mediaList[@]} ; do
@@ -89,7 +100,7 @@ while true ; do
                         updatedFromUsb=true
                         doUpdate=true
                         checkingPackage=false
-                        if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 1 )); then
+                        if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting != 0 )); then
                             logMessage "USB update disables GitHub updates - must be reenabled manually !!"
                             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
                             autoUpdateSetting=0
@@ -98,8 +109,27 @@ while true ; do
                     fi
                 done
             fi
-            if [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 1 )); then
-                currentTime=$(date '+%s')
+
+            # if USB update not pending and auto update enabled, look for GitHub updates
+            if ! $doUpdate && (( $autoUpdateSetting != 0 )); then
+                # change in update mode, start package scan over
+                if (( $autoUpdateSetting != $lastGitHubUpdateSetting )); then
+                    # start with first package, but don't break out of the loop
+                    checkingPackage=false
+                    skipEndProcessing=true
+                    lastGitHubUpdateSetting=$autoUpdateSetting
+                    break
+                fi
+
+
+                # set update delay based on update mode 
+                if (( $autoUpdateSetting >= 2 )) ; then
+                    gitHubCheckDelay=$gitHubFastCheckDelay
+                else
+                    gitHubCheckDelay=$gitHubSlowCheckDelay
+                fi
+
+                currentTime=$(date '+%s')              
                 # wait between GitHub updates to minimize traffic
                 if (( $currentTime >= $lastUpdateTime + $gitHubCheckDelay )) ; then
                     lastUpdateTime=$currentTime
@@ -117,22 +147,23 @@ while true ; do
                 if [ $package == "SetupHelper" ]; then
                     updateSetupHelper=true
                     break
-                # reinstall the package without user interactionl
+                # reinstall the package without user interaction
                 else
                     # update via unattended reinstall only
                     logMessage "updating $package"
                     doUpdate $package
                 fi
-            elif [ -f "$setupOptionsRoot/SetupHelper/autoGitHubUpdate" ]; then
+            elif [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 0 )); then
                 rm -rf "$packageDir-$gitHubBranch"
             fi
-        fi
+        fi # end if checkingPackage
         # current package was checked - move on to the next one
         # if checking was deferred, stay on this package
         if ! $checkingPackage ; then
             ((i++))
         fi
-        sleep 5
+        sleep 1
+        lastGitHubUpdateSetting=$autoUpdateSetting
     done
 
     # prevent further USB updates until media is removed and reinserted
@@ -154,5 +185,13 @@ while true ; do
         sleep 10000
     fi
 
-    gitHubCheckDelay=$gitHubSlowCheckDelay
+    if ! $skipEndProcessing ; then
+        # single pass
+        if (( $autoUpdateSetting == 3 )) ; then
+            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+        # end of first pass, switch to slow updates
+        elif (( $autoUpdateSetting == 2 )) ; then
+            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+        fi
+    fi
 done

@@ -97,20 +97,43 @@ if [ $scriptAction == 'NONE' ] ; then
                 autoUpdate=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
                         /Settings/GuiMods/GitHubAutoUpdate\
                         com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
-                if [ $autoUpdate == '1' ] ; then
-                    echo "Automatic GitHub updates are currently ENABLED"
-                else
-                    echo "Automatic GitHub updates are currently disabled"
-                fi
-                read -p "Enable (e) / Disable (d) / no change(cr)?: " response
+                case $autoUpdate in
+                    1)
+                        echo "Automatic GitHub updates are at normal rate"
+                        ;;
+                    2)
+                        echo "Automatic GitHub updates are at fast rate"
+                        ;;
+                    3)
+                        echo "Automatic GitHub updates will occur only once"
+                        ;;
+                    *)
+                        echo "Automatic GitHub updates are currently disabled"
+                        ;;
+                esac
+                echo "Available modes:"
+                echo "  Normal (n) - one package is checked once every 10 minutes"
+                echo "  Fast (f) - one package is checked once every 10 seconds"
+                echo "  Once (o) - each package is checked once then auto updates are turned off"
+                echo "  Disable (d) - auto updates are disabled"
+
+                read -p "Choose a mode from the above list: (cr for no change): " response
                 if [ ! -z $response ]; then
-                    if [ $response == 'e' ] || [ $response == 'E' ]; then
-                        logMessage "enabling automatic GitHub package updates"
-                        setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
-                    elif [ $response == 'd' ] || [ $response == 'D' ]; then 
-                        logMessage "disabling automatic GitHub package updates"
-                        setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
-                   fi
+                    case $response in
+                        [nN]* | [eE]*)
+                            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+                            ;;
+                        [fF]*)
+                            setSetting 2 /Settings/GuiMods/GitHubAutoUpdate
+                            ;;
+                         [oO]*)
+                            setSetting 3 /Settings/GuiMods/GitHubAutoUpdate
+                            ;;
+                        [dD]*)
+                            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+                            ;;
+                    *)
+                    esac
                 fi
                 ;;
             [pP]*)

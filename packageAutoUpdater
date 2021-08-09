@@ -28,11 +28,9 @@ source "/data/SetupHelper/UpdateResources"
 # $2 is the dbus path
 setSetting ()
 {
-    local newValue=$1
-    local dbusPath=$2
-    if [ ! -z $newValue ]; then
-        dbus -y com.victronenergy.settings $dbusPath SetValue $newValue > /dev/null
-    fi
+    local newValue="$1"
+    local dbusPath="$2"
+    dbus -y com.victronenergy.settings $dbusPath SetValue "$newValue" > /dev/null
 }
 
 #### main code starts here
@@ -43,13 +41,15 @@ checkUSB=true
 lastUpdateTime=0
 checkingPackage=false
 updateSetupHelper=false
+checkingMessage=''
+
 
 # 10 minutes between GitHub checks to minimize network traffic
 gitHubSlowCheckDelay=600
 # 10 seconds for first pass
 gitHubFastCheckDelay=10
 gitHubCheckDelay=0
-skipEndProcessing=false
+speedUpLoop=false
 
 lastGitHubUpdateSetting=0
 
@@ -64,7 +64,7 @@ while true ; do
     i=0
     pkgArray=($allPackages)
     while (( i < ${#pkgArray[@]} )); do
-        skipEndProcessing=false
+        speedUpLoop=false
         doUpdate=false
         # if no removable media is present allow usbUpdates to occur next time there is
         # this prevents repeated processing of same files
@@ -78,7 +78,7 @@ while true ; do
             packageDir="/data/$package"
             setupOptionsDir="$setupOptionsRoot"/$package
             if [ ! -f "$setupOptionsDir/optionsSet" ]; then
-                sleep 1
+                ((i++))
                 continue
             # package has been installed, look for it's archives
             else
@@ -112,12 +112,14 @@ while true ; do
 
             # if USB update not pending and auto update enabled, look for GitHub updates
             if ! $doUpdate && (( $autoUpdateSetting != 0 )); then
-                # change in update mode, start package scan over
-                if (( $autoUpdateSetting != $lastGitHubUpdateSetting )); then
-                    # start with first package, but don't break out of the loop
+                # if speeding up the loop, start package scan over
+                if (( $autoUpdateSetting >= 2 )) && (( $lastGitHubUpdateSetting <= 1 )); then
                     checkingPackage=false
-                    skipEndProcessing=true
+                    # prevent end processing that changes update mode
+                    speedUpLoop=true
                     lastGitHubUpdateSetting=$autoUpdateSetting
+                fi
+                if $speedUpLoop ; then
                     break
                 fi
 
@@ -132,6 +134,8 @@ while true ; do
                 currentTime=$(date '+%s')              
                 # wait between GitHub updates to minimize traffic
                 if (( $currentTime >= $lastUpdateTime + $gitHubCheckDelay )) ; then
+                    setSetting "checking $package" /Settings/GuiMods/CheckingPackage
+                    checkingMessage='CHECKING'
                     lastUpdateTime=$currentTime
                     getFromGitHub $package
                     if [ $? -eq 1 ]; then
@@ -139,6 +143,11 @@ while true ; do
                         doUpdate=true
                     fi
                     checkingPackage=false
+                elif (( $autoUpdateSetting != 0 )); then
+                    if [[ $checkingMessage != 'WAIT' ]] ; then
+                        setSetting "waiting to check $package" /Settings/GuiMods/CheckingPackage
+                        checkingMessage='WAIT'
+                    fi
                 fi
             fi
             if $doUpdate ; then
@@ -156,6 +165,12 @@ while true ; do
             elif [ ! -z $autoUpdateSetting ] && (( $autoUpdateSetting == 0 )); then
                 rm -rf "$packageDir-$gitHubBranch"
             fi
+            if (( $autoUpdateSetting == 0 )); then
+                if [[ $checkingMessage != 'IDLE' ]] ; then
+                    setSetting "Fast updates: 10 sec/pkg, Normal updates: 10 min/pkg" /Settings/GuiMods/CheckingPackage
+                    checkingMessage='IDLE'
+                    fi
+            fi
         fi # end if checkingPackage
         # current package was checked - move on to the next one
         # if checking was deferred, stay on this package
@@ -163,14 +178,12 @@ while true ; do
             ((i++))
         fi
         sleep 1
-        lastGitHubUpdateSetting=$autoUpdateSetting
     done
 
     # prevent further USB updates until media is removed and reinserted
     if $updatedFromUsb ; then
         checkUSB=false
     fi
-
     # continue execution in packageAutoUpdateCleanup
     # so that this script and the service can exit cleanly
     if $updateSetupHelper || $rebootNeeded ; then
@@ -185,7 +198,8 @@ while true ; do
         sleep 10000
     fi
 
-    if ! $skipEndProcessing ; then
+    # skip processing if we've brokend out of the loop and starting with first package
+    if ! $speedUpLoop ; then
         # single pass
         if (( $autoUpdateSetting == 3 )) ; then
             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
@@ -194,4 +208,5 @@ while true ; do
             setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
         fi
     fi
+    sleep 1
 done

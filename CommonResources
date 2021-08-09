@@ -545,7 +545,7 @@ endScript ()
         fi
         # flag verison not installed
         if [ $scriptAction == 'UNINSTALL' ] ; then
-            packageVersion="("$packageVersion")"
+            packageVersion="(not installed) $packageVersion"
         fi
         # update version Setting - will fail silently if dbus setting doesn't exist
         dbus -y com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName SetValue "$packageVersion" &> /dev/null

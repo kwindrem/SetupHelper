@@ -17,12 +17,14 @@ if [ $scriptAction == 'NONE' ] ; then
     # if one setting exists, assume they are all there
     # NOTE: if new settings are added in the future, change test for that one
     # to avoid creating that new parameter !!!!
-    autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+    
+    lastSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiModsCheckingPackage\
             com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
-    if [ -z $autoUpdateSetting ]; then
+    if [ -z $lastSetting ]; then
         logMessage "creating SetupHelper Settings"
         dbus -y com.victronenergy.settings /Settings AddSettings\
-            '%[{"path": "/GuiMods/GitHubAutoUpdate", "default":0} ]'  > /dev/null
+            '%[ {"path": "/GuiMods/GitHubAutoUpdate", "default":0},\
+                {"path": "/GuiMods/CheckingPackage", "default":""},]'  > /dev/null
         # move setup option flag to dbus setting
         if [ -f "$setupOptionsDir/autoGitHubUpdate" ]; then
             setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
@@ -30,7 +32,6 @@ if [ $scriptAction == 'NONE' ] ; then
         else
             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
         fi
-        
     fi
 
     # display innitial message

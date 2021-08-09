@@ -25,6 +25,7 @@
 # so code here operates on both directories
 
 victronServicesDir="/opt/victronenergy/service"
+overlayWorkDir="/run/overlays/service"
 if [ -d "$victronServicesDir" ]; then
     serviceDir="$victronServicesDir"
     serviceOverlay=true
@@ -53,9 +54,6 @@ _startService ()
     svc -u "/service/$pkg"
     if [ -e "$serviceDir/$pkg/log" ]; then
         rm -f "$serviceDir/$pkg/log/down"
-        if $serviceOverlay ; then
-            rm -f "/service/$pkg/log/down"
-        fi
         svc -u "/service/$pkg/log"
     fi
 }
@@ -109,14 +107,14 @@ _removeService ()
 {
     local pkg=$1
     # stop the service
-    svc -d "/service/$pkg"
+    _stopService $pkg
 
-    # remove the active service directory
+    # remove the service directory
     # removing the service in the overlayed service directory doesn't remove it from /service
-    # so that needs to be removed FIRST
-    rm -rf "/service/$pkg"
+    # it needs to be removed from the overlay work directory also
+    rm -rf "$serviceDir/$pkg"
     if $serviceOverlay ; then
-        rm -rf "$serviceDir/$pkg"
+        rm -rf "$overlayWorkDir/$pkg"
     fi
     # kill related processes
     _killServiceProcesses $pkg
@@ -162,12 +160,12 @@ installService ()
     local serviceRestartNeeded=false
 
     if [ -L "$serviceDir/$pkg" ]; then
-        logMessage "$pkg removing old service (was symbolic link)"
-        _removeService $pkg
+        logMessage "removing old $pkg service (was symbolic link)"
+        rm -f "$serviceDir/$pkg"
     fi
     # service not yet installed, COPY service directory to the active locaiton
     if [ ! -e "$serviceDir/$pkg" ]; then
-        logMessage "$pkg installing service"
+        logMessage "installing $pkg service"
         cp -R "$scriptDir/service" "$serviceDir/$pkg"
     # service already installed - only copy changed files, then restart service
     else

@@ -43,8 +43,7 @@ if [ $scriptAction == 'NONE' ] ; then
     echo "Prevouslly uninstalled packages can also be installed and configured"
     echo "  as an option from the menu either from GitHub or from a USB stick"
     echo
-    echo "If internet access is not available, you can manually update/install from a USB stick"
-    echo "Note: installing from a USB stick disables automatic GitHub updates"
+    echo "If internet access is not available, you can manually update/install from a USB stick or SD card"
     echo
 
     if [ -f "$setupOptionsDir/optionsSet" ]; then

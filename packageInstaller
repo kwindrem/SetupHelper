@@ -48,25 +48,13 @@ if $updateFromUsb ; then
 fi
 
 # allow reinstallations if auto updates are not enabled
-# or if they are disabled here
-reinstallOk=false
 autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
-if [ $autoUpdateSetting == 1 ]; then
+if [ -z $autoUpdateSetting ] || [ $autoUpdateSetting == 0 ]; then
     reinstallOk=true
 else
-    echo "manual package reinstallation may conflict with automatic updates"
-    echo "automatic must be disabled to manually reinstall packages"
-    yesNoPrompt "Do you wish to disable automatic updates? (y/n): "
-    if $yesResponse ; then
-        logMessage "Disabling automatic package updates"
-        echo "package reinstallation is now possible"
-        setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
-        reinstallOk=true
-    fi
+    reinstallOk=false
 fi
-
-
 
 rebootNeeded=false
 updateSetupHelper=false
@@ -77,14 +65,13 @@ for package in $allPackages; do
     # if automatic updates are enabled, skip packages that have alreay been installed
     if [ -e $packageDir ] && [ -f "$setupOptionsRoot/$package/optionsSet" ]; then
         if ! $reinstallOk ; then
-            echo "$package found on but has already been installed - skipping"
+            echo "$package has already been installed and will be automatically updated - skipping"
             continue
         fi
         installText="reinstall"
     else
         installText="install"
     fi
-
 
     if $updateFromUsb ; then
         for dir in ${mediaList[@]} ; do

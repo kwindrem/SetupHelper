@@ -52,7 +52,6 @@ getFromUsb ()
     local package=$1
     local packageArchive="/media/$dir/$package"-$gitHubBranch.tar.gz
     local packageDir="/data/$package"
-    local archiveTimeStamp=""
     local lastUpdate=""
 
     # archive not found on USB stick
@@ -113,7 +112,6 @@ getFromGitHub ()
 {
     local package=$1
     local packageDir="/data/$package"
-    local archiveTimeStamp=""
     local lastUpdate=""
 
     # get the version from local copy of package

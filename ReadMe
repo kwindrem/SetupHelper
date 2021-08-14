@@ -58,8 +58,6 @@ to install and update packages.
 
 packageAutoUpdater handles automatic package updates. 
 
-There are two methods and they should NOT be used at the same time: USB and GitHub.
-
 GitHub updates are enabled from the setup menu (g) option.
 
 if GuiMods is up to date, auto updates can also be controlled from 
@@ -77,7 +75,6 @@ Automatic updates can be controlled via the GuiMods menu or options in the Setup
     Fast checks GitHub for a package once every 10 seconds
     Once checks GitHub for a package once every 10 minutes, but only once, then updates are turned off
     Disable disables GitHub updates
-Updates from USB/SD media disable Git Hub updates to avoid conflicts
 
 If you are experimenting with modificaitons and wish to avoid GitHub updates overriding your work,
 disable automatic updates.
@@ -90,14 +87,16 @@ To use the USB update process:
     Choose the .tar.gz download link.
     (Do not download from the Code tab or download the .zip file. These won't work.)
     Copy the archive files to a USB memory stick.
+    Do NOT unpack the archive
     Insert the stick in the Venus device.
 
 Regardless the update source (USB or GitHub),
-packageAutoUpdater replaces the current copy on the Venus device with the archive contents.
+packageAutoUpdater replaces the current copy on the Venus device with the archive contents
+    but only if the version number of the source is newer than the one that's installed.
 Then the package's setup script is run to reinstall the modificaitons.
 No user interaction is needed in this process.
 
-A USB package update disables automatic GitHub updates to avoid conflicts.
+You may wish to dispalbe GitHub updates if you are updating from a USB/SD memory stick to avoid conflicts.
 (GitHub and files on a USB stick could have different versions.)
 
 packageAutoUpdater runs in the background (as a service).
@@ -105,12 +104,9 @@ packageAutoUpdater runs in the background (as a service).
 
 packageInstaller provides the opportunity to install packages for the first time, or reinstall them.
 For each package, packageInstaller prompts the user to install that package.
-Reinstallation is not allowed if automatic updates are enabled.
-Those packages are skipped.
-The user is prompted to disable automaitc updates while running packageInstaller
-before checking for packages.
+Packages that are already installed will be skipped if automatic updates are enabled.
 
-Packages can be installed from eithera USB memory stick or from GitHub.
+Packages can be installed from either a USB memory stick/SD memory card or from GitHub.
 After the package is copied to the Venus device it's setup script is run
 and the user must answer the prompts to complete the instalation.
 
@@ -120,7 +116,7 @@ As with package automatic updates, GitHub is the desired source if your Venus de
 
 packageInstaller is called from the SetupHelper setup script by choosing the package (p) option at the main prompt.
 The packageInstaller is a shell script and can also be run manually:
-/data/SetupHelper/manualUpdate
+/data/SetupHelper/packageInstaller
 
 When a package is updated from GitHub or a USB stick, the currently installed package is moved to a backup directory
 so that the package can be returned to a previous verison should this be necessary.

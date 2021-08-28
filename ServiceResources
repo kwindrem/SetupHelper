@@ -157,7 +157,6 @@ installService ()
     fi
 
     local pkg=$1
-    local serviceRestartNeeded=false
 
     if [ -L "$serviceDir/$pkg" ]; then
         logMessage "removing old $pkg service (was symbolic link)"

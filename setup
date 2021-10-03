@@ -34,13 +34,13 @@ if [ $scriptAction == 'NONE' ] ; then
         fi
     fi
 
-    # display innitial message
+    # display initial message
     echo
-    echo "This package provides support functions and utilities for Venus modificaiton packages"
+    echo "This package provides support functions and utilities for Venus modification packages"
     echo "Packages are automatically reinstalled following a Venus OS update"
     echo "Packages may also be automatically updated from GitHub"
     echo "  or a USB stick"
-    echo "Prevouslly uninstalled packages can also be installed and configured"
+    echo "Previously uninstalled packages can also be installed and configured"
     echo "  as an option from the menu either from GitHub or from a USB stick"
     echo
     echo "If internet access is not available, you can manually update/install from a USB stick or SD card"

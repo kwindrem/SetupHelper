@@ -9,7 +9,7 @@ source "/data/SetupHelper/CommonResources"
 source "/data/SetupHelper/UpdateResources"
 
 echo
-echo "This script allows Venus modificaiton packages to be installed"
+echo "This script allows Venus modification packages to be installed"
 echo "Previously installed packages are updated automatically, not from this script"
 echo "If updating from USB stick, insert it now before proceeding"
 echo

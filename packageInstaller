@@ -118,7 +118,7 @@ done
 # this prevents stepping on SetupHelper resources
 # (this script will complete even if it's replaced)
 if $updateSetupHelper ; then
-    doUpdate "SetupHelper" 'propmting'
+    doUpdate "SetupHelper" 'prompting'
 fi
 if $rebootNeeded ; then
     echo

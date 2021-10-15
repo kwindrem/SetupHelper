@@ -6,7 +6,7 @@
 # source "/data/SetupHelper/UpdateResources"
 
 # SetupHelper must be first so it updates resources used by other packages before they are updated
-allPackages="SetupHelper GuiMods GeneratorConnector ShutdownMonitor RpiDisplaySetup RpiGpioSetup VeCanSetup TankRepeater"
+allPackages="SetupHelper GuiMods GuiMods GeneratorConnector ShutdownMonitor RpiDisplaySetup RpiGpioSetup VeCanSetup TankRepeater"
 
 gitHubUser="kwindrem"
 gitHubBranch="current"

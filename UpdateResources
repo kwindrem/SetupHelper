@@ -8,13 +8,8 @@
 # SetupHelper must be first so it updates resources used by other packages before they are updated
 allPackages="SetupHelper GuiMods GuiMods2 GeneratorConnector ShutdownMonitor RpiDisplaySetup RpiGpioSetup VeCanSetup TankRepeater"
 
-gitHubUser="kwindrem"
-gitHubBranch="current"
-
-# directory that holds script's options
-setupOptionsRoot="/data/setupOptions"
-
-exitReboot=123
+setupHelperDir="/data/SetupHelper"
+source "$setupHelperDir/EssentialResources"
 
 # converts a Venus version string to a version number
 #
@@ -188,8 +183,8 @@ doUpdate ()
     mv "$packageDir-$gitHubBranch" "$packageDir"
 
     if [ -f "$packageDir/setup" ]; then
-        # if options have been set previously, reinstall automatically
-        if [ -f "$setupOptionsRoot/$package/optionsSet" ]; then
+        # if package is installed, reinstall automatically
+        if [ -f "installedFlagPrefix$package" ]; then
             logMessage "reinstalling $package"
             "$packageDir/setup" "reinstall" "force"
             # defer reboot until all updates and reinstalls have been done
@@ -204,7 +199,7 @@ doUpdate ()
                 rebootNeeded=true
             fi
         else
-            logMessage "$package can't reinstall - options from previous install not found"
+            logMessage "$package not currently active - skipping reinstall"
         fi
     fi
 }

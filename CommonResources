@@ -5,45 +5,12 @@
 
 ######## skip to bottom of file for code executed when script is called
 
-# get the full, unambiguous path to this script
-scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
-packageName=$(basename "$scriptDir")
-shortScriptName=$(basename "$scriptDir")/$(basename "$0")
-fullScriptName="$scriptDir/$(basename "$0")"
-
-venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
-
-installedFlag=/etc/venus/isInstalled-$packageName
-
-# set up pointers to package files
-pkgFileSets="$scriptDir/FileSets"
-fileSet="$pkgFileSets/$venusVersion"
-
-# GitHub account
-gitHubUser="kwindrem"
-
 setupHelperDir="/data/SetupHelper"
+source "$setupHelperDir/EssentialResources"
 source "$setupHelperDir/LogHandler"
 source "$setupHelperDir/ServiceResources"
 source "$setupHelperDir/UpdateResources"
 reinstallParam="reinstall"
-
-
-reinstallScriptsList="/data/reinstallScriptsList"
-
-# rc local file that calls reinstallMods
-# use /data/rc.local if some scripts need resources not available at time rcS.local runs
-rcLocal="/data/rcS.local"
-
-# defined exit codes - must be consistent between all setup scripts and reinstallMods
-exitReboot=123
-exitSuccess=0
-
-# directory that holds script's options
-# options were removed from the script directory so they are preserved when the package is reinstalled
-setupOptionsRoot="/data/setupOptions"
-setupOptionsDir="$setupOptionsRoot"/$packageName
-
 
 # what action the script should take:
 #  NONE - do noting - signals script to prompt for user input on how to proceed

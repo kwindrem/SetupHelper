@@ -184,7 +184,7 @@ doUpdate ()
 
     if [ -f "$packageDir/setup" ]; then
         # if package is installed, reinstall automatically
-        if [ -f "installedFlagPrefix$package" ]; then
+        if [ -f "$installedFlagPrefix$package" ]; then
             logMessage "reinstalling $package"
             "$packageDir/setup" "reinstall" "force"
             # defer reboot until all updates and reinstalls have been done

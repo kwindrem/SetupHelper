@@ -1,4 +1,4 @@
 #!/bin/sh
 #exec 2>&1
-exec /data/SetupHelper/packageAutoUpdater 2>&1 | awk '{print "packageAutoUpdater" $0}'| tai64n >> /var/log/SetupHelper
+exec /data/SetupHelper/packageAutoUpdater
 

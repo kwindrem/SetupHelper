@@ -16,22 +16,14 @@ scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 packageame=$(basename "$scriptDir")
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
 
+source "/data/SetupHelper/EssentialResources"
 source "/data/SetupHelper/LogHandler"
 
 # this flag is tested by LogHandler to determine if messages should be output to the console
 logToConsole=false
 
 source "/data/SetupHelper/UpdateResources"
-
-# set dbus setting
-# $1 is new value
-# $2 is the dbus path
-setSetting ()
-{
-    local newValue="$1"
-    local dbusPath="$2"
-    dbus -y com.victronenergy.settings $dbusPath SetValue "$newValue" > /dev/null
-}
+source "/data/SetupHelper/DbusSettingsResources"
 
 # updates status message on GUI
 # $1 is the message identifier (not the actual message
@@ -65,7 +57,7 @@ updateStatus ()
     fi
     # update GUI status message
     if $updateDbus ; then
-        setSetting "$message" /Settings/GuiMods/CheckingPackage
+        updateDbusStringSetting "/Settings/GuiMods/CheckingPackage" "$message"
     fi
     lastMessage=$1
     lastPackage=$package
@@ -74,12 +66,17 @@ updateStatus ()
 
 #### main code starts here
 
+# wait until dbus settings are active
+while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
+    logMessage "waiting for dBus settings"
+    sleep 1
+done
+
 logMessage "starting up"
 
 usbCheck=false
 mediaDetected=false
 lastUpdateTime=0
-checkingPackage=false
 updateSetupHelper=false
 
 
@@ -89,67 +86,95 @@ gitHubSlowCheckDelay=600
 gitHubFastCheckDelay=10
 gitHubCheckDelay=0
 
-lastGitHubUpdateSetting=0
-
+autoUpdateSetting=0
+lastUpdateSetting=0
 
 # loop forever
 while true ; do
     rebootNeeded=false
+    checkingPackage=false
+    restartFromFirstPackage=false
 
-    # loop through packages, but don't look at new package until it's been checked for an update
-    # this loop will run every second even if waiting to access GitHub again
-    # this permits detection of USB media during the long wait for the next GitHub check
-    pkgArray=($allPackages)
-    i=0
-    while (( i < ${#pkgArray[@]} )); do
-        # look for installed package
-        if ! $checkingPackage ; then
-            package=${pkgArray[i]}
-            packageDir="/data/$package"
-            setupOptionsDir="$setupOptionsRoot"/$package
-            if [ ! -f "$setupOptionsDir/optionsSet" ]; then
-                (( i++ ))
-                continue
-            # package has been installed, continue
-            else
-                checkingPackage=true
+    # skip all processing if package list doesn't exist
+    # but keep checking
+    if [ ! -f "$packageListFile" ]; then
+        sleep 10
+        continue
+    fi
+    # loop through packages from package list
+    while read -u 9 package gitHubUser gitHubBranch; do
+
+        # skip comments
+        if [[ ${package:0:1} == "#" ]] ; then
+            continue
+        # skip blank/incomplete lines
+        elif [ -z $package ] || [ -z $gitHubUser ] || [ -z $gitHubBranch ] ; then
+            continue
+        fi
+
+        packageDir="/data/$package"
+        setupOptionsDir="$setupOptionsRoot"/$package
+
+        # skip uninstalled packages
+        if [ ! -f "$installedFlagPrefix"$package ]; then
+            continue
+        # package has been installed, check for updates
+        else
+            checkingPackage=true
+        fi
+
+        # this loop permits detection of USB media during the long wait for the next GitHub check
+        while $checkingPackage ; do
+            doUpdate=false
+
+            # pull Git Hub autoupdate mode from dbus
+            autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+            if [ -z $autoUpdateSetting ]; then
+                autoUpdateSetting=0
             fi
-        fi
 
-        doUpdate=false
+            # look for change in autoupdate setting
+            if (( $autoUpdateSetting != $lastUpdateSetting)); then
+                # GitHub updates just activated - start package scan over
+                if (( $lastGitHubUpdateSetting == 0)); then
+                    checkingPackage=false
+                    restartFromFirstPackage=true
+                 # if speeding up the loop, start package scan over
+                elif (( $autoUpdateSetting >= 2 )) && (( $lastUpdateSetting <= 1 )); then
+                    checkingPackage=false
+                    restartFromFirstPackage=true
+                fi
+                if $restartFromFirstPackage
 
-        # pull Git Hub autoupdate mode from dbus
-        autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
-                com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
-        if [ -z $autoUpdateSetting ]; then
-            autoUpdateSetting=0
-        fi
+                    break
+               
+            fi
 
-        # check for USB / SD media
-        mediaList=($(ls /media))
-        # no media
-        if [ -z $mediaList ] ; then
-            mediaDetected=false
-            usbCheck=false
-        # media first detected, start loop over and enable USB checks
-        elif ! $mediaDetected ; then
-            mediaDetected=true
-            usbCheck=true
-            updateStatus 'USB_CHECK'
-            i=0
-            continue
-        fi
+            # check for USB / SD media
+            mediaList=($(ls /media))
+            # no media
+            if [ -z $mediaList ] ; then
+                mediaDetected=false
+                usbCheck=false
+            # media first detected, enable USB checks and start loop over
+            elif ! $mediaDetected ; then
+                mediaDetected=true
+                usbCheck=true
+                updateStatus 'USB_CHECK'
+                checkingPackage=false
+                restartFromFirstPackage=true
+                break
+            fi
 
-        # nothing to do - reset loop and wait
-        if (( $autoUpdateSetting == 0 )) && ! $usbCheck ; then
-            i=0
-            checkingPackage=false
-            updateStatus 'IDLE'
-            sleep 1
-            continue
-        fi
+            # nothing to do - reset loop and wait
+            if (( $autoUpdateSetting == 0 )) && ! $usbCheck ; then
+                checkingPackage=false
+                restartFromFirstPackage=true ###############################
+                updateStatus 'IDLE'
+                break ########################
+            fi
 
-        if $checkingPackage ; then
             # USB / SD updates
             if $usbCheck ; then
                 for dir in ${mediaList[@]} ; do
@@ -158,7 +183,7 @@ while true ; do
                         logMessage "found $package on USB"
                         doUpdate=true
                         updateStatus 'CHECKING'
-                        break;
+                        break
                     fi
                 done
                 # done checking for this package, time to move on
@@ -169,9 +194,9 @@ while true ; do
                 # if speeding up the loop, start package scan over
                 if (( $autoUpdateSetting >= 2 )) && (( $lastGitHubUpdateSetting <= 1 )); then
                     checkingPackage=false
+                    restartFromFirstPackage=true
                     lastGitHubUpdateSetting=$autoUpdateSetting
-                    i=0
-                    continue
+                    break
                 fi
 
                 # set update delay based on update mode 
@@ -214,24 +239,34 @@ while true ; do
             elif (( $autoUpdateSetting == 0 )); then
                 rm -rf "$packageDir-$gitHubBranch"
             fi
-        fi # end if checkingPackage
-        # go to next package if done with this one
-        if ! $checkingPackage ; then
-            (( i++ ))
-        fi
-        if $usbCheck ; then
-            usleep 200000
+
+            # delay for inner loop
+            if $checkingPackage ; then
+                if $usbCheck ; then
+                    usleep 200000
+                else
+                    sleep 1
+                fi
+            fi
+        done                    # end while checkingPackage
+
+
+        if $restartFromFirstPackage ; then
+            break
         else
             sleep 1
         fi
-    done
+    done 9< "$packageListFile"   # end while read ...
 
-    # single pass
-    if (( $autoUpdateSetting == 3 )) ; then
-        setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
-    # end of first pass, switch to slow updates
-    elif (( $autoUpdateSetting == 2 )) ; then
-        setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+# if not restarting scan, update automatic update state
+    if ! $restartFromFirstPackage ; then
+        # single pass
+        if (( $autoUpdateSetting == 3 )) ; then
+            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+        # end of first pass, switch to slow updates
+        elif (( $autoUpdateSetting == 2 )) ; then
+            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+        fi
     fi
     usbCheck=false
 
@@ -245,9 +280,8 @@ while true ; do
         # shutdown the service which runs this script - this will end this script
         svc -d "/service/SetupHelper"
 
-        # wait here for service to end the script
+        # wait here for service to end this script
         sleep 10000
     fi
-
     sleep 1
 done

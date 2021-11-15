@@ -1,5 +1,5 @@
 # CommonResources for SetupHelper
-# contains a functions and variables necessare for a setup script to interface with reinstallMods
+# contains a functions and variables necessary for a setup script to interface with reinstallMods
 #
 # Refer to the SetupHelper ReadMe file for details on how to use these resources.
 
@@ -10,7 +10,7 @@ source "$setupHelperDir/EssentialResources"
 source "$setupHelperDir/LogHandler"
 source "$setupHelperDir/ServiceResources"
 source "$setupHelperDir/UpdateResources"
-reinstallParam="reinstall"
+source "$setupHelperDir/DbusSettingsResources"
 
 # what action the script should take:
 #  NONE - do noting - signals script to prompt for user input on how to proceed
@@ -35,6 +35,8 @@ rebootNeeded=false
 runAgain=false
 filesUpdated=false
 restartGui=false
+
+
 
 # yesNoPrompt provides user prompting requesting a yes/no response
 #
@@ -264,44 +266,6 @@ restoreActiveFile ()
     fi
 }
 
-# sets a dbus setting
-# $1 is new value
-# $2 is the dbus path
-
-setSetting ()
-{
-    local newValue=$1
-    local dbusPath=$2
-    if [ ! -z $newValue ]; then
-        dbus -y com.victronenergy.settings $dbusPath SetValue $newValue &> /dev/null
-    fi
-}
-
-# move a setting from setup options or from previous dbus Setting
-# $1 is the setup options path
-# $2 is the old dbus path
-# $3 is the new dbus path
-# dbus paths start with /Settings
-# if specified, the setup option file must include a value
-#   that value has priority over the old dbus parameter
-
-moveSetting ()
-{
-    local setupOption="$1"
-    local oldDbusPath=$2
-    local newDbusPath=$3
-    if [ -f "$setupOption" ]; then
-        oldSetting=$(cat "$setupOption")
-    elif [ ! -z "$oldDbusPath" ]; then
-        oldSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
-            $oldDbusPath com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
-    else
-        oldSetting=""
-    fi
-    if [ ! -z $oldSetting ] && [ ! -z "$newDbusPath" ]; then
-        dbus -y com.victronenergy.settings $newDbusPath SetValue $oldSetting &> /dev/null
-    fi
-}
 
 # checkFileSets validates the file sets used install package modifications
 #
@@ -455,7 +419,6 @@ endScript ()
             logMessage "adding $shortScriptName" to $(basename "$reinstallScriptsList")
             echo "$fullScriptName" "$reinstallParam" >> "$reinstallScriptsList"
         fi
-        
         if [ ! -f "$rcLocal" ]; then
             logMessage "creating $rcLocal"
             cat "$setupHelperDir/rcS.local" > "$rcLocal"
@@ -463,6 +426,10 @@ endScript ()
         elif  [ $(grep -c "SetupHelper" "$rcLocal") == 0 ]; then
             logMessage "adding SetupHelper reinstall script to $rcLocal"
             sed -e '1d' "$setupHelperDir/rcS.local" >> $rcLocal
+        # update reinstall call to nohup background
+        elif [ $(grep -c "nohup /data/SetupHelper" "$rcLocal") == 0 ]; then
+            logMessage "updating SetupHelper reinstall script in $rcLocal"
+            sed -i -e 's?/data/SetupHelper?nohup /data/SetupHelper?' -e 's?reinstallMods?reinstallMods > /dev/null \&?' "$rcLocal"
         fi
 
         # installed flag is removed if script needs to run again
@@ -474,6 +441,24 @@ endScript ()
             touch "$installedFlag"
       fi
 
+        # add package to packageList if not already there and the GitHub paths have been specified
+        if [ ! -z $packageGitHubUser ] && [ ! -z $packageGitHubBranch ]; then
+            # move from previous locaiton
+            oldPackageListFile="$setupOptionsRoot/SetupHelper/packageList"
+            if [ -f "$oldPackageListFile" ]; then
+                mv "$oldPackageListFile" "$packageListFile"
+            fi
+
+            if  [ ! -f "$packageListFile" ] || [ $(grep -c "$packageName\s" "$packageListFile") == 0 ]; then
+                logMessage "adding $packageName to SetupHelper package list"
+                echo "$packageName $packageGitHubUser $packageGitHubBranch" >> "$packageListFile"
+            fi
+        fi
+
+        # update package version for the gui - takes time so do in background
+        nohup "/data/SetupHelper/updatePackageVersions" > /dev/null &
+
+
     elif [ $scriptAction == 'UNINSTALL' ] ; then
         # remove this script from reinstallScriptsList to prevent further calls during boot
         if [ -f "$reinstallScriptsList" ] && [ ! $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
@@ -484,40 +469,10 @@ endScript ()
 
         # clean up only - flag not used since package is being removed
         rm -f "$installedFlag"
+        
+        # update package version for the gui - takes time so do in background
+        nohup "/data/SetupHelper/updatePackageVersions" > /dev/null &
     fi
-
-    # create/update dbus version setting
-    # do only if not running as a boot-time reinstall
-    # dbus services won't be up if running from rcS.local
-    if $force || ! $reinstall ; then
-        if [ $scriptAction == 'INSTALL' ] ; then
-            # create the version setting if it doesn't exist yet
-            packageVersion=$(dbus-send --system --print-reply=literal\
-                    --dest=com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName\
-                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}')
-            if [ -z $packageVersion ]; then
-                logMessage "creating $packageName version Setting"
-                dbus -y com.victronenergy.settings /Settings AddSettings\
-                    "%[ {\"path\":\"/GuiMods/PackageVersions/$packageName\", \"default\":\"unknown\"} ]" &> /dev/null
-            fi
-        fi
-        if [ -f "$scriptDir/version" ]; then
-            packageVersion=$(cat "$scriptDir/version")
-        # if no version, use package timestamp instead
-        elif [ -f "$scriptDir/timeStamp" ]; then
-            timeStamp=$(cat "$scriptDir/timeStamp")
-            packageVersion=$(date --date=@$timeStamp)
-        else
-            packageVersion="unknown"
-        fi
-        # flag verison not installed
-        if [ $scriptAction == 'UNINSTALL' ] ; then
-            packageVersion="(not installed) $packageVersion"
-        fi
-        # update version Setting - will fail silently if dbus setting doesn't exist
-        dbus -y com.victronenergy.settings /Settings/GuiMods/PackageVersions/$packageName SetValue "$packageVersion" &> /dev/null
-    fi
-
 
     # this script was called from reinstallMods
     # set exit code based on actual code

@@ -1,23 +1,48 @@
+New: SetupHelper now includes an automatic install using SD/USB media
+    without the need for command line access
+
+
 The SetupHelper package provides:
     a set of utilities to simplfy installing modifications to Victron Venus Os
     a mechanism to automatically reinstall them following a Venus OS update
     an automatic update mechanism to keep packages up to date
         from GitHub archives or USB stick
     a manual package installation mechanism from GitHub archives or USB stick
+    an automatic install from SD/USB media
 
 NOTE: Starting with v2.80~10, the root partition is mounted read only
     This package and those that use these resources rely on a writable /root partition
     so CommonResources runs the remount-rw.sh script to make it writable
 
 Supported pacages are:
-    SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup TankRepeater
+    SetupHelper GeneratorConnector GuiMods GuiMods2 RpiDisplaySetup RpiGpioSetup ShutdownManager TankRepeater
 
 More information is provided below.
 
 Setup:
-There are two methods to fetch a package archive.
+There are three methods to fetch a package archive.
 
-IF the Venus device has internet access is to run the following command:
+New: You can install SetupHelper and GuiMods2 without need of command line access
+    1) Download venus-data.tgz from the GitHub repo
+    2) copy it to the root of a freshly formatted SD card or USB memory stick
+    3) place the media in the GX device (Cerbo, CCGX, etc)
+    4) reboot the Gx device TWICE
+        after the second reboot, you should see the GUI restart and display
+        the enhanced flow overview from GuiMods2
+    5) remove the media from the GX device to prevent the next reboot from
+        starting the process all over again
+
+    CAUTION: This mechanism overwrites /data/rcS.local !!!!
+        If you are using rcS.local to perform boot-time activities,
+        /data/rcS.local must be recreated following this "blind" install
+        Note that SetupHelper and GuiMods2 also use /data/rcS.local for
+        reinstallation following a firmware update so use caution in
+        recreating rcS.local.
+    
+    Note: this process is also used by the Victron reset to factory defaults
+        and the 123 BMS
+
+If the Venus device has internet access is to run the following command:
 
 wget -qO - https://github.com/kwindrem/SetupHelper/archive/current.tar.gz | tar -xzf - -C /data
 
@@ -40,12 +65,13 @@ Finally, run the setup script to complete the installation
 
 Use the manual or automatic update mechnism for future updates
 
+
 Description:
 
 There are two parts to SetupHelper:
 1) Install and update utilities help a user manage packages.
 
-2) CommonResources helps in writing scripts to perform the installation.
+2) Resources to help writing scripts to perform the installation.
 
 The latter is of concern only to those writing new Venus modificaitons
 or modifying an existing setup script.
@@ -58,23 +84,16 @@ to install and update packages.
 
 packageAutoUpdater handles automatic package updates. 
 
-GitHub updates are enabled from the setup menu (g) option.
-
-if GuiMods is up to date, auto updates can also be controlled from 
-    Device List / Settings / Display & language / GuiMods / Auto update packages ...
-
-If enabled, automatic GitHub update checks will download and install the GitHub version
-if it is newer than the current version.
-
-Version numbers use the same syntax as Venus OS:
-    v<major>.<minor>~<test>
-    v2.45 would replace v2.45~68 as test versions lead up to an eventual release
-
-Automatic updates can be controlled via the GuiMods menu or options in the SetupHelper setup script
+Automatic updates can be controlled via the Device List / Settings / Package Versions menu
+        or options in the SetupHelper setup script
     Normal checks GitHub for a package once every 10 minutes
     Fast checks GitHub for a package once every 10 seconds
     Once checks GitHub for a package once every 10 minutes, but only once, then updates are turned off
     Disable disables GitHub updates
+
+If enabled, automatic GitHub update checks will download and install the GitHub version
+    of all installed packages if it is newer than the current version.
+
 
 If you are experimenting with modificaitons and wish to avoid GitHub updates overriding your work,
 disable automatic updates.
@@ -118,11 +137,6 @@ packageInstaller is called from the SetupHelper setup script by choosing the pac
 The packageInstaller is a shell script and can also be run manually:
 /data/SetupHelper/packageInstaller
 
-When a package is updated from GitHub or a USB stick, the currently installed package is moved to a backup directory
-so that the package can be returned to a previous verison should this be necessary.
-Two complete backups plus the current installation are saved.
-Backups are in /data and are named with -backup1 and -backup2 appended to the package name.
-    -backup2 is the oldest
 
 Setup script aids:
 
@@ -308,6 +322,10 @@ The following functions manage execution of the script and interfaces to reinsta
     $obsoleteVersion - if the package is obsolete, it can be prevented from installation
         at a specified Venus OS version
 
+    $packageGitHubUser - specifies the GitHub user name to be used to fetch updates
+    $packageGitHubBranch - specifies the branch to pull the update from
+        Both of these need to be specified in the setup script to enable updates from GitHub and USB/SD media
+
 The following functions update or restore Venus files to activate a package
 they are intended to simplify common tasks, generally reducing many lines
 to a single line that is easier to read/understand
@@ -419,3 +437,50 @@ LogHandler is a logging and log display mechanism. It is sourced by CommonResour
         The latter must be initialized in setup script code
         If no package log file exists, $packageLogFile shoudl remain null ""
 
+
+Update handler
+    SetupHelper checks for updates to packages from GitHub or USB/SD media.
+    The GitHub updates can be automatic.
+    When a package is installed, it addes the GitHub user and branch info to a file
+        used by the automatic and manual updates.
+    The defaultPackageList file is included in the SetupHelper package.
+    The default is copied to the active location at /data/setupOptions/SetupHelper/packageList
+        if it does not already exist.
+    The active file can then be edited to control the updates.
+    Package setup scripts should add lines to this file during installation.
+    This is handled in endScript if the packageGitHubUser and packageGitHubBranch are defined in the script
+    Some packages are included in defaultPackageList
+
+    Normally, the current or latest branch is used to check for updates, but specifying a different branch
+    or a specific version (of the form v2.3) can also be specified.
+    
+    A development branch should be used during package development to prevent affecting others using auto update.
+    
+    The repo version is compared with the installed version.
+    
+    If a version is specified for the branch, the package will be brought to that version
+    regardless of what is currently installed.
+    
+    If any other branch name is used, an update will occur if the repo verison is numerically greater than the installed version
+    
+PackageList format
+    The file consists of one line per package naming the package and specifying the GitHub user and branch, e.g.,
+
+    SetupHelper         kwindrem    current
+
+    Blank lines or those beginning with # are ignored
+    A package can be manually added to this file, or updates disabled by adding a # at the beginning of the line.
+
+packageVersions file
+    packageVersions are maintained in a file and also placed in dbus Settings for display in
+        the Package Versions List menu
+    The reason for the duplicaiton is dbus access from unix shell scripts is very slow
+
+    Whenever a package is installed, it compares its current version to the one in
+    the /data/packageVersions file. If there is a difference dbus Settings are updated
+    
+    Do NOT edit this file!!!
+
+Version numbers use the same syntax as Venus OS:
+    v<major>.<minor>~<test>
+    v2.45 would replace v2.45~68 as test versions lead up to an eventual release are considered

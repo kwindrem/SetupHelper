@@ -1,0 +1,18 @@
+# list of packages managed by SetupHelper
+# lines beginning with # are ignored and can be used
+#       to remove a package from auto and manual updates
+#       or as comments
+# blank lines are ignored
+# incomplete lines are ignored
+# SetupHelper should be first (and not commented out)
+#   so it updates resources used by other packages prior to their update
+# packages should add themselves to this list during setup
+
+# Package           GitHubUser  Version 
+SetupHelper         kwindrem    current
+GuiMods             kwindrem    current
+GuiMods2            kwindrem    current
+ShutdownMonitor     kwindrem    current
+RpiDisplaySetup     kwindrem    current
+RpiGpioSetup        kwindrem    current
+TankRepeater        kwindrem    current

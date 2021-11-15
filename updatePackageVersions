@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# This script keeps creates a list of installed package versions
+# and updates dBus /Settings/PackageVersion/...
+#
+# this script should be called whenever a package is installed or uninstalled
+# this is part of endScript () if used
+# it can take time, so launch it as a background task:
+#
+# nohup /data/updatePackageVersions > /dev/null &
+#
+# dbus access is slow, so this script builds a file with the known values
+# only changes are sent to dbus
+
+source "/data/SetupHelper/EssentialResources"
+source "/data/SetupHelper/LogHandler"
+source "/data/SetupHelper/DbusSettingsResources"
+
+versionsFile="/data/packageVersions"
+
+# this flag is tested by LogHandler to determine if messages should be output to the console
+logToConsole=false
+
+# wait until dbus settings are active
+while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
+    logMessage "waiting for dBus settings"
+    sleep 1
+done
+
+newNames=()
+newVersions=()
+oldNames=()
+oldVersions=()
+
+# read in old values
+if [ -f "$versionsFile" ]; then
+    index=0
+    while read -u 8 oldPackage oldVersion; do
+        oldNames[$index]=$oldPackage
+        oldVersions[$index]=$oldVersion
+        ((index++))
+    done 8< "$versionsFile"
+fi
+oldCount=${#oldNames[@]}
+
+# loop through packages from package list
+index=0
+rm -f "$versionsFile"
+while read -u 9 package gitHubUser gitHubBranch; do
+
+    # skip comments
+    if [[ ${package:0:1} == "#" ]] ; then
+        continue
+    # skip blank/incomplete lines
+    elif [ -z $package ] ; then
+        continue
+    fi
+    # skip uninstalled packages
+    if [ ! -f "$installedFlagPrefix"$package ]; then
+        continue
+    fi
+
+    newNames[$index]=$package
+    if [ -f "/data/$package/version" ]; then
+        packageVersion=$(cat "/data/$package/version")
+    else
+        packageVersion="?"
+    fi
+    newVersions[$index]=$packageVersion
+
+    # save in file for later comparison
+    echo $package $packageVersion >> "$versionsFile"
+
+    ((index++))
+
+done 9< "$packageListFile"
+newCount=${#newNames[@]}
+
+if (( $oldCount > $newCount )); then
+    minCount=$newCount
+    maxCount=$oldCount
+else
+    minCount=$oldCount
+    maxCount=$newCount
+fi
+
+# compare new and old and update dbus Settings as needed
+index=0
+while ((index < newCount )); do
+    if (( index > oldCount )); then
+        updateDbusStringSetting "/Settings/PackageVersion/$index/PackageName" ${newNames[$index]} 
+        updateDbusStringSetting "/Settings/PackageVersion/$index/PackageVersion" ${newVersions[$index]}
+    else
+        if [ "${newNames[$index]}" != "${oldNames[$index]}" ]; then
+            updateDbusStringSetting "/Settings/PackageVersion/$index/PackageName" ${newNames[$index]}
+        fi
+        if [ "${newVersions[$index]}" != "${oldVersions[$index]}" ]; then
+            updateDbusStringSetting "/Settings/PackageVersion/$index/PackageVersion" ${newVersions[$index]}
+        fi
+    fi
+    ((index++))
+done
+
+index=$newCount
+while (( $index < $oldCount )); do
+    echo "### remove setting for $index"
+    removeDbusSetting "/Settings/PackageVersion/$index/PackageName"
+    removeDbusSetting "/Settings/PackageVersion/$index/PackageVersion"
+    ((index++))
+done
+
+updateDbusIntSetting "/Settings/PackageVersion/Count" $newCount
+

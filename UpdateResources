@@ -5,9 +5,6 @@
 # source "/data/SetupHelper/LogHandler"
 # source "/data/SetupHelper/UpdateResources"
 
-# SetupHelper must be first so it updates resources used by other packages before they are updated
-allPackages="SetupHelper GuiMods GuiMods2 GeneratorConnector ShutdownMonitor RpiDisplaySetup RpiGpioSetup VeCanSetup TankRepeater"
-
 setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
 
@@ -36,11 +33,42 @@ function versionStringToNumber ()
     fi
 }
 
+# the version number of the archive is compared to the installed version
+# if a the branch specifies a spcific version number, the two versions must match
+# for the installed package to be considered up to date
+# for a branch label, the installed package is up to date if it's version
+# is equal to or greater than the archive's verison
+#
+# function will return 1 if an update is required and 0 if no update is needed
+
+function checkVersions ()
+{
+    # convert versions to numbers and compare them
+    versionStringToNumber $archiveVersion
+    archiveVersionNumber=$versionNumber
+    versionStringToNumber $installedVersion
+    # if version number specified, must match that exact value
+    if [[ ${gitHubBranch:0:1} == "v" ]] ; then
+        if (( $versionNumber == $archiveVersionNumber )); then
+            return 0
+        else
+            return 1
+        fi
+    else
+        if (( $versionNumber >= $archiveVersionNumber )); then
+            return 0
+        else
+            return 1
+        fi
+    fi
+    
+}
+
 
 # get the package from a USB file
 # The package is left in $package-$gitHubBranch for processing later
 # $1 is the name of the package
-# returns 0 if updated should NOT occur or 1 if update is acceptable for update
+# returns 0 if updates should NOT occur or 1 if update is acceptable for update
 
 getFromUsb ()
 {
@@ -81,16 +109,12 @@ getFromUsb ()
         logMessage "WARNING: no version for $package current installation - proceeding"
         return 1
     else
-        # convert versions to numbers and compare them
-        versionStringToNumber $archiveVersion
-        archiveVersionNumber=$versionNumber
-        versionStringToNumber $installedVersion
-        if (( $versionNumber >= $archiveVersionNumber )); then
+        checkVersions
+        if [ $? -eq 0 ]; then
             if $logToConsole ; then
                 echo "$package is up to date"
             fi
             return 0
-        # archive is newer
         else
             return 1
         fi
@@ -128,15 +152,14 @@ getFromGitHub ()
     elif [ -z $installedVersion ]; then
         logMessage "WARNING: no version for $package current installation - proceeding"
     else
-        # convert versions to numbers and compare them
-        versionStringToNumber $archiveVersion
-        archiveVersionNumber=$versionNumber
-        versionStringToNumber $installedVersion
-        if (( $versionNumber >= $archiveVersionNumber )); then
+        checkVersions
+        if [ $? -eq 0 ]; then
             if $logToConsole ; then
                 echo "$package is up to date"
             fi
             return 0
+        else
+            return 1
         fi
     fi
     # update the package and reinstall it
@@ -152,9 +175,6 @@ getFromGitHub ()
 
 # install the archive and run setup script
 #
-# backup the last 2 versions in case
-# it is necessary to revert to a previous verion
-#
 # $1 is the package name
 # $2 is the flag to allow running the script with user interaction
 
@@ -169,19 +189,6 @@ doUpdate ()
         installOk=false
     fi
     
-    # backup last 2 versions
-    if [ -d "$packageDir-backup2" ]; then
-        rm -rf "$packageDir-backup2"
-    fi
-    if [ -d "$packageDir-backup1" ]; then
-        mv "$packageDir-backup1" "$packageDir-backup2"
-    fi
-    if [ -d "$packageDir" ]; then
-        mv "$packageDir" "$packageDir-backup1" 
-    fi
-    # move new version into active position
-    mv "$packageDir-$gitHubBranch" "$packageDir"
-
     if [ -f "$packageDir/setup" ]; then
         # if package is installed, reinstall automatically
         if [ -f "$installedFlagPrefix$package" ]; then

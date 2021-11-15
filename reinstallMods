@@ -1,15 +1,24 @@
 #!/bin/sh
 
 # reinstalMods will reinstall customizations to Venus following a software update
-# Refer to the ReadMe for more details
 #
+# some setup scripts access dbus Settings which are not up early in the boot process
+# therefore, this script is run as a background task and waits for dbus Settings
+#
+# Refer to the ReadMe for more details
 
 setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
 source "$scriptDir/LogHandler"
 
-# disable outputting log messaged to console and package log
+# disable outputting log messages to console
 runningAtBoot=true
+
+# wait until dbus settings are active
+while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
+    logMessage "waiting for dBus settings"
+    sleep 2
+done
 
 
 if [ ! -f "$reinstallScriptsList" ] ; then
@@ -20,7 +29,7 @@ fi
 # read lines from script list file specified above
 # and call each script
 rebootNeeded=false
-while read line ; do
+while read -u 9 line ; do
     # ignore blank and comment lines
     if [ ! -z "$line" ] && ! [[ "$line" == \#* ]]; then
         # strip command parameters to make sure the path/command exists
@@ -35,7 +44,7 @@ while read line ; do
             logMessage "$command not found"
         fi
     fi
-done < "$reinstallScriptsList"
+done 9< "$reinstallScriptsList"
 
 # reboot now if any script reboots were indicated
 if $rebootNeeded ; then

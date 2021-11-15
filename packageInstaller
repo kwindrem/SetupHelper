@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# This script prompts for manual installation of packages from the allPackages list
+# This script prompts for manual installation of packages from the packageList file
 # it is called from SetupHelper/setup or can be run from the command line
 # Packages are installed either from GitHub or from a USB stick
 #
@@ -51,20 +51,39 @@ fi
 autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
 if [ -z $autoUpdateSetting ] || [ $autoUpdateSetting == 0 ]; then
-    reinstallOk=true
+    autoUpdatesEnabled=false
 else
-    reinstallOk=false
+    autoUpdatesEnabled=true
 fi
 
 rebootNeeded=false
 updateSetupHelper=false
-for package in $allPackages; do
+
+# skip all processing if package list doesn't exist
+if [ ! -f "$packageListFile" ]; then
+    echo "no packageList file found"
+    exit
+fi
+
+# loop through packages from package list file
+while read -u 9 package gitHubUser gitHubBranch; do
+    # skip comments
+    if [[ ${package:0:1} == "#" ]] ; then
+        continue
+    # skip blank/incomplete lines
+    elif [ -z $package ] || [ -z $gitHubUser ] || [ -z $gitHubBranch ] ; then
+        continue
+    fi
+
     doUpdate=false
     packageDir="/data/$package"
     
+
+
+##########################################################
     # if automatic updates are enabled, skip packages that have alreay been installed
-    if [ -e $packageDir ] && [ -f "$setupOptionsRoot/$package/optionsSet" ]; then
-        if ! $reinstallOk ; then
+    if [ -e $packageDir ] && [ -f "$setupOptionsRoot/$package/installOk" ]; then
+        if $autoUpdatesEnabled ; then
             echo "$package has already been installed and will be automatically updated - skipping"
             continue
         fi
@@ -82,7 +101,6 @@ for package in $allPackages; do
                 if $yesResponse ; then
                     doUpdate=true
                 else
-                    echo "#### removing $packageDir"
                     rm -rf "$packageDir-$gitHubBranch"
                 fi
                 break;
@@ -98,7 +116,6 @@ for package in $allPackages; do
             if $yesResponse ; then
                 doUpdate=true
             else
-                echo "#### removing $packageDir"
                 rm -rf "$packageDir-$gitHubBranch"
             fi
         fi
@@ -112,7 +129,7 @@ for package in $allPackages; do
             doUpdate $package 'prompting'
         fi
     fi
-done
+done 9< "$packageListFile"   # end while read ...
 
 # if an update was found for SetupHelper, run it's setup script now
 # this prevents stepping on SetupHelper resources

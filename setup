@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# this script sets up the SetupHelper service
+# this script sets up the SetupHelper service and other resources associated with package updates
 # This service provides automatic and manual updates for Venus modificaiton packages
 #
 
@@ -10,6 +10,26 @@
 source "/data/SetupHelper/CommonResources"
 
 #### end of lines to include SetupHelper
+
+# remove settings no longer used
+
+cleanupDbusSettings ()
+{
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/PackageVersions/GeneratorConnector\
+                com.victronenergy.BusItem.GetValue &> /dev/null
+    if (( $? == 0 )); then
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/GeneratorConnector"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/GuiMods"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/GuiMods2"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiDisplaySetup"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiGpioSetup"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiTemp"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/SetupHelper"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/TankRepeater"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/VeCanSetup"
+        removeDbusSetting "/Settings/GuiMods/PackageVersions/ShutdownMonitor"
+    fi
+}
 
 #### running manually and OK to proceed - prompt for input
 if [ $scriptAction == 'NONE' ] ; then
@@ -146,11 +166,34 @@ if [ $scriptAction == 'NONE' ] ; then
 fi
 
 if [ $scriptAction == 'INSTALL' ] ; then
+    if [ ! -f "$packageListFile" ]; then
+        logMessage "installing default packge list"
+        cp "$scriptDir/defaultPackageList" "$packageListFile"
+    fi
+
+    updateActiveFile "$qmlDir/PageSettings.qml"
+    updateActiveFile "$qmlDir/PageSettingsPackageControl.qml"
+    updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
+    updateActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
+
     installService $packageName
+
+    cleanupDbusSettings
 fi
 
 if [ $scriptAction == 'UNINSTALL' ] ; then
+    restoreActiveFile "$qmlDir/PageSettings.qml"
+    restoreActiveFile "$qmlDir/PageSettingsPackageControl.qml"
+    restoreActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
+    restoreActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
+
     removeService $packageName
+
+    cleanupDbusSettings
+fi
+
+if $filesUpdated ; then
+    restartGui=true
 fi
 
 # thats all folks - SCRIPT EXITS INSIDE THE FUNCTION

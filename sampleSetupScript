@@ -31,6 +31,11 @@ obsoleteVersion="v2.70~12"
 
 source "/data/SetupHelper/CommonResources"
 
+# GitHub account info - fill in as appropriate
+# to include this package in SetupHelper automatic updates
+packageGitHubUser=""
+packageGitHubBranch=""
+
 #### end of lines to include SetupHelper
 
 #### running manually and OK to proceed - prompt for input

@@ -1,4 +1,4 @@
 #!/bin/bash
 
 # SetupHelper reinstall all Venus mods
-/data/SetupHelper/reinstallMods
+nohup /data/SetupHelper/reinstallMods > /dev/null &

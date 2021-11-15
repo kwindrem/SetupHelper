@@ -86,8 +86,7 @@ gitHubSlowCheckDelay=600
 gitHubFastCheckDelay=10
 gitHubCheckDelay=0
 
-autoUpdateSetting=0
-lastUpdateSetting=0
+lastGitHubUpdateSetting=0
 
 # loop forever
 while true ; do
@@ -101,8 +100,14 @@ while true ; do
         sleep 10
         continue
     fi
+
     # loop through packages from package list
     while read -u 9 package gitHubUser gitHubBranch; do
+
+        #initialze package name & version arrays
+        packageIndex=0
+        packageNames=()
+        packageVersions=()
 
         # skip comments
         if [[ ${package:0:1} == "#" ]] ; then
@@ -121,6 +126,12 @@ while true ; do
         # package has been installed, check for updates
         else
             checkingPackage=true
+
+            # update package version table
+            packageNames[$packageIndex]=$package
+            packageVersions[$packageIndex]=$(cat "$packageDir/version")
+logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex]}  version: ${packageVersions[$packageIndex]}"
+            ((packageIndex++))
         fi
 
         # this loop permits detection of USB media during the long wait for the next GitHub check
@@ -132,23 +143,6 @@ while true ; do
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
             if [ -z $autoUpdateSetting ]; then
                 autoUpdateSetting=0
-            fi
-
-            # look for change in autoupdate setting
-            if (( $autoUpdateSetting != $lastUpdateSetting)); then
-                # GitHub updates just activated - start package scan over
-                if (( $lastGitHubUpdateSetting == 0)); then
-                    checkingPackage=false
-                    restartFromFirstPackage=true
-                 # if speeding up the loop, start package scan over
-                elif (( $autoUpdateSetting >= 2 )) && (( $lastUpdateSetting <= 1 )); then
-                    checkingPackage=false
-                    restartFromFirstPackage=true
-                fi
-                if $restartFromFirstPackage
-
-                    break
-               
             fi
 
             # check for USB / SD media
@@ -170,9 +164,9 @@ while true ; do
             # nothing to do - reset loop and wait
             if (( $autoUpdateSetting == 0 )) && ! $usbCheck ; then
                 checkingPackage=false
-                restartFromFirstPackage=true ###############################
+                restartFromFirstPackage=true
                 updateStatus 'IDLE'
-                break ########################
+                break
             fi
 
             # USB / SD updates

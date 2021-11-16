@@ -73,9 +73,19 @@ function checkVersions ()
 getFromUsb ()
 {
     local package=$1
-    local packageArchive="/media/$dir/$package"-$gitHubBranch.tar.gz
+    local packageArchive
     local packageDir="/data/$package"
     local lastUpdate=""
+    local fileSuffix
+
+    # the unpacked folder for version tags don't inclue the v (e.g, v2.4 is 2.4 in archive name)
+    # so the gitHubBranch is reworked to create a file suffix
+    if [[ ${gitHubBranch:0:1} == "v" ]]; then
+        fileSuffix=${gitHubBranch:1:999}
+    else
+        fileSuffix=$gitHubBranch
+    fi
+    packageArchive="/media/$dir/$package"-$fileSuffix.tar.gz
 
     # archive not found on USB stick
     if [ ! -f "$packageArchive" ]; then
@@ -83,7 +93,7 @@ getFromUsb ()
     fi
 
     tar -xzf "$packageArchive" -C /data
-    if [ ! -d "$packageDir-$gitHubBranch" ]; then
+    if [ ! -d "$packageDir-$fileSuffix" ]; then
         logMessage "ERROR: $packageArchive did not contain $package"
         return 0
     fi
@@ -96,7 +106,7 @@ getFromUsb ()
     fi
     
     # get archive version
-    archiveVersion=$(cat "/data/$package-$gitHubBranch/version")
+    archiveVersion=$(cat "/data/$package-$fileSuffix/version")
     if [ ! -e "$packageDir" ]; then
         if $logToConsole ; then
             echo "$package not yet installed"
@@ -125,7 +135,7 @@ getFromUsb ()
 # get the package from a GitHub
 # The package is left in $package-$gitHubBranch for processing later
 # $1 is the name of the package
-# returns 0 if updated should NOT occur or 1 if update is acceptable for update
+# returns 0 if update should NOT occur or 1 if update is acceptable
 
 getFromGitHub ()
 {
@@ -158,17 +168,15 @@ getFromGitHub ()
                 echo "$package is up to date"
             fi
             return 0
-        else
-            return 1
         fi
     fi
     # update the package and reinstall it
     wget -qO - https://github.com/$gitHubUser/$package/archive/$gitHubBranch.tar.gz | tar -xzf - -C /data
-    if [ ! -d "$packageDir-$gitHubBranch" ]; then
-        logMessage "ERROR: $packageArchive did not contain $package"
-        return 0
-    else
+    if [ $? -eq 0 ]; then
         return 1
+    else
+        logMessage "ERROR: $package $gitHubUser $gitHubBranch not available"
+        return 0
     fi
 }
 
@@ -176,19 +184,38 @@ getFromGitHub ()
 # install the archive and run setup script
 #
 # $1 is the package name
-# $2 is the flag to allow running the script with user interaction
+# $2 is the github branch/version tag
+# $3 is the flag to allow running the script with user interaction
 
 doUpdate ()
 {
     local package=$1
     local packageDir="/data/$package"
+    local gitHubBranch=$2
+    local fileSuffix
 
-    if [ $# -gt 1 ] && [ $2 == 'prompting' ]; then
+    # the unpacked folder for version tags don't inclue the v (e.g, v2.4 is 2.4 in archive name)
+    if [[ ${gitHubBranch:0:1} == "v" ]]; then
+        fileSuffix=${gitHubBranch:1:999}
+    else
+        fileSuffix=$gitHubBranch
+    fi
+
+    if [ $# -gt 2 ] && [ $3 == 'prompting' ]; then
         installOk=true
     else
         installOk=false
     fi
     
+    # move new version into active position
+    if [ -d "$packageDir-$fileSuffix" ]; then
+        rm -rf "$packageDir"
+        mv "$packageDir-$fileSuffix" "$packageDir"
+    else
+        logMessage "$packageDir-$fileSuffix is missing - can't continue"
+        return
+    fi
+
     if [ -f "$packageDir/setup" ]; then
         # if package is installed, reinstall automatically
         if [ -f "$installedFlagPrefix$package" ]; then

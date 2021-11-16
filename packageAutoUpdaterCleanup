@@ -7,9 +7,10 @@
 # This script also reboots the system if needed.
 
 # get parameters from command line
-updateSetupHelper=$1
-rebootNeeded=$2
-    
+gitHubBranch=$1
+updateSetupHelper=$2
+rebootNeeded=$3
+
 # get the full, unambiguous path to this script
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 shortScriptName=$(basename "$scriptDir")/$(basename "$0")
@@ -26,11 +27,11 @@ sleep 2
 
 if $updateSetupHelper ; then
     logMessage "running SetupHelper setup script to reinstall"
-    doUpdate "SetupHelper"
+    doUpdate "SetupHelper" $gitHubBranch
 fi
 
 # reboot now if any script reboots were indicated
-if $rebootNeeded ; then
-    logMessage "rebooting ..."
-    reboot
-fi
+#if $rebootNeeded ; then
+#    logMessage "rebooting ..."
+#    reboot
+#fi

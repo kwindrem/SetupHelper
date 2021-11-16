@@ -77,6 +77,7 @@ logMessage "starting up"
 usbCheck=false
 mediaDetected=false
 lastUpdateTime=0
+checkingPackage=false
 updateSetupHelper=false
 
 
@@ -91,7 +92,6 @@ lastGitHubUpdateSetting=0
 # loop forever
 while true ; do
     rebootNeeded=false
-    checkingPackage=false
     restartFromFirstPackage=false
 
     # skip all processing if package list doesn't exist
@@ -103,12 +103,6 @@ while true ; do
 
     # loop through packages from package list
     while read -u 9 package gitHubUser gitHubBranch; do
-
-        #initialze package name & version arrays
-        packageIndex=0
-        packageNames=()
-        packageVersions=()
-
         # skip comments
         if [[ ${package:0:1} == "#" ]] ; then
             continue
@@ -126,12 +120,6 @@ while true ; do
         # package has been installed, check for updates
         else
             checkingPackage=true
-
-            # update package version table
-            packageNames[$packageIndex]=$package
-            packageVersions[$packageIndex]=$(cat "$packageDir/version")
-logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex]}  version: ${packageVersions[$packageIndex]}"
-            ((packageIndex++))
         fi
 
         # this loop permits detection of USB media during the long wait for the next GitHub check
@@ -224,8 +212,8 @@ logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex
                 # reinstall the package without user interaction
                 else
                     # update via unattended reinstall only
-                    logMessage "updating $package"
-                    doUpdate $package
+                    logMessage "updating $package with $gitHubBranch"
+                    doUpdate $package $gitHubBranch
                     if $usbCheck ; then
                         sleep 1
                     fi
@@ -244,8 +232,7 @@ logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex
             fi
         done                    # end while checkingPackage
 
-
-        if $restartFromFirstPackage ; then
+        if $restartFromFirstPackage || $updateSetupHelper ; then
             break
         else
             sleep 1
@@ -253,7 +240,7 @@ logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex
     done 9< "$packageListFile"   # end while read ...
 
 # if not restarting scan, update automatic update state
-    if ! $restartFromFirstPackage ; then
+    if ! $restartFromFirstPackage && ! $updateSetupHelper; then
         # single pass
         if (( $autoUpdateSetting == 3 )) ; then
             setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
@@ -269,7 +256,7 @@ logMessage "#### package index $packageIndex  name: ${packageNames[$packageIndex
     if $updateSetupHelper || $rebootNeeded ; then
         logMessage "continuing in cleanup script - $packageName exiting"
         
-        nohup "$scriptDir/packageAutoUpdaterCleanup" $updateSetupHelper $rebootNeeded 2>&1 | awk '{print "packageAutoUpdater " $0}'| tai64n >> /var/log/SetupHelper &
+        nohup "$scriptDir/packageAutoUpdaterCleanup" $gitHubBranch $updateSetupHelper $rebootNeeded 2>&1 | awk '{print "packageAutoUpdaterCleanup " $0}'| tai64n >> /var/log/SetupHelper &
         
         # shutdown the service which runs this script - this will end this script
         svc -d "/service/SetupHelper"

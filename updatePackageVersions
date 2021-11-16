@@ -31,11 +31,18 @@ newNames=()
 newVersions=()
 oldNames=()
 oldVersions=()
-
 # read in old values
 if [ -f "$versionsFile" ]; then
     index=0
     while read -u 8 oldPackage oldVersion; do
+        # skip comments
+        if [[ ${oldPackage:0:1} == "#" ]] ; then
+            continue
+        # skip blank/incomplete lines
+        elif [ -z $oldPackage ] ; then
+            continue
+        fi
+
         oldNames[$index]=$oldPackage
         oldVersions[$index]=$oldVersion
         ((index++))
@@ -45,7 +52,7 @@ oldCount=${#oldNames[@]}
 
 # loop through packages from package list
 index=0
-rm -f "$versionsFile"
+echo "# AUTO GENERATED DO NOT MODIFY" > "$versionsFile"
 while read -u 9 package gitHubUser gitHubBranch; do
 
     # skip comments
@@ -103,7 +110,6 @@ done
 
 index=$newCount
 while (( $index < $oldCount )); do
-    echo "### remove setting for $index"
     removeDbusSetting "/Settings/PackageVersion/$index/PackageName"
     removeDbusSetting "/Settings/PackageVersion/$index/PackageVersion"
     ((index++))

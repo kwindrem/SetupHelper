@@ -23,7 +23,7 @@ cleanupDbusSettings ()
                     "/Settings/GuiMods/PackageVersions/RpiGpioSetup" "/Settings/GuiMods/PackageVersions/RpiTemp"\
                     "/Settings/GuiMods/PackageVersions/SetupHelper" "/Settings/GuiMods/PackageVersions/TankRepeater",\
                     "/Settings/GuiMods/PackageVersions/VeCanSetup" "/Settings/GuiMods/PackageVersions/ShutdownMonitor"\
-                    "/Settings/GuiMods/CheckingPackage" "/Settings/GuiMods/CheckingPackage"
+                    "/Settings/GuiMods/CheckingPackage" "/Settings/GuiMods/GitHubAutoUpdate"
     fi
 }
 

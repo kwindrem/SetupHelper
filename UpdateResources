@@ -109,7 +109,7 @@ getFromUsb ()
     archiveVersion=$(cat "/data/$package-$fileSuffix/version")
     if [ ! -e "$packageDir" ]; then
         if $logToConsole ; then
-            echo "$package not yet installed"
+            echo "$package not yet installed - proceeding"
         fi
         return 1
     elif [ -z $archiveVersion ]; then
@@ -135,6 +135,10 @@ getFromUsb ()
 # get the package from a GitHub
 # The package is left in $package-$gitHubBranch for processing later
 # $1 is the name of the package
+#
+# $2 is a boolean: when true archive download is skipped
+#   used by packageInstaller when a package is aready installed and auto updates are enabled
+#  if auto updates are enabled and update will be skipped anyway
 # returns 0 if update should NOT occur or 1 if update is acceptable
 
 getFromGitHub ()
@@ -142,7 +146,13 @@ getFromGitHub ()
     local package=$1
     local packageDir="/data/$package"
     local lastUpdate=""
-
+    local skipDownload
+    if [ $# -gt 1 ] &&  $2 ; then
+        checkOnly=true
+    else
+        checkOnly=false
+    fi
+    
     # get the version from local copy of package
     if [ -f "$packageDir/version" ]; then
         installedVersion=$(cat "$packageDir/version")
@@ -150,14 +160,16 @@ getFromGitHub ()
         installedVersion=""
     fi
  
-    # fetch archive version
-    archiveVersion=$(wget -qO - https://raw.githubusercontent.com/$gitHubUser/$package/$gitHubBranch/version)
     if [ ! -e "$packageDir" ]; then
         if $logToConsole ; then
-            echo "$package not yet installed"
+            echo "$package not yet installed - proceeding"
         fi
-    elif [ -z $archiveVersion ]; then
-        logMessage "ERROR: Can't access GitHub archive or no version for $package - can't update"
+    fi
+
+    # fetch archive version
+    archiveVersion=$(wget -qO - https://raw.githubusercontent.com/$gitHubUser/$package/$gitHubBranch/version)
+    if [ -z $archiveVersion ]; then
+        logMessage "ERROR: no version for $package $gitHubUser $gitHubBranch on GitHub - can't continue"
         return 0
     elif [ -z $installedVersion ]; then
         logMessage "WARNING: no version for $package current installation - proceeding"
@@ -168,6 +180,8 @@ getFromGitHub ()
                 echo "$package is up to date"
             fi
             return 0
+        elif $checkOnly ; then
+            return 1
         fi
     fi
     # update the package and reinstall it
@@ -175,7 +189,7 @@ getFromGitHub ()
     if [ $? -eq 0 ]; then
         return 1
     else
-        logMessage "ERROR: $package $gitHubUser $gitHubBranch not available"
+        logMessage "ERROR: can't access $package $gitHubUser $gitHubBranch on GitHub"
         return 0
     fi
 }

@@ -15,19 +15,15 @@ source "/data/SetupHelper/CommonResources"
 
 cleanupDbusSettings ()
 {
-    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/PackageVersions/GeneratorConnector\
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
                 com.victronenergy.BusItem.GetValue &> /dev/null
     if (( $? == 0 )); then
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/GeneratorConnector"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/GuiMods"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/GuiMods2"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiDisplaySetup"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiGpioSetup"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/RpiTemp"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/SetupHelper"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/TankRepeater"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/VeCanSetup"
-        removeDbusSetting "/Settings/GuiMods/PackageVersions/ShutdownMonitor"
+            removeDbusSettings "/Settings/GuiMods/PackageVersions/GeneratorConnector" "/Settings/GuiMods/PackageVersions/GuiMods"\
+                    "/Settings/GuiMods/PackageVersions/GuiMods" "/Settings/GuiMods/PackageVersions/RpiDisplaySetup"\
+                    "/Settings/GuiMods/PackageVersions/RpiGpioSetup" "/Settings/GuiMods/PackageVersions/RpiTemp"\
+                    "/Settings/GuiMods/PackageVersions/SetupHelper" "/Settings/GuiMods/PackageVersions/TankRepeater",\
+                    "/Settings/GuiMods/PackageVersions/VeCanSetup" "/Settings/GuiMods/PackageVersions/ShutdownMonitor"\
+                    "/Settings/GuiMods/CheckingPackage" "/Settings/GuiMods/CheckingPackage"
     fi
 }
 
@@ -38,20 +34,17 @@ if [ $scriptAction == 'NONE' ] ; then
     # NOTE: if new settings are added in the future, change test for that one
     # to avoid creating that new parameter !!!!
     
-    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/CheckingPackage\
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/CheckingPackage\
             com.victronenergy.BusItem.GetValue &> /dev/null
     if (( $? != 0 )); then
         logMessage "creating SetupHelper Settings"
         dbus -y com.victronenergy.settings /Settings AddSettings\
-            '%[ {"path": "/GuiMods/GitHubAutoUpdate", "default":0},\
-                {"path": "/GuiMods/CheckingPackage", "default":""},]'  > /dev/null
-        # move setup option flag to dbus setting
-        if [ -f "$setupOptionsDir/autoGitHubUpdate" ]; then
-            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
-            rm -f "$setupOptionsDir/autoGitHubUpdate"
-        else
-            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
-        fi
+            '%[ {"path": "/PackageVersion/GitHubAutoUpdate", "default":0},\
+                {"path": "/PackageVersion/CheckingPackage", "default":""},]'  > /dev/null
+        # relocate options and current values
+        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/PackageVersion/GitHubAutoUpdate"
+        rm -f "$setupOptionsDir/autoGitHubUpdate"
+        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/PackageVersion/CheckingPackage"
     fi
 
     # display initial message
@@ -115,7 +108,7 @@ if [ $scriptAction == 'NONE' ] ; then
                 ;;
             [gG]*)
                 autoUpdate=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
-                        /Settings/GuiMods/GitHubAutoUpdate\
+                        /Settings/PackageVersion/GitHubAutoUpdate\
                         com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
                 case $autoUpdate in
                     1)
@@ -141,16 +134,16 @@ if [ $scriptAction == 'NONE' ] ; then
                 if [ ! -z $response ]; then
                     case $response in
                         [nN]* | [eE]*)
-                            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+                            setSetting 1 /Settings/PackageVersion/GitHubAutoUpdate
                             ;;
                         [fF]*)
-                            setSetting 2 /Settings/GuiMods/GitHubAutoUpdate
+                            setSetting 2 /Settings/PackageVersion/GitHubAutoUpdate
                             ;;
                          [oO]*)
-                            setSetting 3 /Settings/GuiMods/GitHubAutoUpdate
+                            setSetting 3 /Settings/PackageVersion/GitHubAutoUpdate
                             ;;
                         [dD]*)
-                            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+                            setSetting 0 /Settings/PackageVersion/GitHubAutoUpdate
                             ;;
                     *)
                     esac

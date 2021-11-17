@@ -62,19 +62,23 @@ updateDbusIntSetting ()
 }
 
 
-# removeDbusSetting removes the setting from dbus Settings
+# removeDbusSettings removes the setting from dbus Settings
 #
-# $1 is the path to the setting to be removed  starting with /Settings
+# all parameters are each a quoted path to the setting to be removed
+# e.g., removeDbusSettings "/Settings/foo" "/Settings/bar"
+# (including all settings in one dbus call is much faster)
 
-removeDbusSetting ()
+removeDbusSettings ()
 {
-    logMessage "removing dbus Setting $1"
-    dbus -y com.victronenergy.settings / RemoveSettings "%[\"$1\" ]" &> /dev/null
+    logMessage "removing dbus Settings $@"
+    local settings=$(echo "$@" | sed -e s_^_\"_ -e s_\$_\"_ -e s_\ _'", "'_g)
+    dbus -y com.victronenergy.settings / RemoveSettings "%[ $settings ]" &> /dev/null
 }
 
 
 # setSetting updates the dbus setting parameter
 # the setting must already exist or the update will fail
+# (the setting can not be created without knowing the data type(s))
 #
 # $1 is the new value
 # $2 is the setting path
@@ -86,22 +90,39 @@ setSetting ()
 
 # move a setting from setup options or from previous dbus Setting
 # $1 is the setup options path
-# $2 is the old dbus path
+# $2 is the old dbus path (has priority over setup option)
 # $3 is the new dbus path
 # dbus paths start with /Settings
 # if specified, the setup option file must include a value
 #   that value has priority over the old dbus parameter
+#
+# setup options can either contain a value or be a flag file
+# for flag files, the file will be empty and the state of the option
+# depends on the presence of the file (true) or absense of the file (false)
+#
+# Note: this function does NOT create or remove any old option or Setting
+# use other functions or commands to do so
 
 moveSetting ()
 {
     local setupOption="$1"
     local oldDbusPath=$2
     local newDbusPath=$3
-    if [ -f "$setupOption" ]; then
-        oldSetting=$(cat "$setupOption")
-    elif [ ! -z "$oldDbusPath" ]; then
+
+    if [ ! -z "$oldDbusPath" ]; then
         oldSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
             $oldDbusPath com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+    elif [ ! -z $setupOption ]; then
+        if [ -f "$setupOption" ]; then
+            oldSetting=$(cat "$setupOption")
+            # flag file - old setting is true (1)
+            if [ -z $oldSetting ]; then
+                oldSetting=1
+            fi
+        # file did not exist - assume a false value for a flag file
+        else
+            oldSetting=0
+        fi
     else
         oldSetting=""
     fi

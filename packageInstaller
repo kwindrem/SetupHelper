@@ -48,7 +48,7 @@ if $updateFromUsb ; then
 fi
 
 # allow reinstallations if auto updates are not enabled
-autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate\
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
 if [ -z $autoUpdateSetting ] || [ $autoUpdateSetting == 0 ]; then
     autoUpdatesEnabled=false
@@ -78,16 +78,14 @@ while read -u 9 package gitHubUser gitHubBranch; do
     doUpdate=false
     packageDir="/data/$package"
     
-
-
-##########################################################
-    # if automatic updates are enabled, skip packages that have alreay been installed
-    if [ -e $packageDir ] && [ -f "$setupOptionsRoot/$package/installOk" ]; then
-        if $autoUpdatesEnabled ; then
-            echo "$package has already been installed and will be automatically updated - skipping"
-            continue
-        fi
+    # if automatic updates are enabled, skip packages that are installed
+    checkOnly=false
+    if [ -e $packageDir ] && [ -f "$installedFlagPrefix"$package ]; then
         installText="reinstall"
+        # update will be skipped so set a flag so getFromGitHub only checks versions
+        if ! $updateFromUsb ; then
+            checkOnly=true
+        fi
     else
         installText="install"
     fi
@@ -109,8 +107,12 @@ while read -u 9 package gitHubUser gitHubBranch; do
 
     # check GitHub
     else
-        getFromGitHub $package
+        getFromGitHub $package $checkOnly
         if [ $? -eq 1 ]; then
+            if $autoUpdatesEnabled ; then
+                echo "$package needs update but will be updated automatically - skipping"
+                continue
+            fi
             echo
             yesNoPrompt "$installText $package from GitHub? (y/n): "
             if $yesResponse ; then

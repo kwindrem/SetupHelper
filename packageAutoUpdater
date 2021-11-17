@@ -57,7 +57,7 @@ updateStatus ()
     fi
     # update GUI status message
     if $updateDbus ; then
-        updateDbusStringSetting "/Settings/GuiMods/CheckingPackage" "$message"
+        updateDbusStringSetting "/Settings/PackageVersion/CheckingPackage" "$message"
     fi
     lastMessage=$1
     lastPackage=$package
@@ -127,7 +127,7 @@ while true ; do
             doUpdate=false
 
             # pull Git Hub autoupdate mode from dbus
-            autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
+            autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate\
                     com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
             if [ -z $autoUpdateSetting ]; then
                 autoUpdateSetting=0
@@ -243,10 +243,10 @@ while true ; do
     if ! $restartFromFirstPackage && ! $updateSetupHelper; then
         # single pass
         if (( $autoUpdateSetting == 3 )) ; then
-            setSetting 0 /Settings/GuiMods/GitHubAutoUpdate
+            setSetting 0 /Settings/PackageVersion/GitHubAutoUpdate
         # end of first pass, switch to slow updates
         elif (( $autoUpdateSetting == 2 )) ; then
-            setSetting 1 /Settings/GuiMods/GitHubAutoUpdate
+            setSetting 1 /Settings/PackageVersion/GitHubAutoUpdate
         fi
     fi
     usbCheck=false

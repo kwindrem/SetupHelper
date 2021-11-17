@@ -7,7 +7,7 @@ import com.victron.velib 1.0
 MbPage {
 	id: root
 	title: qsTr("Package Versions")
-    property string bindPrefix: "com.victronenergy.settings/Settings/GuiMods"
+    property string bindPrefix: "com.victronenergy.settings/Settings/PackageVersion"
     VBusItem { id: checkingPackageItem; bind: Utils.path(bindPrefix, "/CheckingPackage") }
     property string checkingPackage: checkingPackageItem.valid ? checkingPackageItem.value : ""
 

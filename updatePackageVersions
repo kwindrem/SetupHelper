@@ -110,8 +110,8 @@ done
 
 index=$newCount
 while (( $index < $oldCount )); do
-    removeDbusSetting "/Settings/PackageVersion/$index/PackageName"
-    removeDbusSetting "/Settings/PackageVersion/$index/PackageVersion"
+    removeDbusSettings "/Settings/PackageVersion/$index/PackageName"\
+                        "/Settings/PackageVersion/$index/PackageVersion"
     ((index++))
 done
 

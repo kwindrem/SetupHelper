@@ -34,19 +34,6 @@ if [ $scriptAction == 'NONE' ] ; then
     # NOTE: if new settings are added in the future, change test for that one
     # to avoid creating that new parameter !!!!
     
-    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/CheckingPackage\
-            com.victronenergy.BusItem.GetValue &> /dev/null
-    if (( $? != 0 )); then
-        logMessage "creating SetupHelper Settings"
-        dbus -y com.victronenergy.settings /Settings AddSettings\
-            '%[ {"path": "/PackageVersion/GitHubAutoUpdate", "default":0},\
-                {"path": "/PackageVersion/CheckingPackage", "default":""},]'  > /dev/null
-        # relocate options and current values
-        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/PackageVersion/GitHubAutoUpdate"
-        rm -f "$setupOptionsDir/autoGitHubUpdate"
-        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/PackageVersion/CheckingPackage"
-    fi
-
     # display initial message
     echo
     echo "This package provides support functions and utilities for Venus modification packages"
@@ -163,6 +150,20 @@ if [ $scriptAction == 'INSTALL' ] ; then
         logMessage "installing default packge list"
         cp "$scriptDir/defaultPackageList" "$packageListFile"
     fi
+
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/CheckingPackage\
+            com.victronenergy.BusItem.GetValue &> /dev/null
+    if (( $? != 0 )); then
+        logMessage "creating SetupHelper Settings"
+        dbus -y com.victronenergy.settings /Settings AddSettings\
+            '%[ {"path": "/PackageVersion/GitHubAutoUpdate", "default":0},\
+                {"path": "/PackageVersion/CheckingPackage", "default":""},]'  > /dev/null
+        # relocate options and current values
+        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/PackageVersion/GitHubAutoUpdate"
+        rm -f "$setupOptionsDir/autoGitHubUpdate"
+        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/PackageVersion/CheckingPackage"
+    fi
+
 
     updateActiveFile "$qmlDir/PageSettings.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageControl.qml"

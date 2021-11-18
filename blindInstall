@@ -42,12 +42,12 @@ if [ -f "/data/SetupHelper/setup" ]; then
     sync
     logMessage "installing SetupHelper"
     /data/SetupHelper/setup reinstall force deferReboot
-    if [ -f "/data/GuiMods2/setup" ]; then
-        logMessage "installing GuiMods2"
-        /data/GuiMods2/setup reinstall force deferReboot
+    if [ -f "/data/GuiMods/setup" ]; then
+        logMessage "installing GuiMods"
+        /data/GuiMods/setup reinstall force deferReboot
     fi
 
     # enable GitHub automatic updates
-    dbus -y com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate SetValue 1 &> /dev/null
+    dbus -y com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate SetValue 1 &> /dev/null
 fi
 

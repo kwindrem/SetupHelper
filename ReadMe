@@ -22,13 +22,16 @@ More information is provided below.
 Setup:
 There are three methods to fetch a package archive.
 
-New: You can install SetupHelper and GuiMods2 without need of command line access
-    1) Download venus-data.tgz from the GitHub repo
+New: You can install SetupHelper and GuiMods without need of command line access
+
+    1) Download venus-data.tgz from the GitHub repo.
     2) copy it to the root of a freshly formatted SD card or USB memory stick
     3) place the media in the GX device (Cerbo, CCGX, etc)
-    4) reboot the Gx device TWICE
+    4) reboot the GX device TWICE
         after the second reboot, you should see the GUI restart and display
         the enhanced flow overview from GuiMods2
+        If GuiMods2 was previously installed, the Grid Parallel overview
+            is automatically selected
     5) remove the media from the GX device to prevent the next reboot from
         starting the process all over again
 
@@ -38,9 +41,14 @@ New: You can install SetupHelper and GuiMods2 without need of command line acces
         Note that SetupHelper and GuiMods2 also use /data/rcS.local for
         reinstallation following a firmware update so use caution in
         recreating rcS.local.
-    
-    Note: this process is also used by the Victron reset to factory defaults
-        and the 123 BMS
+
+    venus-data.tgz is available here:
+        https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz
+    and here:
+        https://github.com/kwindrem/GuiMods/raw/main/venus-data.tgz
+    One may be newer than the other. In any case, automatic updates
+        will update any package that is out of date following the blind install
+
 
 If the Venus device has internet access is to run the following command:
 

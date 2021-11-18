@@ -14,10 +14,6 @@
 # functions that begin with _ skip checks and do not log activity
 
 
-# _killServiceProcesses makes sure there are no service processes running
-# The intent is to force supervise to run the new version 
-# must be called from other functions that have already made the necessary checks
-
 # starting with v2.80~10, services are stored in this directory which is overlayed onto /service
 # all services need to be added there rather than /service
 # Note: service calls (eg svc) are still made on /service/...
@@ -34,12 +30,6 @@ else
     serviceOverlay=false
 fi
 
-_killServiceProcesses ()
-{
-    local pkg=$1
-    ps -lw | grep $pkg | grep -v -e grep -e $$  | awk '{print $3}' | xargs kill > /dev/null 2>&1
-}
-
 # startService and stopService start and stop the service, respectively
 # the 'down' flag is also cleared/set to control service runs in the future
 # startService will cause the service to stop then start again !!!
@@ -50,6 +40,7 @@ _startService ()
     rm -f "$serviceDir/$pkg/down"
     if $serviceOverlay ; then
         rm -f "/service/$pkg/down"
+        svc -u "/service/$pkg"
     fi
     svc -u "/service/$pkg"
     if [ -e "$serviceDir/$pkg/log" ]; then
@@ -82,7 +73,6 @@ _stopService ()
         touch "$serviceDir/$pkg/log/down"
         svc -d "/service/$pkg/log"
     fi
-    _killServiceProcesses $pkg
 }
 
 stopService ()
@@ -116,8 +106,6 @@ _removeService ()
     if $serviceOverlay ; then
         rm -rf "$overlayWorkDir/$pkg"
     fi
-    # kill related processes
-    _killServiceProcesses $pkg
 }
 
 removeService ()
@@ -181,8 +169,8 @@ installService ()
                 cp "$scriptDir/service/log/run" "$serviceDir/$pkg/log/run"
            fi
         fi
-        _killServiceProcesses $pkg
     fi
+    _startService $pkg
 }
 
 

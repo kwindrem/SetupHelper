@@ -4,7 +4,6 @@ import "utils.js" as Utils
 
 MbItem {
 	id: root
-/////////////	height: 30
 
 	property int versionIndex
 	property string bindPrefix
@@ -15,12 +14,33 @@ MbItem {
 	}
 
     VBusItem { id: packageName; bind: getBind ("PackageName") }
-    VBusItem { id: packageVersion; bind: getBind ("PackageVersion") }
+///////////////////    VBusItem { id: packageVersion; bind: getBind ("PackageVersion") }
 
-    MbItemValue
+    MbRowSmall
     {
+        anchors.verticalCenter: parent.verticalCenter
+        height: 25
+    
+        isCurrentItem: root.isCurrentItem
         description: packageName.valid ? packageName.value : ""
-        item.bind: getBind ("PackageVersion")
-        show: item.valid && packageName.valid
+        MbTextBlock
+        {
+            id: gitUser
+            item { bind: getBind("GitHubUser") }
+            width: 100
+            show: packageName.valid && item.valid
+        }
+        MbTextBlock
+        {
+            item { bind: getBind("GitHubBranch") }
+            show: packageName.valid && gitUser.item.valid
+            width: 80
+        }
+        MbTextBlock
+        {
+            item { bind: getBind("PackageVersion") }
+            width: 80
+            show: packageName.valid
+        }
     }
 }

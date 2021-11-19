@@ -20,12 +20,17 @@ source "/data/SetupHelper/LogHandler"
 # a dbus exeption error will be logged if settings are not active yet
 
 
-# updateDbusStringSetting updates a dbus setting STRING parameter with a new value
-# if the setting does not exist, it is created
+# updateDbusStringSetting
+# updateDbusIntSetting
+# updateDbusRealSetting
+#   updates a dbus setting parameter with a new value
 #
-# functions for other data types have not been included but could be added
-# the determining factor is the values supplied for default, max and min values
-# as they determine the underlying data type for the setting
+# if the setting does not exist, it is created
+# but max and min values are not set and the default is "", 0 or 0.0 depending on data type
+# if these are needed use the dbus command directly
+#   this can also be faster if lots of settings must be created at the same time
+#
+# other data types may exist and would need their own function
 #
 # $1 is the path to the setting starting with /Settings
 # $2 is the new value
@@ -35,7 +40,7 @@ source "/data/SetupHelper/LogHandler"
 updateDbusStringSetting ()
 {
     dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
-            com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}'
+            com.victronenergy.BusItem.GetValue &> /dev/null
     if (( $? != 0 )); then
         logMessage "creating dbus Setting $1"
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":\"\"} ]" &> /dev/null
@@ -47,13 +52,24 @@ updateDbusStringSetting ()
 
 updateDbusIntSetting ()
 {
-    local oldValue
-
-    oldValue=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
-            com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}')
-    if [ -z $oldValue ]; then
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
+            com.victronenergy.BusItem.GetValue &> /dev/null
+    if (( $? != 0 )); then
         logMessage "creating dbus Setting $1"
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":0} ]" &> /dev/null
+    fi
+
+    dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null
+}
+
+
+updateDbusRealSetting ()
+{
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
+            com.victronenergy.BusItem.GetValue &> /dev/null
+    if (( $? != 0 )); then
+        logMessage "creating dbus Setting $1"
+        dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":0.0} ]" &> /dev/null
     fi
 
     dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null

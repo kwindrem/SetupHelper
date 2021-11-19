@@ -449,7 +449,7 @@ endScript ()
                 mv "$oldPackageListFile" "$packageListFile"
             fi
 
-            if  [ ! -f "$packageListFile" ] || [ $(grep -c "$packageName\s" "$packageListFile") == 0 ]; then
+            if  [ ! -f "$packageListFile" ] || [ $(grep -c "^$packageName\s" "$packageListFile") == 0 ]; then
                 logMessage "adding $packageName to SetupHelper package list"
                 echo "$packageName $packageGitHubUser $packageGitHubBranch" >> "$packageListFile"
             fi

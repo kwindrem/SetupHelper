@@ -34,11 +34,9 @@ source "/data/SetupHelper/LogHandler"
 
 updateDbusStringSetting ()
 {
-    local oldValue
-
-    oldValue=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
-            com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}')
-    if [ -z $oldValue ]; then
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings "$1"\
+            com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $2}'
+    if (( $? != 0 )); then
         logMessage "creating dbus Setting $1"
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":\"\"} ]" &> /dev/null
     fi

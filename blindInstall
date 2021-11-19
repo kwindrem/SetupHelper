@@ -27,6 +27,8 @@ while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
     sleep 1
 done
 
+sleep 2
+
 logMessage "starting up"
 
 # a package setup script normally prompts for user input

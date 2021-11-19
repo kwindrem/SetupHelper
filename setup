@@ -151,17 +151,30 @@ if [ $scriptAction == 'INSTALL' ] ; then
         cp "$scriptDir/defaultPackageList" "$packageListFile"
     fi
 
+    # check both parameters to insure they are both created
     dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/CheckingPackage\
-            com.victronenergy.BusItem.GetValue &> /dev/null
+            com.victronenergy.BusItem.GetValue &> /dev/null    
     if (( $? != 0 )); then
+        settingsInstalled=false
+    # first setting exists, check the second
+    else
+        dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate\
+                com.victronenergy.BusItem.GetValue &> /dev/null
+        if (( $? != 0 )); then
+            settingsInstalled=false
+        else
+            settingsInstalled=true
+        fi
+    fi
+    if ! $settingsInstalled ; then
         logMessage "creating SetupHelper Settings"
         dbus -y com.victronenergy.settings /Settings AddSettings\
             '%[ {"path": "/PackageVersion/GitHubAutoUpdate", "default":0},\
                 {"path": "/PackageVersion/CheckingPackage", "default":""},]'  > /dev/null
         # relocate options and current values
-        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/PackageVersion/GitHubAutoUpdate"
+        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/Settings/PackageVersion/GitHubAutoUpdate"
         rm -f "$setupOptionsDir/autoGitHubUpdate"
-        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/PackageVersion/CheckingPackage"
+        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/Settings/PackageVersion/CheckingPackage"
     fi
 
 

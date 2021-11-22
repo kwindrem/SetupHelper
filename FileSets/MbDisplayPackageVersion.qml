@@ -14,12 +14,11 @@ MbItem {
 	}
 
     VBusItem { id: packageName; bind: getBind ("PackageName") }
-///////////////////    VBusItem { id: packageVersion; bind: getBind ("PackageVersion") }
 
     MbRowSmall
     {
         anchors.verticalCenter: parent.verticalCenter
-        height: 25
+        height: 20
     
         isCurrentItem: root.isCurrentItem
         description: packageName.valid ? packageName.value : ""

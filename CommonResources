@@ -438,7 +438,7 @@ endScript ()
             rm -f "$installedFlag"
         # otherwise installed flag is set so script won't be run again at boot
         else
-            touch "$installedFlag"
+            cp "$scriptDir/version" "$installedFlag"
       fi
 
         # add package to packageList if not already there and the GitHub paths have been specified
@@ -518,6 +518,10 @@ endScript ()
 # check for reinstall parameter
 # set $scriptAction to control work following the source command
 # if "force" is also provided on the command line, then the installedFlag is not checked
+# installedFlag contains the installed version (if any)
+# it is compared to the version file in the package directory
+#  if installedFlag is missing or contents are different, the installation will proceed
+# if the two versions matched, there is no need to reinstall the package
 # we assume a reinstall is always run without benefit of a console (runningAtBoot will be true)
 # so there will be no prompts and all actions will be automatic
 #
@@ -562,7 +566,16 @@ if $reinstall ; then
     elif [ ! -f "$installedFlag" ]; then
         scriptAction='INSTALL'
     else
-        exit
+        # compare installed version with the one in the package directory
+        # nothing to do
+        # if they are not the same, continue with install
+        iVer=$(cat "$installedFlag")
+        pVer=$(cat "$scriptDir/version")
+        if [ "$iVer" = "$pVer" ]; then
+            exit
+        else
+            scriptAction='INSTALL'
+        fi
     fi
     runningAtBoot=true
     logToConsole=false

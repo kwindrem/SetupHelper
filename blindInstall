@@ -1,10 +1,6 @@
 #!/bin/bash
 
-# this script is part of an autoInstall archive which installs SetupHelper
-#	previous versions of blindInstall also installed GuiMods but has since been removed
-# PackageManager will install all package archives found on the SD/USB media so 
-#	the result is the same (or actually better)
-#
+# this script is part of an autoInstall archive
 # the archive makes use of the Venus OS update-data.sh script
 # archives named "venus-data.tar" are unpacked during boot
 # then for this archive, Venus must be rebooted, causing rcS.local to run,
@@ -36,17 +32,24 @@ sleep 2
 logMessage "starting up"
 
 # a package setup script normally prompts for user input
-# 'reinstall force' insures SetupHelper is installed without user interaction
+# reinstall force options insure the package is installed without user interaction
+#
+# currently VeCanSetup and RpiDisplaySetup require user responses during initial setup
+# so can't be installed via this mechanism
 
+# all packages rely on SetupHelper so it must be present and installed first
 if [ -f "/data/SetupHelper/setup" ]; then
     # insure package reinstall doesn't get appended to the auto install rcS.local !!!
     rm -f /data/rcS.local
     sync
     logMessage "installing SetupHelper"
     /data/SetupHelper/setup reinstall force deferReboot
+    if [ -f "/data/GuiMods/setup" ]; then
+        logMessage "installing GuiMods"
+        /data/GuiMods/setup reinstall force deferReboot
+    fi
 
-    # enable GitHub automatic updates and automatic installation
-    dbus -y com.victronenergy.settings /Settings/PackageMonitor/GitHubAutoUpdate SetValue 1 &> /dev/null
-    dbus -y com.victronenergy.settings /Settings/PackageMonitor/AutoInstall SetValue 1 &> /dev/null
+    # enable GitHub automatic updates
+    dbus -y com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate SetValue 1 &> /dev/null
 fi
 

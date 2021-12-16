@@ -1,0 +1,150 @@
+#!/bin/bash
+
+# This script prompts for manual installation of packages from the packageList file
+# it is called from SetupHelper/setup or can be run from the command line
+# Packages are installed either from GitHub or from a USB stick
+#
+
+source "/data/SetupHelper/CommonResources"
+source "/data/SetupHelper/UpdateResources"
+
+echo
+echo "This script allows Venus modification packages to be installed"
+echo "Previously installed packages are updated automatically, not from this script"
+echo "If updating from USB stick, insert it now before proceeding"
+echo
+while true ; do
+    read -p "Select the package source GitHub (g) or USB (u): " response
+    case $response in
+        [gG]*)
+            updateFromUsb=false
+            break;;
+        [uU]*)
+            updateFromUsb=true
+            break;;
+        *)
+            ;;
+    esac
+done
+
+if $updateFromUsb ; then
+    # wait up to 20 seconds for USB stick
+    timeoutCount=20
+    /bin/echo -n "Waiting for USB media"
+    while true ; do
+        mediaList=($(ls /media))
+        if [ ! -z $mediaList ] ; then
+            break;
+        elif ((timeoutCount-- == 0)); then
+            echo
+            echo "no usb media found - exiting"
+            exit
+        else
+            /bin/echo -n "."
+            sleep 1
+        fi
+    done
+    echo
+fi
+
+# allow reinstallations if auto updates are not enabled
+autoUpdateSetting=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate\
+                    com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+if [ -z $autoUpdateSetting ] || [ $autoUpdateSetting == 0 ]; then
+    autoUpdatesEnabled=false
+else
+    autoUpdatesEnabled=true
+fi
+
+rebootNeeded=false
+updateSetupHelper=false
+
+# skip all processing if package list doesn't exist
+if [ ! -f "$packageListFile" ]; then
+    echo "no packageList file found"
+    exit
+fi
+
+# loop through packages from package list file
+while read -u 9 package gitHubUser gitHubBranch; do
+    # skip comments
+    if [[ ${package:0:1} == "#" ]] ; then
+        continue
+    # skip blank/incomplete lines
+    elif [ -z $package ] || [ -z $gitHubUser ] || [ -z $gitHubBranch ] ; then
+        continue
+    fi
+
+    doUpdate=false
+    packageDir="/data/$package"
+    
+    # if automatic updates are enabled, skip packages that are installed
+    checkOnly=false
+    if [ -e $packageDir ] && [ -f "$installedFlagPrefix"$package ]; then
+        installText="reinstall"
+        # update will be skipped so set a flag so getFromGitHub only checks versions
+        if ! $updateFromUsb ; then
+            checkOnly=true
+        fi
+    else
+        installText="install"
+    fi
+
+    if $updateFromUsb ; then
+        for dir in ${mediaList[@]} ; do
+            getFromUsb $package
+            if [ $? -eq 1 ]; then
+                echo
+                yesNoPrompt "$installText $package from USB? (y/n): "
+                if $yesResponse ; then
+                    doUpdate=true
+                else
+                    rm -rf "$packageDir-$gitHubBranch"
+                fi
+                break;
+            fi
+        done
+
+    # check GitHub
+    else
+        getFromGitHub $package $checkOnly
+        if [ $? -eq 1 ]; then
+            if $autoUpdatesEnabled ; then
+                echo "$package needs update but will be updated automatically - skipping"
+                continue
+            fi
+            echo
+            yesNoPrompt "$installText $package from GitHub? (y/n): "
+            if $yesResponse ; then
+                doUpdate=true
+            else
+                rm -rf "$packageDir-$gitHubBranch"
+            fi
+        fi
+    fi
+    if $doUpdate ; then
+        # defer running SetupHelper script
+        if [ $package == "SetupHelper" ]; then
+            updateSetupHelper=true
+        # update the package with user interaction if it is needed to do a full install (not reinstall)
+        else
+            doUpdate $package 'prompting'
+        fi
+    fi
+done 9< "$packageListFile"   # end while read ...
+
+# if an update was found for SetupHelper, run it's setup script now
+# this prevents stepping on SetupHelper resources
+# (this script will complete even if it's replaced)
+if $updateSetupHelper ; then
+    doUpdate "SetupHelper" 'prompting'
+fi
+if $rebootNeeded ; then
+    echo
+    yesNoPrompt "Reboot needed to complete installation, do it now? (y/n): "
+    if $yesResponse ; then
+        echo "rebooting ..."
+    else
+        echo "You must reboot manually to complete installation"
+    fi
+fi

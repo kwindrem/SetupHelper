@@ -1,164 +1,494 @@
-New: SetupHelper includes a GUI based package mananager
+New: SetupHelper now includes an automatic install using SD/USB media
+    without the need for command line access
+
 
 The SetupHelper package provides:
-    a mechanism to automatically reinstall packages following a Venus OS update
+    a set of utilities to simplfy installing modifications to Victron Venus Os
+    a mechanism to automatically reinstall them following a Venus OS update
     an automatic update mechanism to keep packages up to date
         from GitHub archives or USB stick
-	control of the automatic download and install from the GUI
-	add and remove packages from the system
-	manual download, install, uninstall from the GUI
-    an "blind" install of SetupHelper from SD/USB media
+    a manual package installation mechanism from GitHub archives or USB stick
+    an automatic install from SD/USB media
 
-SetupHelper is also required for my other packages
-	and must be installed BEFORE running the other package setup scripts
+NOTE: Starting with v2.80~10, the root partition is mounted read only
+    This package and those that use these resources rely on a writable /root partition
+    so CommonResources runs the remount-rw.sh script to make it writable
 
-Blind Install:
+Supported pacages are:
+    SetupHelper GeneratorConnector GuiMods GuiMods2 RpiDisplaySetup RpiGpioSetup ShutdownManager TankRepeater
 
-By far, the easiest way to install SetupHelper is the "blind install"
-	which requires no command-line interaction.
+More information is provided below.
 
-    1) Download venus-data.tgz from the SetupHelper GitHub repo.
+Setup:
+There are three methods to fetch a package archive.
+
+New: You can install SetupHelper and GuiMods without need of command line access
+
+    1) Download venus-data.tgz from the GitHub repo.
     2) copy it to the root of a freshly formatted SD card or USB memory stick
     3) place the media in the GX device (Cerbo, CCGX, etc)
-    4) reboot the GX device TWICE - allowing the system to display the GUI each time
-        after the second reboot, you should find the Package Manager menus
-        at the bottom of the Settings menu
+    4) reboot the GX device TWICE
+        after the second reboot, you should see the GUI restart and display
+        the enhanced flow overview from GuiMods2
+        If GuiMods2 was previously installed, the Grid Parallel overview
+            is automatically selected
     5) remove the media from the GX device to prevent the next reboot from
         starting the process all over again
 
     CAUTION: This mechanism overwrites /data/rcS.local !!!!
         If you are using rcS.local to perform boot-time activities,
         /data/rcS.local must be recreated following this "blind" install
-        Note that SetupHelper also uses /data/rcS.local for
+        Note that SetupHelper and GuiMods2 also use /data/rcS.local for
         reinstallation following a firmware update so use caution in
         recreating rcS.local.
 
     venus-data.tgz is available here:
         https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz
-        
-Other mechanisms to install SetupHelper require command-line interaction with the GX device
-	and are no longer recommended for SetupHelper or my other packages
+    and here:
+        https://github.com/kwindrem/GuiMods/raw/main/venus-data.tgz
+    One may be newer than the other. In any case, automatic updates
+        will update any package that is out of date following the blind install
 
-Once SetupHelper is installed, updates to it and other packages can be performed through the GUI
-using the PackageManager menus.
 
-CAUTION:
-	Package Manager allows uninstalling SetupHelper.
-	This can not be undone since the menus to control Package Manager will go away
-	You would need to use the Blind Install again to reinstall SetupHelper
-	
-	Note that removal does not actually remove the package so other setup scripts
-	will continue to function.
+If the Venus device has internet access is to run the following command:
+
+wget -qO - https://github.com/kwindrem/SetupHelper/archive/current.tar.gz | tar -xzf - -C /data
+
+If the Venus device does not have internet access, you will need to fetch the archive using a computer that does have internet access:
+
+click on this link in a web browser:
+https://github.com/kwindrem/SetupHelper/archive/current.tar.gz
+
+rename the resulting .tar.gz file to venus-data.tar.gz
+copy the venus-data.tar.gz to a USB stick,
+put the stick in the Venus device and reboot.
+When Venus boots, it will unarchive the file to /data/SetupHelper-current
+
+Move the directory into it's active locaiton:
+rm -rf /data/SetupHelper
+mv /data/SetupHelper-current /data/SetupHelper
+
+Finally, run the setup script to complete the installation
+/data/SetupHelper/setup
+
+Use the manual or automatic update mechnism for future updates
+
 
 Description:
 
 There are two parts to SetupHelper:
-1) Package Manager, controls automatic and manual updates to pacakges
+1) Install and update utilities help a user manage packages.
 
-2) Utilities used by other packages' setup scripts.
-	These resources simplfy the task of writing install/uninstall scripts
-	and may be of help to others writing packages of their own.
+2) Resources to help writing scripts to perform the installation.
 
 The latter is of concern only to those writing new Venus modificaitons
 or modifying an existing setup script.
-These are described in detail later in the SetupHelperDescription document.
+These are described in detail later in the document.
 
-Package Manager:
+SetupHelper package management:
 
-The Package Manager includes a set of menus on the GX device menu system
-	that allows the user to view package versions,
-	control automatic package updates
-	and manually install, uninstall, add and remove packages.
-	
-	A python program runs in the backgrouns (as a service) to do the actual
-		work and to interface with the menus.
+The intent of this part of SetupHelper is to minimize the effort needed
+to install and update packages.
 
-	Package Manager menu:
+packageAutoUpdater handles automatic package updates. 
 
-		The first line of this menu provides status for Package Manager,
-			indicating what it is currenly doing
+Automatic updates can be controlled via the Device List / Settings / Package Versions menu
+        or options in the SetupHelper setup script
+    Normal checks GitHub for a package once every 10 minutes
+    Fast checks GitHub for a package once every 10 seconds
+    Once checks GitHub for a package once every 10 minutes, but only once, then updates are turned off
+    Disable disables GitHub updates
 
-		Automatic GitHub downloads controls if packages are automatically downloaded
-				from GitHub. This occurs if a newer version is available.
-			Modes:
-				Normal checks GitHub for a package once every 5 minutes 
-					and waits 10 minutes after a download has occured before checking another
-				Fast checks GitHub for a package once every 5 seconds (10 seconds after a download),
-					then after one pass through all packages, the downloads are switched to Normal rate
-				Once checks GitHub for a package at the fast rate, but only once, then dowloads are turned off
-				Disable disables GitHub downloads
-
-			Auto install packages:
-				Controls whether new versions of a package are automatically installed.
-				Some users may wish to have the system automatically download new updates,
-				but install them manually.
-				In this case, automatic GitHub downloads may be turned on and Auto install packages turned off
-				
-				Auto install packages also influences whether packages transferred from SD/USB media 
-					are automatically installed or just transferred to local storage
-
-	Package Version List:
-		displays all packages known to Package Manager.
-		
-		Version information is displayed for each package:
-			Git Hub shows the version found on GitHub
-			Stored shows the verison stored on the GX device
-			Installed shows the version actually installed and running
-
-	Package Editor:
-		This menu facilitates:
-			manual install, uninstall, package add and package remove
-			changing GitHub access information for each package
-
-		Normally, you would want to download the latest released version
-			but you may also wish to try out a beta version or revert to a previous one.
-			Once the GitHub branch is changed, PackageManager will update the GitHub version
-				and, if enabled, download this alternate version.
-		
-		Changing the GitHub user is probably not needed. It is used more in adding a new pacakge to the system.
-		
-		Both GitHub user and GitHub branch must be set appropriately or you'll see -- for the GitHub version
-		
-		For most packages, this information fills in automatically when the package is installed
-
-		Remove Package
-			Packages that are of no interest to you may be removed from Package Manager.
-			Removed packages will no longer appear in the version list or be accessible from the Package Editor menu.
-			But you can add the package back in manually.
-		
-		Add Package
-			Package Manager includes a default list of packages. If the package of interest is not in this list
-			and you know the GitHub user and an appropriate branch or version tag, you can add the package manually.
-			The package name, GitHub user and GitHub branch must all point to a package designed for install
-			by Package Manager. More about this in the section on desigining packages.
-		
-		Package Manager does not allow removing packages unless they are uninstalled first.
-		
-		Package Manager does permit uninstalling SetupHelper,
-			however this will remove the Package Manager itself.
-			Once removed, the Blind Install mechanism will be needed again !!
+If enabled, automatic GitHub update checks will download and install the GitHub version
+    of all installed packages if it is newer than the current version.
 
 
-USB/SD updates:
+If you are experimenting with modificaitons and wish to avoid GitHub updates overriding your work,
+disable automatic updates.
 
-	When the GX device is not connected to the internet, a USB flash drive or microSD card provides an install/upgrade path.
 
-	To use the USB update process
-		Navigate to the GitHub, repo, click on tags and select the appropirate branch or specific version tag. 
-		Choose the .tar.gz download link.
-		(Do not download from the Code tab or download the .zip file. These won't work.)
-		Copy the archive file to a USB memory stick or microSD card.
-		Do NOT unpack the archive
-		Repeat this for all packages you wish to install.
-		(These can all be placed on the same media along with the SetupHelper venus-data.tgz file)
-		Insert the stick in the GX device. 
-		If SetupHelper has not yet been installed, follow the Blind Install process above.
-		Once Package Manager is running, it will transfer and unpack the archive files
-			and update the package list with the new packages. 
-		If Auto install packages is turned on, the packages will then be installed
-		
-		NOTE: no vesion checks are made for packages found on SD/USB media!
-			Package Manager is quite content to transfer and install an older version!
-			So make sure you have the latest version especially if your GX device does not have internet access.
+USB updates are handy when the Venus device is not connected to the internet.
 
-If you are insterested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription
+To use the USB update process:
+    Navigate to the GitHub, repo, click on tags and select "current". 
+    Choose the .tar.gz download link.
+    (Do not download from the Code tab or download the .zip file. These won't work.)
+    Copy the archive files to a USB memory stick.
+    Do NOT unpack the archive
+    Insert the stick in the Venus device.
+
+Regardless the update source (USB or GitHub),
+packageAutoUpdater replaces the current copy on the Venus device with the archive contents
+    but only if the version number of the source is newer than the one that's installed.
+Then the package's setup script is run to reinstall the modificaitons.
+No user interaction is needed in this process.
+
+You may wish to dispalbe GitHub updates if you are updating from a USB/SD memory stick to avoid conflicts.
+(GitHub and files on a USB stick could have different versions.)
+
+packageAutoUpdater runs in the background (as a service).
+
+
+packageInstaller provides the opportunity to install packages for the first time, or reinstall them.
+For each package, packageInstaller prompts the user to install that package.
+Packages that are already installed will be skipped if automatic updates are enabled.
+
+Packages can be installed from either a USB memory stick/SD memory card or from GitHub.
+After the package is copied to the Venus device it's setup script is run
+and the user must answer the prompts to complete the instalation.
+
+The method of putting an archive on a USB stick for manaul install is the same as the one for automatic updates.
+
+As with package automatic updates, GitHub is the desired source if your Venus device has an internet connection.
+
+packageInstaller is called from the SetupHelper setup script by choosing the package (p) option at the main prompt.
+The packageInstaller is a shell script and can also be run manually:
+/data/SetupHelper/packageInstaller
+
+
+Setup script aids:
+
+SetupHelper provides a number of functions and variables that simplfy scripts written to
+install Venus OS mods. The remainder of this ReadMe describes the resources available and
+how to incorporate them into a setup script. 
+
+Read on if you are intersting in writing a package setup script (or modifying an existing one) 
+or understanding how the mechanism works.
+
+To use SetupHelper, the script must be written to include CommonResources, 
+then use the functions included in CommonResources to carry out the modiciations.
+
+#### following lines incorporate SetupHelper utilities into this script
+# Refer to the SetupHelper ReadMe file for details.
+    
+source "/data/SetupHelper/CommonResources" 
+
+#### end of lines to include SetupHelper
+
+A Venus software update overwrites any modifications to the root partition.
+It is therefore necessary to reinstall the modifications following the Venus update.
+
+Running setup for any package using SetupHelper will install the necessary code to reinstall packages
+during system boot
+
+Typically, rcS.local is used because it runs prior to starting services
+   so conflicts with running services can be avoided
+   (services don't need to be restarted after they've been modified)
+   and if a reboot is required, it happens faster
+
+If your setup script needs resources launched later in boot, change the following line in CommonResources
+
+rcLocal="/data/rcS.local"
+
+to
+
+rcLocal="/data/rc.local"
+
+If you have already run any setup scripts and want to make this change, make sure to edit /data/rcS.local
+to remove the call to reinstallMods or it will be called twice during boot!
+
+reinstallScriptsList is a list of setup scripts, one per line that will be called from reinstallMods.
+Scripts in this list are called EVERY time the system boots. 
+The script must avoid repeating work if it can be avoided.
+SetupHelper tools (CommonResources) handles this for the script write.
+
+reinstallScriptsList is hard-coded to reside in the /data directory.
+The location must match in CommonResources, and in reinstallMods
+The file is created by the first setup script to add to it.
+
+reinstallScriptsList should use full path names to avoid problems finding the script
+Lines beginning with # or completely blank lines are ignored as is white space at begin and end
+
+When the setup script adds itself to the script list, it includes "reinstall" as the first parameter.
+When reinstallMods calls the script, it passes "reinstall" to the setup script so it knows not to prompt the user
+
+When called from reinstallMods:
+1)    The setup script must not require user input since there will be no user interface
+2)    The setup script should not reboot the system directly
+3)    The setup script should avoid reapplying the modifications.
+4)    The setup script should avoid making calls to the internet as these could hang the system.
+
+reinstallMods tests the exit code of each setup script.
+An exit code of 123 signals that reinstallMods should reboot the system after all scripts have been run.
+
+A "installed flag file" is used to make sure the automatic reinstallation occurs only once after a Venus OS update.
+
+The presence of the installed flag file signals no further work needs to be done to reinstall the package
+
+Running the script manually should typically ignore the installed flag,
+but MUST create or remove it as appropriate to control future boot-time execution.
+
+The installed flag file needs to be removed by a Venus OS update so that the script can do it's work again.
+Therefore, installed flag files are stored in /etc/venus since a Venus OS update overwrites the entire dirctory.
+
+The installed flag file should be tested early in the script to save time.
+
+Installation choice may be required to control the installation of optional parameters.
+These options are stored in /data/setupOpitons/[package]
+This maintains the options through a reinstallation of the package.
+optionsSet is set after an installation is successful. This enables package reinstallation.
+
+A setup script needs to run manually to perform the initial installation or removal of the package.
+In this case, user interaction is necessary at least to choose to install or uninstall.
+The setup script also needs to run unattended when called from reinstallMods during system boot.
+When run by a user, the scrit should prompt the user for neede information.
+However, the call from reinstallMods also needs this information and the user won't be available.
+Therefore the paremeters taken from user interaction need to be stored in persistent storage,
+then recovered from that storage during the reinstall. 
+The script's directory is a convenient location for persistent storage since /data survives a Venus OS update.
+The $scriptDir variable is set up in CommonResources (see discussion below).
+$scriptDir may be prepended to any persistent storage files.
+
+CommonResources contains common functions and variables that can be used by all scripts,
+    saving the setup script writer from lots of tedious work and also hooks scripts into
+    the reinstall mechanism.
+
+The tools CommonResorces provides are described now.
+
+The following functions manage execution of the script and interfaces to reinstallMods which is run
+    at boot from one of the /data/rc scripts:
+
+    Sourcing CommonResources checks the setup script command line and the installed flag
+    and sets $scriptAction based on what is found.
+        If this is a boot-time reinstall, AND the installed flag is set,
+            the script exits inside CommonResources.
+        It is no longer necessary to test scriptAction for EXIT. In fact that value will never be used 
+        If this a boot-time reinstall but the installed flag is NOT set,
+            scriptAction is set to INSTALL.
+
+    checkFileSets has been decommissioned - file set checks are now handled when CommonResources is sourced
+        Attempts to create a file set for the current Venus OS version if it does not exist yet.
+            If the original files match another version, the file set is created
+                so the setup script may continue normally
+            However, if the original files for this new version differ from all existing versions
+                the new partial file set must not be used
+                Flag files ares placed in the file set:
+                    basename.NO_REPLACEMENT indicates a new replaement verion must be created manually
+                    INCOMPLETE indiates the file set can not be used until issue are corrected
+                scriptAction is also set to EXIT
+                It is necessary for the user to create new replacement files manually
+                    then rerun the setup script to install the package.
+                    You can also revert to a previous Venus OS version until the package
+                        is updated for the new version.
+        checkFileSets no longer needs to be called in the setup script
+
+    endScript
+        Function to finish up, prompt the user (if not reinstalling) and exit the script
+        It updates the installed flag based on the $runAgain variable
+            This script is added/removed from the reinstallScriptsList if installing/uninstalling, respectively
+        If $runningAtBoot is true (false when CommonResources is sourced)
+            the script will exit with $exitReboot if $rebootNeeded is true
+            otherwise, the script will exit with $exitSuccess
+            endScript NEVER RETURNS to the caller
+        If $runningAtBoot is false (script was run manually), user interaction controls further action
+            If $rebootNeeded is true, the function asks if the user wishes to reboot now
+            If they respond yes, the system will be rebooted
+            The user may choose to not reboot now if additional installations need to be done first
+            If $rebootNeeded is false, the function notifies the user of any needed actions
+        If $restartGui is true (false when CommonResources is sourced)
+            the gui service will be restarted
+            
+        The following variables are available to control behavior:
+            $scriptAction provides direction for the setup script and has the following values:
+                NONE - setup script should prompt the user for the desired action
+                    and set scriptAction accordingly
+                EXIT - the setup script should exit immediately
+                INSTALL - the setup script should execute code to install the package
+                UNINSTALL - the setup script should execute the code to restore the Venus files to stock
+            If installaiton errors occur within functions in CommonResources, scriptAction will be changed to UNINSTALL.
+                The setup script MUST retest scriptAction after all installation code has been executed
+                so the package can be removed, rather than leaving the system with a partially installed package.
+
+            $rebootNeeded - true signifies a reboot is required after the script is run
+                if $runningAtBoot is also true, the reboot is actually performed in reinstallMods
+            $runAgain - true signifies startup script needs to be run again
+
+ The following useful variables become available as well:
+    $scriptDir - the full path name to the startup script
+        the script's code can use this to identify the location of files that need to
+        persist between reboots and through Venus OS updates
+        It must be set in the setup script beause it is needed before sourcing CommonResources
+    $scriptName - the basename of the setup script
+    $reinstallScriptsList - the file containing a list of scripts to be run at boot to reinstall packages
+        after a Venus software update
+    $installedFlag - the name of the install flag files including it's full path
+        User code may use these variables but should not change their value!
+        It must be set in the setup script beause it is needed before sourcing CommonResources
+    $venusVersion - the version of VenusOS derived from /opt/victronenergy/version
+    $fileSets - the standard location for the replacement files
+        equivalent to #scriptDir/FileSets
+        Version-dependent replacements are stored in version subdirectories
+        Version-INDEPENDENT replacements are stored in FileSets
+    $pkgFileSets - is the locaiton of version-dependent files for the current Venus version
+        equivalent to  $fileSets/$venusVersion
+    $runningAtBoot - true if the script was called from reinstallMods (at boot time)
+        signifying this is to be an unattended (automatic) installation
+        CommonResoures sets this variable based on command line options
+    $setupOptionsDir - the location of any files that control installation
+        These options are maintained in a separate directory so reinsalling the package
+        does not remove them so that a reinstall can proceed without prompting again
+    $obsoleteVersion - if the package is obsolete, it can be prevented from installation
+        at a specified Venus OS version
+
+    $packageGitHubUser - specifies the GitHub user name to be used to fetch updates
+    $packageGitHubBranch - specifies the branch to pull the update from
+        Both of these need to be specified in the setup script to enable updates from GitHub and USB/SD media
+
+The following functions update or restore Venus files to activate a package
+they are intended to simplify common tasks, generally reducing many lines
+to a single line that is easier to read/understand
+
+The "active" file is the one used by Venus applications
+It is backed up to [activeFile].orig in the same directory
+Then a "replacement" file is copied into place and becomes the active file
+Backups allow the stock functionality to be restored when the package is uninstalled
+
+Replacement files are expected in the FileSets directory within the script's directory
+If the replacement file content differs with VenusOS version,
+subdirectories for each version hold the replacement files
+If the replacment is independent of version, it can be placed in FileSets
+The version subdirectories are checked first.
+
+The version sub-directories also contain the stock files with their name ending in .orig.
+These are used to look for a match within previous versions when a new Venus version is detected.
+A new Venus version with matching files to a previous version updates the file sets automatically.
+If the new version has different file content, replacement file(s) will need to be created MANUALLY.
+This is typically easy by inspecting previous active and .orig files and the new .orig file.
+The file set for the new version is flagged as INCOMPLETE and
+will preven installation until the file set is complete and the INCOMPLETE flag is removed manually.
+
+fileList contains a list of Venus files to be managed by this package. 
+Packages may also contain files that do not exist in the stock Venus image.
+These are NOT included in fileList!
+
+obsoleteVersion is a file optionally contained in the package directory. 
+It indicates a Venus OS version at which the package is no longer compatible. 
+CommonResources prevents the package from being installed for the specified version and all those following it.
+
+Use full paths/name for all files to avoid problems when running the script from other locations
+such as the boot code, and quote them in case the names contain spaces.
+
+Two flags are set by these routines in order for the setup script to detect changes
+    $thisFileUpdated is true of the venus file was modified by the operation
+        It can be tested following each update, copy or restore operation
+        to determine the success/failure of that one operation
+    $filesUpdates is true if ANY file is modified by any of these functions
+        It can be tested at the end of the setup script to know if ANY file
+        was modified to trigger restarting service or rebooting
+
+Use updateActiveFile to replace the active file with a replacement from the package
+
+    updateActiveFile replacementFile activeFile
+        or
+    updateActiveFile activeFile
+         First backs up the active file
+            then copies the replacement version into the active location
+        If called with two parameters
+            the first is replacement the file (source)
+            the second is the active file (destination)
+        If called with only one parameter, it specifies the active file 
+            the replacement file is selected from FileSets
+
+    restoreActiveFile activeFile
+        Moves the backup copy to the active location
+        The first parameter is the name of the active file (the one to be restored to stock)
+        The file with the same name with .orig at the end is moved
+            to the active file
+        If the backup copy doesn't exist BUT the noOrig flag is set
+            the active copy is deleted to restore the system to stock
+
+    A failure in updateActiveFile and copyToActiveFile set scriptAction to UNINSTALL.
+        The setup script MUST then remove the package
+        to prevent system instability from a partially installed package
+
+The following functions simplify the task of getting user input
+
+    standardActionPrompt displays a menu of actions and asks the user to choose
+        It sets scriptAction accordingly and returns
+        It also handles displaying setup and package logs then asks for an action again
+        It also handles quitting with no action - the fuction EXITS without returning in this case
+        The basic action prompt includes install, reinstall, quit, display logs (2 choices)
+        A reinstall option is enabled if the optionsSet option exists
+        When reinstall is enabled, selecting install, returns a scriptAction of NONE
+        indicating additional prompting may be needed to complete the install
+        At the end of these prompts, the main script should set scriptAction to INSTALL
+        If reinstall is selected, the script action is set to INSTALL and the main script
+        should then skip additional prompts and allow options set previously to control the install
+
+    yesNoPrompt "question"
+        Asks the user to answer yes or no to the question
+        Any details regarding the question should be output before calling yesNoPrompt
+        yesNoPrompt sets $yesResponse to true if the answer was yes and false if the answer was no
+
+LogHandler is a logging and log display mechanism. It is sourced by CommonResources and also by reinstallMods
+    Some executions of the setup scripts are during system boot
+    where console messages are likely to go unnoticed (if they are visible at all).
+    Boot-time scripts that output to the console are diverted to /var/log/boot,var/log/messages or dmesg,
+        but these logs retain messages only from the last boot.
+    A Setup Helper log is used to make messages from these setup acivities that are more persistent and easier to find.
+    The setup helper log file is /var/log/SetupHelper (or $setupLogFile)
+    In addition, some packages have their own log file and logging utilities here write to these logs as well
+    Finally, when run from the command line, the console (stdout) is also available and provides the most immediate
+        interface to the user.
+    A tai64n timestamp is added to messages written to both log files.
+    This timestamp can be converted to human readable form for display tai64nlocal 
+    The script name is also written to logs
+
+    logMessage "message"
+        writes "message" the above places 
+            
+    displayLog logfile
+        displays the last 100 lines of the log file
+        $1 is the log file to be displayed. Either:
+            $setupLogFile or
+            $packageLogFile
+        The latter must be initialized in setup script code
+        If no package log file exists, $packageLogFile shoudl remain null ""
+
+
+Update handler
+    SetupHelper checks for updates to packages from GitHub or USB/SD media.
+    The GitHub updates can be automatic.
+    When a package is installed, it addes the GitHub user and branch info to a file
+        used by the automatic and manual updates.
+    The defaultPackageList file is included in the SetupHelper package.
+    The default is copied to the active location at /data/setupOptions/SetupHelper/packageList
+        if it does not already exist.
+    The active file can then be edited to control the updates.
+    Package setup scripts should add lines to this file during installation.
+    This is handled in endScript if the packageGitHubUser and packageGitHubBranch are defined in the script
+    Some packages are included in defaultPackageList
+
+    Normally, the current or latest branch is used to check for updates, but specifying a different branch
+    or a specific version (of the form v2.3) can also be specified.
+    
+    A development branch should be used during package development to prevent affecting others using auto update.
+    
+    The repo version is compared with the installed version.
+    
+    If a version is specified for the branch, the package will be brought to that version
+    regardless of what is currently installed.
+    
+    If any other branch name is used, an update will occur if the repo verison is numerically greater than the installed version
+    
+PackageList format
+    The file consists of one line per package naming the package and specifying the GitHub user and branch, e.g.,
+
+    SetupHelper         kwindrem    current
+
+    Blank lines or those beginning with # are ignored
+    A package can be manually added to this file, or updates disabled by adding a # at the beginning of the line.
+
+packageVersions file
+    packageVersions are maintained in a file and also placed in dbus Settings for display in
+        the Package Versions List menu
+    The reason for the duplicaiton is dbus access from unix shell scripts is very slow
+
+    Whenever a package is installed, it compares its current version to the one in
+    the /data/packageVersions file. If there is a difference dbus Settings are updated
+    
+    Do NOT edit this file!!!
+
+Version numbers use the same syntax as Venus OS:
+    v<major>.<minor>~<test>
+    v2.45 would replace v2.45~68 as test versions lead up to an eventual release are considered

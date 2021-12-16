@@ -13,25 +13,17 @@ source "/data/SetupHelper/CommonResources"
 
 # remove settings no longer used
 
-cleanup ()
+cleanupDbusSettings ()
 {
-    # cleanup from older versions
-    restoreActiveFile "$qmlDir/PageSettingsPackageControl.qml"
-
     dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
                 com.victronenergy.BusItem.GetValue &> /dev/null
     if (( $? == 0 )); then
-            removeDbusSettings /Settings/GuiMods/PackageVersions/GeneratorConnector /Settings/GuiMods/PackageVersions/GuiMods\
-								/Settings/GuiMods/PackageVersions/GuiMods /Settings/GuiMods/PackageVersions/RpiDisplaySetup\
-								/Settings/GuiMods/PackageVersions/RpiGpioSetup /Settings/GuiMods/PackageVersions/RpiTemp\
-								/Settings/GuiMods/PackageVersions/SetupHelper /Settings/GuiMods/PackageVersions/TankRepeater,\
-								/Settings/GuiMods/PackageVersions/VeCanSetup /Settings/GuiMods/PackageVersions/ShutdownMonitor\
-								/Settings/GuiMods/CheckingPackage /Settings/GuiMods/GitHubAutoUpdate > /dev/null
-			removeDbusSettings	/Settings/PackageVersion/Count  /Settings/PackageVersion/New/GitHubUser \
-								/Settings/PackageVersion/New/GitHubBranch  /Settings/PackageVersion/New/InstalledVersion \
-								/Settings/PackageVersion/New/PackageName  /Settings/PackageVersion/New/PackageVersion \
-								/Settings/PackageVersion/GitHubAutoUpdate  /Settings/PackageVersion/EditAction \
-								/Settings/PackageVersion/CheckingPackage  > /dev/null
+            removeDbusSettings "/Settings/GuiMods/PackageVersions/GeneratorConnector" "/Settings/GuiMods/PackageVersions/GuiMods"\
+                    "/Settings/GuiMods/PackageVersions/GuiMods" "/Settings/GuiMods/PackageVersions/RpiDisplaySetup"\
+                    "/Settings/GuiMods/PackageVersions/RpiGpioSetup" "/Settings/GuiMods/PackageVersions/RpiTemp"\
+                    "/Settings/GuiMods/PackageVersions/SetupHelper" "/Settings/GuiMods/PackageVersions/TankRepeater",\
+                    "/Settings/GuiMods/PackageVersions/VeCanSetup" "/Settings/GuiMods/PackageVersions/ShutdownMonitor"\
+                    "/Settings/GuiMods/CheckingPackage" "/Settings/GuiMods/GitHubAutoUpdate"
     fi
 }
 
@@ -46,37 +38,165 @@ if [ $scriptAction == 'NONE' ] ; then
     echo
     echo "This package provides support functions and utilities for Venus modification packages"
     echo "Packages are automatically reinstalled following a Venus OS update"
-    echo "All actions are controlled via /Settings/PackageMonitor in the GUI"
-    echo "  Packages may be automatically updated from GitHub or a USB stick"
-    echo "  Previously uninstalled packages can also be downloaded an installed"
+    echo "Packages may also be automatically updated from GitHub"
+    echo "  or a USB stick"
+    echo "Previously uninstalled packages can also be installed and configured"
+    echo "  as an option from the menu either from GitHub or from a USB stick"
+    echo
+    echo "If internet access is not available, you can manually update/install from a USB stick or SD card"
     echo
 
-    standardActionPrompt
+    if [ -f "$setupOptionsDir/optionsSet" ]; then
+        enableReinstall=true
+    else
+        enableReinstall=false
+    fi
+
+    response=''
+    fullPrompt=true
+    while true; do
+        if $fullPrompt ; then
+            echo
+            echo "Available actions:"
+            echo "  Install and activate (i)"
+            if $enableReinstall ; then
+                echo "  Reinstall (r) based on options provided at last install"
+            fi
+            echo "  Uninstall (u) and restores all files to stock"
+            echo "  Quit (q) without further action"
+            echo "  Display setup log (s) outputs the last 100 lines of the log"
+            echo
+            echo "  Enable/disable automatic GitHub package updates (g)"
+            echo "  Manually install packages from GitHub or USB stick (p)"
+            echo
+            fullPrompt=false
+        fi
+        /bin/echo -n "Choose an action from the list above: "
+        read response
+        case $response in
+            [iI]*)
+                scriptAction='INSTALL'
+                break;;
+            [rR]*)
+                if $enableReinstall ; then
+                    scriptAction='INSTALL'
+                    break
+                fi
+                ;;
+            [uU]*)
+                scriptAction='UNINSTALL'
+                break
+                ;;
+            [qQ]*)
+                exit
+                ;;
+            [sS]*)
+                displayLog $setupLogFile
+                ;;
+            [gG]*)
+                autoUpdate=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
+                        /Settings/PackageVersion/GitHubAutoUpdate\
+                        com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+                case $autoUpdate in
+                    1)
+                        echo "Automatic GitHub updates are at normal rate"
+                        ;;
+                    2)
+                        echo "Automatic GitHub updates are at fast rate"
+                        ;;
+                    3)
+                        echo "Automatic GitHub updates will occur only once"
+                        ;;
+                    *)
+                        echo "Automatic GitHub updates are currently disabled"
+                        ;;
+                esac
+                echo "Available modes:"
+                echo "  Normal (n) - one package is checked once every 10 minutes"
+                echo "  Fast (f) - one package is checked once every 10 seconds"
+                echo "  Once (o) - each package is checked once then auto updates are turned off"
+                echo "  Disable (d) - auto updates are disabled"
+
+                read -p "Choose a mode from the above list: (cr for no change): " response
+                if [ ! -z $response ]; then
+                    case $response in
+                        [nN]* | [eE]*)
+                            setSetting 1 /Settings/PackageVersion/GitHubAutoUpdate
+                            ;;
+                        [fF]*)
+                            setSetting 2 /Settings/PackageVersion/GitHubAutoUpdate
+                            ;;
+                         [oO]*)
+                            setSetting 3 /Settings/PackageVersion/GitHubAutoUpdate
+                            ;;
+                        [dD]*)
+                            setSetting 0 /Settings/PackageVersion/GitHubAutoUpdate
+                            ;;
+                    *)
+                    esac
+                fi
+                ;;
+            [pP]*)
+                "$scriptDir/packageInstaller"
+                fullPrompt=true
+                ;;
+            *)
+        esac
+    done
 fi
 
 if [ $scriptAction == 'INSTALL' ] ; then
+    if [ ! -f "$packageListFile" ]; then
+        logMessage "installing default packge list"
+        cp "$scriptDir/defaultPackageList" "$packageListFile"
+    fi
+
+    # check both parameters to insure they are both created
+    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/CheckingPackage\
+            com.victronenergy.BusItem.GetValue &> /dev/null    
+    if (( $? != 0 )); then
+        settingsInstalled=false
+    # first setting exists, check the second
+    else
+        dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate\
+                com.victronenergy.BusItem.GetValue &> /dev/null
+        if (( $? != 0 )); then
+            settingsInstalled=false
+        else
+            settingsInstalled=true
+        fi
+    fi
+    if ! $settingsInstalled ; then
+        logMessage "creating SetupHelper Settings"
+        dbus -y com.victronenergy.settings /Settings AddSettings\
+            '%[ {"path": "/PackageVersion/GitHubAutoUpdate", "default":0},\
+                {"path": "/PackageVersion/CheckingPackage", "default":""},]'  > /dev/null
+        # relocate options and current values
+        moveSetting "$setupOptionsDir/autoGitHubUpdate" "/Settings/GuiMods/GitHubAutoUpdate" "/Settings/PackageVersion/GitHubAutoUpdate"
+        rm -f "$setupOptionsDir/autoGitHubUpdate"
+        moveSetting "" "/Settings/GuiMods/CheckingPackage" "/Settings/PackageVersion/CheckingPackage"
+    fi
+
 
     updateActiveFile "$qmlDir/PageSettings.qml"
-    updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
+    updateActiveFile "$qmlDir/PageSettingsPackageControl.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
-    updateActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
     updateActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
 
-    installService PackageManager
+    installService $packageName
 
-    cleanup
+    cleanupDbusSettings
 fi
 
 if [ $scriptAction == 'UNINSTALL' ] ; then
     restoreActiveFile "$qmlDir/PageSettings.qml"
-    restoreActiveFile "$qmlDir/PageSettingsPackageManager.qml"
+    restoreActiveFile "$qmlDir/PageSettingsPackageControl.qml"
     restoreActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
-    restoreActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
     restoreActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
 
-    removeService PackageManager
+    removeService $packageName
 
-    cleanup
+    cleanupDbusSettings
 fi
 
 if $filesUpdated ; then

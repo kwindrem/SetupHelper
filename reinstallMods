@@ -11,8 +11,6 @@ setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
 source "$scriptDir/LogHandler"
 
-logMessage "reinstallMods starting"
-
 # disable outputting log messages to console
 runningAtBoot=true
 
@@ -52,6 +50,4 @@ done 9< "$reinstallScriptsList"
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
-else
-	logMessage "reinstallMods complete"
 fi

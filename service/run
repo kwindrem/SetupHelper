@@ -1,4 +1,4 @@
 #!/bin/sh
-#exec 2>&1
-exec /data/SetupHelper/packageAutoUpdater > /dev/null
+exec 2>&1
+exec /data/SetupHelper/PackageManager.py
 

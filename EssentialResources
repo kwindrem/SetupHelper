@@ -11,6 +11,10 @@ fullScriptName="$scriptDir/$(basename "$0")"
 
 venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
 
+installedVersionPrefix="/etc/venus/installedVersion-"
+installedVersionFile="$installedVersionPrefix"$packageName
+
+# obsolete - use installedVersion
 installedFlagPrefix="/etc/venus/inInstalled-"
 installedFlag="$installedFlagPrefix"$packageName
 
@@ -25,8 +29,18 @@ fileSet="$pkgFileSets/$venusVersion"
 rcLocal="/data/rcS.local"
 
 # defined exit codes - must be consistent between all setup scripts and reinstallMods
-exitReboot=123
-exitSuccess=0
+# and PackageManager.py
+EXIT_SUCCESS=0
+EXIT_REBOOT=123
+EXIT_ERROR=255	# unknown error
+EXIT_INCOMPATIBLE_VERSION=254
+EXIT_INCOMPATIBLE_PLATFOM=253
+EXIT_FILE_SET_ERROR=252
+EXIT_OPTIONS_NOT_SET=251
+EXIT_RUN_AGAIN=250
+# old variables - keep for compatibility
+exitReboot=$EXIT_REBOOT
+exitSuccess=$EXIT_SUCCESS
 
 reinstallParam="reinstall"
 

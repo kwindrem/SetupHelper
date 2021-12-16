@@ -1,0 +1,14 @@
+add Package Manager & GUI
+add setup script return codes for above
+add optionsRequired flag file (VeCanSetup is only package that needs this now)
+
+add platform and version checks to CommonResources
+add install opiton to CommonResources
+better support installs without command line
+### TBD remove logging to package log files
+
+improve adding packages from SD/USB
+
+split auto download and auto install
+
+

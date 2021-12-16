@@ -135,10 +135,6 @@ if [ $scriptAction == 'INSTALL' ] ; then
         restartAppsNeeded=true
     fi
 
-    # if some processing requires running this script on the next reboot, set the flag then process it later
-    if $something3 ; then
-        runAgain=true
-    fi
 fi
 
 # #### uninstalling - check scriptAction again
@@ -159,7 +155,6 @@ if [ $scriptAction == 'UNINSTALL' ] ; then
     # set exit flags as needed
     rebootNeeded=false
     restartAppsNeeded=true
-    runAgain=false
 fi
 
 

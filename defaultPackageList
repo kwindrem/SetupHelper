@@ -11,7 +11,9 @@
 # Package           GitHubUser  Version 
 SetupHelper         kwindrem    current
 GuiMods             kwindrem    current
+GeneratorConnector  kwindrem    current
 ShutdownMonitor     kwindrem    current
+TankRepeater        kwindrem    current
+VeCanSetup	    kwindrem    current
 RpiDisplaySetup     kwindrem    current
 RpiGpioSetup        kwindrem    current
-TankRepeater        kwindrem    current

@@ -41,6 +41,7 @@ logMessage "starting up"
 if [ -f "/data/SetupHelper/setup" ]; then
     # insure package reinstall doesn't get appended to the auto install rcS.local !!!
     rm -f /data/rcS.local
+
     sync
     logMessage "installing SetupHelper"
     /data/SetupHelper/setup reinstall force deferReboot

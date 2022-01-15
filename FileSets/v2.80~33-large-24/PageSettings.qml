@@ -170,6 +170,7 @@ MbPage {
 			subpage: ioSettings
 			show: ioSettings.haveSubMenus
 			PageSettingsIo { id: ioSettings }
+		}
 		/*
 		MbSubMenu {
 			description: qsTr("Backup & Restore")

@@ -489,6 +489,7 @@ endScript ()
 				exit $EXIT_RESTART_GUI
 			# GUI restart NOT deferred - do it now
 			else
+				logMessage "restarting GUI"
 				svc -t /service/gui
 				exit $EXIT_SUCCESS
 			fi

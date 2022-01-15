@@ -1301,7 +1301,10 @@ class PackageClass:
 
 		# create setupOptions directory if it doesn't already exist
 		#	this would happen if the package was being added / installed for the first time
-		optionsPath = "/data/setupOptions/" + packageName
+		optionsDir = "/data/setupOptions/"
+		optionsPath = optionsDir + packageName
+		if not os.path.isdir (optionsDir):
+			os.mkdir (optionsPath)
 		if not os.path.isdir (optionsPath):
 			os.mkdir (optionsPath)
 

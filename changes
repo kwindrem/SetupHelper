@@ -1,3 +1,7 @@
+v4.1:
+	fixed: packageManager crash when moving old DO_NOT ... flags to setupOptions
+	fixed: white screen on v2.8~33-large-24
+
 v4.0:
 	beta test period ended
 	added running version to PackageManager sign-on

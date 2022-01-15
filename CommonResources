@@ -9,7 +9,6 @@ setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
 source "$setupHelperDir/LogHandler"
 source "$setupHelperDir/ServiceResources"
-source "$setupHelperDir/UpdateResources"
 source "$setupHelperDir/DbusSettingsResources"
 
 # what action the script should take:
@@ -35,8 +34,6 @@ rebootNeeded=false
 runAgain=false
 filesUpdated=false
 restartGui=false
-
-
 
 # yesNoPrompt provides user prompting requesting a yes/no response
 #
@@ -84,11 +81,6 @@ yesNoPrompt ()
 
 standardActionPrompt ()
 {
-    if [ -f "$setupOptionsDir/optionsSet" ]; then
-        enableReinstall=true
-    else
-        enableReinstall=false
-    fi
     if [ $# -gt 0 ] && [ $1 == 'MORE_PROMPTS' ]; then
         updateScriptAction=false
     else
@@ -98,7 +90,7 @@ standardActionPrompt ()
     echo
     echo "Available actions:"
     echo "  Install and activate (i)"
-    if $enableReinstall ; then
+    if $optionsSet ; then
         echo "  Reinstall (r) based on options provided at last install"
     fi
     echo "  Uninstall (u) and restores all files to stock"
@@ -120,7 +112,7 @@ standardActionPrompt ()
                 break
                 ;;
             [rR]*)
-                if $enableReinstall ; then
+                if $optionsSet ; then
                     scriptAction='INSTALL'
                     break
                 fi
@@ -130,7 +122,7 @@ standardActionPrompt ()
                 break
                 ;;
             [qQ]*)
-                exit
+                exit $EXIT_SUCCESS
                 ;;
             [lL]*)
                 displayLog $packageLogFile
@@ -298,6 +290,11 @@ _checkFileSets ()
         return
     fi
 
+	# if incomplete file set exists - remove it and try again
+	if [ -f "$fileSet/INCOMPLETE" ]; then
+		rm -rf $fileSet
+	fi
+
     # attempt to create file set if it doesn't exist
     if [ ! -d "$fileSet" ]; then
         logMessage "creating file set for $venusVersion"
@@ -310,7 +307,7 @@ _checkFileSets ()
     local baseName=""
     local file=""
     
-    rm -f "$pkgFileSets/INCOMPLETE"
+	rm -f  "$fileSet/INCOMPLETE"
 
     for file in $fileList ; do
         baseName=$(basename "$file")
@@ -369,6 +366,9 @@ _checkFileSets ()
             done
             
             if $matchFound ;then
+				if [ -e "$fileSet/$baseName.orig" ]; then
+					rm -rf "$fileSet/$baseName.orig"
+				fi
                 ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 rm -f "$fileSet/$baseName.NO_ORIG"
                 # if other file set contains a replacement file, link to it
@@ -395,7 +395,7 @@ _checkFileSets ()
 
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
-        exit
+        exit $EXIT_FILE_SET_ERROR
     fi
 }
 
@@ -405,14 +405,9 @@ _checkFileSets ()
 
 endScript ()
 {
-    if $restartGui $$ !rebootNeeded ; then
-        logMessage "restarting GUI"
-        svc -t /service/gui
-    fi
-
     if [ $scriptAction == 'INSTALL' ] ; then
-        # indicate installation was successful, so reinstalls can use the existing options in the future
-        touch "$setupOptionsDir/optionsSet"
+        # assume that if we get this far, any command line opitons have already been set
+		touch "$setupOptionsDir/optionsSet"
 
         # set up reinstallMods to run this script again after a VenusOS update
         if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
@@ -432,33 +427,15 @@ endScript ()
             sed -i -e 's?/data/SetupHelper?nohup /data/SetupHelper?' -e 's?reinstallMods?reinstallMods > /dev/null \&?' "$rcLocal"
         fi
 
-        # installed flag is removed if script needs to run again
+        # if script needs to run again, installedVersionFile flag file is removed
+        # script should run again at boot time via reinstallMods
         if $runAgain ; then
           logMessage "script will run again at startup"
-            rm -f "$installedFlag"
-        # otherwise installed flag is set so script won't be run again at boot
+            rm -f "$installedVersionFile"
+        # otherwise, installation is complete - update installedVersion
         else
-            cp "$scriptDir/version" "$installedFlag"
-      fi
-
-        # add package to packageList if not already there and the GitHub paths have been specified
-        if [ ! -z $packageGitHubUser ] && [ ! -z $packageGitHubBranch ]; then
-            # move from previous locaiton
-            oldPackageListFile="$setupOptionsRoot/SetupHelper/packageList"
-            if [ -f "$oldPackageListFile" ]; then
-                mv "$oldPackageListFile" "$packageListFile"
-            fi
-
-            if  [ ! -f "$packageListFile" ] || [ $(grep -c "^$packageName\s" "$packageListFile") == 0 ]; then
-                logMessage "adding $packageName to SetupHelper package list"
-                echo "$packageName $packageGitHubUser $packageGitHubBranch" >> "$packageListFile"
-            fi
-        fi
-
-        # update package version for the gui - takes time so do in background
-        nohup "/data/SetupHelper/updatePackageVersions" > /dev/null &
-
-
+            cp "$scriptDir/version" "$installedVersionFile"
+		fi
     elif [ $scriptAction == 'UNINSTALL' ] ; then
         # remove this script from reinstallScriptsList to prevent further calls during boot
         if [ -f "$reinstallScriptsList" ] && [ ! $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
@@ -468,88 +445,113 @@ endScript ()
         fi
 
         # clean up only - flag not used since package is being removed
-        rm -f "$installedFlag"
-        
-        # update package version for the gui - takes time so do in background
-        nohup "/data/SetupHelper/updatePackageVersions" > /dev/null &
+        rm -f "$installedFlag"	# obsolete but remove it anyway
+        rm -f "$installedVersionFile"
+	else
+		logMessage "unexpected script action $scriptAction - did not install or uninstall"
     fi
 
-    # this script was called from reinstallMods
-    # set exit code based on actual code
-    if $runningAtBoot ; then
-        if $rebootNeeded ; then
-            logMessage "reboot pending"
-            exit $exitReboot
-        else
-            logMessage "completed"
-            exit $exitSuccess
-        fi
-
-    # this script was run manually
-    else
-        # if reboot needed ask user if it should be done now
-        if $rebootNeeded ; then
-            if $deferReboot ; then
-                exit $exitReboot
-            else
-                yesNoPrompt "Reboot system now (y) or issue a reboot manually later (n): "
-                if $yesResponse ; then
-                    echo "rebooting ..."
-                    reboot
-                else
-                    echo "system must be rebooted to finish installation and activate components"
-                fi
-            fi
-
-        elif $runAgain ; then
-            echo "$shortScriptName NOT completed"
-            echo "  run it again manually to finish"
-            echo "  or reboot the system to finish automatically"
-            exit $exitSuccess
-        else
-            logMessage "completed"
-            exit $exitSuccess
-        fi
-    fi
+	# prioritize exit
+	if $versionNotCompatible ; then
+		logMessage "version not compatible - exiting"
+		exit $EXIT_INCOMPATIBLE_VERSION
+	elif $platformNotCompatible ; then
+		logMessage "platform not compatible - exiting"
+		exit $EXIT_INCOMPATIBLE_PLATFOM
+	elif $rebootNeeded ; then
+		if $logToConsole ; then
+			yesNoPrompt "Reboot system now (y) or do it manually later (n): "
+			if $yesResponse ; then
+				echo "rebooting ..."
+				reboot
+			else
+				echo "system must be rebooted to finish installation and activate components"
+				exit $EXIT_REBOOT
+			fi
+		else
+			echo "rebooting needed"
+			exit $EXIT_REBOOT
+		fi
+	elif $restartGui ; then
+		if $logToConsole ; then
+			yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): "
+			if $yesResponse ; then
+				echo "restarting GUI ..."
+				svc -t /service/gui
+				exit $EXIT_SUCCESS
+			else
+				echo "GUI must be restarted activate components"
+				exit $EXIT_RESTART_GUI
+			fi
+		else
+			if $deferGuiRestart ; then
+				logMessage "GUI restart needed"
+				exit $EXIT_RESTART_GUI
+			# GUI restart NOT deferred - do it now
+			else
+				svc -t /service/gui
+				exit $EXIT_SUCCESS
+			fi
+		fi
+	else
+		logMessage "completed"
+		exit $EXIT_SUCCESS
+	fi
 }
 
 ######## this code is executed in-line when CommonResources is sourced
 
 # check for reinstall parameter
 # set $scriptAction to control work following the source command
-# if "force" is also provided on the command line, then the installedFlag is not checked
-# installedFlag contains the installed version (if any)
+# if "force" is also provided on the command line, then the installedVersionFile is not checked
+# installedVersionFile contains the installed version (if any)
 # it is compared to the version file in the package directory
-#  if installedFlag is missing or contents are different, the installation will proceed
-# if the two versions matched, there is no need to reinstall the package
+#  if installedVersionFile is missing or contents are different, the installation will proceed
+# if the two versions match, there is no need to reinstall the package
 # we assume a reinstall is always run without benefit of a console (runningAtBoot will be true)
 # so there will be no prompts and all actions will be automatic
 #
-# "deferReboot" signals that endScript should not prompt for a user reboot, but return exitReboot
-# This is used by the manual package install called from SetupHelper setup script
+# "deferReboot" signals that endScript should not reboot the system, but return EXIT_REBOOT
+#	assuming the caller will evenutally reboot the system
 #
+# "deferGuiRestart" is similar for restarting the GUI
+#
+# "install" causes the package to be installed silently
 # "uninstall" causes the package to be uninstalled silently
 #
 # command line parameters may appear in any order
+#
+#
+# logToConsole is set to true in the LogHandler script
+# It is set to false here if the command line parameters suggest
+#	the setup script is being run without the aid of the command line interface
+#	in which case the user will not be prompted and apprporiate actions are taken automatically
+#	exit code returned by the setup script indicates additional actions that
+#	need to be taken by the caller (if any) or the reason the script could not be completed
 
-# make sure rootfs is mounted R/W
-if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
-    /opt/victronenergy/swupdate-scripts/remount-rw.sh
-fi
-
+# collect command line options
 reinstall=false
 force=false
 deferReboot=false
+deferGuiRestart=false
 while [ $# -gt 0 ]; do
         case $1 in
             $reinstallParam)
                 reinstall=true
+                logToConsole=false
                 ;;
             "force")
                 force=true
                 ;;
             "deferReboot")
                 deferReboot=true
+                ;;
+            "deferGuiRestart")
+                deferGuiRestart=true
+                ;;
+            "install")
+                scriptAction='INSTALL'
+                logToConsole=false
                 ;;
             "uninstall")
                 scriptAction='UNINSTALL'
@@ -560,27 +562,79 @@ while [ $# -gt 0 ]; do
     shift
 done
 
+# make sure rootfs is mounted R/W
+if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
+    /opt/victronenergy/swupdate-scripts/remount-rw.sh
+fi
+
+# move old installedFlag ("...inInstalled...")
+# to its new name ...installedVersionFile...
+if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
+	installedVersion=$(cat "$installedFlag")
+	if [ -z $installedVersion ]; then
+		installedVersion="unknown"
+	else
+		echo $installedVersion > "$installedVersionFile"
+	fi
+fi
+rm -f "$installedFlag"
+
+# packages that require options to proceed unattended
+# must include the optionsRequried flag file in their package directory
+# if the flag is present and options haven't been previously set,
+#	SD/USB media will be checked for the package options directory
+#	and copy them into position
+
+opitonsRequiredFile="$scriptDir/optionsRequired"
+optionsSet=false
+if [ -f $opitonsRequiredFile ]; then
+	if [ -f "$setupOptionsDir/optionsSet" ]; then
+		optionsSet=true
+	# options not set - check media for options if doing a blind install
+	elif [ $scriptAction == 'INSTALL' ]; then
+		mediaList=($(ls /media))
+		for dir in ${mediaList[@]} ; do
+			altSetupDir="/media/$dir/"$(basename $setupOptionsRoot)"/$packageName"
+			if [ -f "$altSetupDir/optionsSet" ]; then
+				cp -r "$altSetupDir" "$setupOptionsRoot"
+				if [ -f "$setupOptionsDir/optionsSet" ]; then
+					logMessage "options retrieved from SD/USB media"
+					optionsSet=true
+				fi
+				break
+			fi
+		done
+	fi
+
+# no command line options are needed - ok to reinstall even if
+#	setup was not run from the command line
+else
+	optionsSet=true
+fi
+
+# called from reinstallMods at boot time
 if $reinstall ; then
+	installedVersion=$(cat "$installedVersionFile")
+	versionStringToNumber $installedVersion
+	installedVersionNumber=$versionNumber
+	packageVersion=$(cat "$scriptDir/version")
+	versionStringToNumber $packageVersion
+	packageVersionNumber=$versionNumber
+
+    runningAtBoot=true
     if $force ; then
         scriptAction='INSTALL'
-    elif [ ! -f "$installedFlag" ]; then
+    elif [ ! -f "$installedVersionFile" ]; then
+        scriptAction='INSTALL'
+	# trigger install if version numbers differ
+	elif (( installedVersionNumber != packageVersionNumber )); then
         scriptAction='INSTALL'
     else
-        # compare installed version with the one in the package directory
-        # nothing to do
-        # if they are not the same, continue with install
-        iVer=$(cat "$installedFlag")
-        pVer=$(cat "$scriptDir/version")
-        if [ "$iVer" = "$pVer" ]; then
-            exit
-        else
-            scriptAction='INSTALL'
-        fi
+        exit $EXIT_SUCCESS
     fi
-    runningAtBoot=true
     logToConsole=false
 
-# not a reinstall, continue with MANUAL installation
+# not running from reinstallMods
 else
     runningAtBoot=false
 fi
@@ -590,32 +644,85 @@ fi
 versionStringToNumber $venusVersion
 venusVersionNumber=$versionNumber
 
+# create obsolete version file if it does not already exist
+#	accommodates previous mechanism that used shell varaible
+if [ ! -z $obsoleteVersion ] && [ ! -f "$scriptDir/obsoleteVersion" ]; then
+	echo $obsoleteVersion > "$scriptDir/obsoleteVersion"
+fi
+
+# prevent installing Raspberry Pi packages on other platforms
+platformNotCompatible=false
+if [ -f "$scriptDir/raspberryPiOnly" ]; then 
+	if [ -f /etc/venus/machine ]; then
+		machine=$(cat /etc/venus/machine)
+	fi
+	if [ -z $machine ]; then
+		if $isInstalled ; then
+			logMessage "can't determine Venus device type - uninstalling"
+			scriptAction='UNINSTALL'
+		else
+			logMessage "can't determine Venus device type - exiting"
+			exit $INCOMPATIBLE_PLATFORM
+		fi
+	elif [ $machine != "raspberrypi2" ] && [ $machine != "raspberrypi4" ]; then
+		platformNotCompatible=true
+		if $isInstalled ; then
+			logMessage "$packageName not compatible with $machine - uninstalling"
+			scriptAction='UNINSTALL'
+		else
+			logMessage "$packageName not compatible with $machine - exiting"
+			exit $EXIT_INCOMPATIBLE_PLATFOM
+		fi
+	fi
+fi
+
 # check to see if package is compatible with this Venus version
-notCompatible=false
-if [ -f "$scriptDir/obsoleteVersion" ]; then
-    versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
-    obsoleteVersion=$versionNumber
-
-    if (( $venusVersionNumber >= $obsoleteVersion )); then
-        notCompatible=true
-    fi
-fi
-
-if $notCompatible ; then
-    logMessage "$packageName not compatible with Venus $venusVersion"
-    scriptAction='UNINSTALL'
+versionNotCompatible=false
+if [ -f "$scriptDir/firstCompatibleVersion" ]; then
+	firstCompatibleVersion=$(cat "$scriptDir/firstCompatibleVersion")
+# no first compatible version specified - use the default
 else
-    if [ ! -d "$setupOptionsRoot" ]; then
-        logMessage "creating root setup options directory $setupOptionsRoot"
-        mkdir $setupOptionsRoot
-    fi
+	firstCompatibleVersion='v2.40'
+fi
+versionStringToNumber $firstCompatibleVersion
+firstCompatibleVersionNumber=$versionNumber
+if (( $venusVersionNumber < $firstCompatibleVersionNumber )); then
+	versionNotCompatible=true
+elif [ -f "$scriptDir/obsoleteVersion" ]; then
+	versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
+	obsoleteVersionNumber=$versionNumber
+	if (( $venusVersionNumber >= $obsoleteVersionNumber )); then
+		versionNotCompatible=true
+	fi
+fi
+if $versionNotCompatible ; then
+	# if not installed, log message and exit
+	if $isInstalled ; then
+		logMessage "$packageName not compatible with Venus $venusVersion - can't install"
+			exit $EXIT_INCOMPATIBLE_VERSION
+	else
+		logMessage "$packageName not compatible with Venus $venusVersion - uninstalling"
+		scriptAction='UNINSTALL'
+	fi
+else
+	if [ ! -d "$setupOptionsRoot" ]; then
+		logMessage "creating root setup options directory $setupOptionsRoot"
+		mkdir $setupOptionsRoot
+	fi
 
-    if [ ! -d "$setupOptionsDir" ]; then
-        logMessage "creating package options directory to $setupOptionsDir"
-        mkdir $setupOptionsDir
-    fi
+	if [ ! -d "$setupOptionsDir" ]; then
+		logMessage "creating package options directory to $setupOptionsDir"
+		mkdir $setupOptionsDir
+	fi
 fi
 
+# attempting an install without the comand line prompting
+#	and needed options have not been set yet
+#	can't continue
+if [ $scriptAction == 'INSTALL' ] && ! $optionsSet ; then
+	logMessage "required options have not been set - can't install"
+	exit $EXIT_OPTIONS_NOT_SET
+fi
 # if forcing an uninstall, skip file set checks
 if [ $scriptAction != 'UNINSTALL' ]; then
     _checkFileSets

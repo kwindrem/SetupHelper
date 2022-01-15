@@ -1,0 +1,172 @@
+v4.0:
+	beta test period ended
+	added running version to PackageManager sign-on
+
+v4.0~38:
+	fixed: backup/restore hangs
+
+v4.0~37:
+	changed the blind install process to minimize issues if venus-data.tgz is left mounted
+	SetupHelper now unpacks to /data/SetupHelper-blind,
+		then is moved to /data/SetupHelper and the setup script run
+		ONLY IF it is a newer version
+
+v4.0~36:
+	blind install was't updated for ~35 !!!
+
+v4.0~35:
+	reinstall now compares installed and package versions and installs if they differ
+	previously, booting to the alternate installed Venus version would not trigger
+		a package reinstall, possibly resulting in problems or at least out of date packages
+
+v4.0~34:
+	added image overlays to backup/restore
+		this includes custom logos for Mobile and Tile overviews
+
+v4.0~33:
+	fixed: PackageManager doesn't run on Venus versions prior to v2.80~10 (Python 2).
+
+v4.0~32:
+	fixed: version numbers not in the Victron format would crash PackageManager
+		also accommodate a other version string formats:
+		vX.Y.Z, vX.YdZ, vX.YaZ, vX.YbZ
+
+v4.0~31:
+	fixed crashes and bugs that prevented initial install on a system
+		that has no packages yet
+
+v4.0~30:
+	added settings backup/restore
+		note this is NOT the Victron mechanism
+		rather, it extracts SOME of the Settings parameters
+		and writes these to a file
+		care was taken to save/restore only those parameters that
+			should not cause conflicts
+		When Victron releases their mechanism, this one will be removed
+
+v4.0~26:
+	fixed: Large features not appearing
+	fixed: typo in 123SmartBMS-Venus in defaultPackageList
+
+v4.0~25:
+	handle nonexistant package directory
+	pull GitHub user/branch from package directory file
+	optimize AddStoredPackages so it can run all the time
+		(some updates were being missed)
+	changed default package name: smartbms-venus to 123SmartBMS-Venus
+
+v4.0~24:
+	add Reboot/GUI restart button to Package Manager main menu
+		to address deferred operations ("Later")
+
+v4.0~23:
+	fixed: GUI restart not happening after auto install
+	fixed: GUI restart notificaiton in menu not cleared after GUI restart
+v4.0~22: not used
+v4.0~21:
+	fixed: adding package didn't carry over GitHub user and branch
+
+v4.0~20:
+	rearranged package editor menus
+		Package version list -> Active packages
+			tapping on an entry leads to Package editor
+		added Inactive packages
+			which shows only packages that are not on the system yet (or manually removed)
+			tapping on entry leads to Add package menu
+		added separate Add package menu
+		Package Editor eliminated from main menu (access through Active packages only)
+	default packages are no longer automatically added to the active package list
+
+v4.0~19:
+	fixed: venus-data.tar.gz in v2.80~18 didn't include PackageManager.py
+
+v4.0~18:
+	fixed: packages auto add/install when PackageManager is restarted
+		even if REMOVED / DO_NOT_AUTO_INSTALL was set
+	more work on GUI getting "stuck"
+	bogus "unpack tar from GitHub failed" message - package downloads properly
+	major change to thread structure to make operations more responsive
+		and to minimize CPU consumption when idle
+
+v4.0~17:
+	fixed: package editor status did not always show package name
+	fixed?: occationally, Package Editor appears to get stuck when a PackageManager
+			action completes.
+		A missed property update from the dbus paramter may be yhe cause
+		Set a timer to refresh properties in the GUI
+
+v4.0~16:
+	fixed: packages auto auto-adding following manual removal
+
+v4.0~15:
+	fixed: auto download not working
+	moved dbus settings for PackageManager to /Settings/PackageManager
+		from /Settings/PackageMonitor
+	remove dbusSettings when package is removed
+		previously these were left in place
+	changed menu items and titles to conform to Victron standards:
+		only firt word capitalized
+
+v4.0~14:
+	fixed: selecting "Now" in GUI when reboot needed does nothing
+	fixed: blind install did not work
+
+v4.0~13:
+	added support for Venus OS v2.80~33-large-24
+
+v4.0~12:
+	fixed: manually uninstalled packages would reinstall immediately
+		if auto install was on
+	accommodate Python 2.7 for Venus OS prior to v2.80~10
+	fixed: a setup script run failure was not handled properly and
+		caused the install thread to hang
+v4.0~11:
+	fixed bug that caused GUI to restart repeatedly if package was not
+		compatible with the current Venus version
+		e.g., a file set error
+	major rewrite to PackageManager download code
+	changes to GUI:
+		Add Package -> New Package
+		moved SetpHelper uninstall warning to status
+		moved action confirmaiton message to status,
+			Confirm ... button now reads Proceed
+		removed "can't remove" ... message
+v4.0~10:
+	GitHub downloads and SD/USB transfers now scan the entire directory tree
+		searching for a package directory. This was done because of the 123 smartBMS
+		archive directory structure but there are other issues preventing integration
+		with PackageManger.
+	Fixed bug that showed a blank status line with the OK button after a download
+		Rhe OK button no longer appears and Package Editor menu returns
+		to the "navigation" mode
+
+v4.0~9:
+	fixed bug with firstCompatibleVersion
+	added try: / except: around all subprocess.run calls
+		so if the call fails, the program continues to run
+
+v4.0~8:
+	refresh GitHub version prior to download checks
+		new upadates to GitHub could be missed
+	reduced GitHub vesion refres delay
+	touching a row in Package Version List menu
+		leads to Package Editor menu
+		and < will return to the version list
+
+v4.0~5 - 7:
+	download bug fixes
+v4.0~4:
+	add Package Manager & GUI
+	add setup script return codes for above
+	add optionsRequired flag file (VeCanSetup is only package that needs this now)
+
+	add platform and version checks to CommonResources
+	add install opiton to CommonResources
+	better support installs without command line
+	### TBD remove logging to package log files
+
+	improve adding packages from SD/USB
+
+	split auto download and auto install
+
+

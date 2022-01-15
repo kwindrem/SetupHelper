@@ -180,8 +180,8 @@ MbPage {
 //////// added for package control and version display
         MbSubMenu
         {
-            description: qsTr("Package Versions")
-            subpage: Component { PageSettingsPackageControl {} }
+            description: qsTr("Package manager")
+            subpage: Component { PageSettingsPackageManager {} }
         }
 
 		MbSubMenu {

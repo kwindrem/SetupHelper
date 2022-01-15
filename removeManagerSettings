@@ -1,0 +1,48 @@
+#!/bin/bash
+
+
+# remove Settings associated with previous versions of SetupHelper
+# and those of the current verison
+# run this script to make a clean start
+
+source /data/SetupHelper/DbusSettingsResources
+
+removeDbusSettings	/Settings/PackageManager/Count \
+					/Settings/PackageManager/GitHubAutoUpdate \
+					/Settings/PackageManager/GitHubAutoDownload \
+					/Settings/PackageManager/AutoInstall \
+					/Settings/PackageManager/Edit/PackageName \
+					/Settings/PackageManager/Edit/GitHubUser \
+					/Settings/PackageManager/Edit/GitHubBranch \
+					/Settings/PackageManager/0/PackageName \
+					/Settings/PackageManager/0/GitHubUser \
+					/Settings/PackageManager/0/GitHubBranch \
+					/Settings/PackageManager/1/PackageName \
+					/Settings/PackageManager/1/GitHubUser \
+					/Settings/PackageManager/1/GitHubBranch \
+					/Settings/PackageManager/2/PackageName \
+					/Settings/PackageManager/2/GitHubUser \
+					/Settings/PackageManager/2/GitHubBranch \
+					/Settings/PackageManager/3/PackageName \
+					/Settings/PackageManager/3/GitHubUser \
+					/Settings/PackageManager/3/GitHubBranch \
+					/Settings/PackageManager/4/PackageName \
+					/Settings/PackageManager/4/GitHubUser \
+					/Settings/PackageManager/4/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/5/PackageName \
+					/Settings/PackageManager/5/GitHubUser \
+					/Settings/PackageManager/5/GitHubBranch \
+					/Settings/PackageManager/6/PackageName \
+					/Settings/PackageManager/6/GitHubUser \
+					/Settings/PackageManager/6/GitHubBranch \
+					/Settings/PackageManager/7/PackageName \
+					/Settings/PackageManager/7/GitHubUser \
+					/Settings/PackageManager/7/GitHubBranch \
+					/Settings/PackageManager/8/PackageName \
+					/Settings/PackageManager/8/GitHubUser \
+					/Settings/PackageManager/8/GitHubBranch \
+					/Settings/PackageManager/9/PackageName \
+					/Settings/PackageManager/9/GitHubUser \
+					/Settings/PackageManager/9/GitHubBranch > /dev/null
+

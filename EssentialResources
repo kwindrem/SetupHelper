@@ -11,6 +11,10 @@ fullScriptName="$scriptDir/$(basename "$0")"
 
 venusVersion="$(cat /opt/victronenergy/version | head -n 1)"
 
+installedVersionPrefix="/etc/venus/installedVersion-"
+installedVersionFile="$installedVersionPrefix"$packageName
+
+# obsolete - use installedVersion
 installedFlagPrefix="/etc/venus/inInstalled-"
 installedFlag="$installedFlagPrefix"$packageName
 
@@ -25,8 +29,19 @@ fileSet="$pkgFileSets/$venusVersion"
 rcLocal="/data/rcS.local"
 
 # defined exit codes - must be consistent between all setup scripts and reinstallMods
-exitReboot=123
-exitSuccess=0
+# and PackageManager.py
+EXIT_SUCCESS=0
+EXIT_REBOOT=123
+EXIT_RESTART_GUI=124
+EXIT_ERROR=255	# unknown error
+EXIT_INCOMPATIBLE_VERSION=254
+EXIT_INCOMPATIBLE_PLATFOM=253
+EXIT_FILE_SET_ERROR=252
+EXIT_OPTIONS_NOT_SET=251
+EXIT_RUN_AGAIN=250
+# old variables - keep for compatibility
+exitReboot=$EXIT_REBOOT
+exitSuccess=$EXIT_SUCCESS
 
 reinstallParam="reinstall"
 
@@ -39,4 +54,75 @@ setupOptionsDir="$setupOptionsRoot"/$packageName
 packageListFile="/data/packageList"
 
 qmlDir=/opt/victronenergy/gui/qml
+
+
+
+# convert a version string in the form of vX.Y~Z-large-W to an integer to make comparisions easier
+# the ~Z portion indicates a pre-release version so a version without it is later than a version with it
+# the -W portion is like the ~Z for large builds
+# 	the large portion is IGNORED !!!!
+#	note part[0] is always null because there is nothing before v which is used as a separator
+#
+# the incoming verison string is split on every non-digit character
+# the first three of those pieces are combined into a single integer
+# additional pieces are ignored
+#
+#	for example v1.2~3 			would be  1002003
+#	for example v11.22.33  		would be 11022033
+#	for example v11.22-large-33	would be 11022999
+# an empty file or one that contains "unknown" or does not beging with 'v'
+# 	has a version number = 0
+#
+# the separators ~, b, a and d are given special significance
+#	indicating beta (~ and b), alpha or develompent releases
+#	which are prioritized: release is the highest, then beta, then alpha then development
+#	by spliting the third number range into individual ranges
+#	a released version is given the highest numerical value: 999
+#		none for release	--		999
+#		~ or b for beta		0-398	600-998
+#		a for alpha 		0-299	300-599
+#		d for development	0-299	0-299
+
+function versionStringToNumber ()
+{
+	local version
+	local type
+	local major
+	local minor
+	local preRelease
+	local number
+	version=$( echo ${1:1} | sed -e 's/-.*//')
+	read major minor preRelease <<< $(echo $version | sed 's/[.abd~]/ /g')
+	type=$(echo $version | sed 's/[^abd~]//g')
+
+	# assemble core version number from major, minor and preRelease parts
+	(( number = 0 ))
+	if [ ! -z $major ]; then
+		(( number += major * 1000000 ))
+	fi
+	if [ ! -z $minor ]; then
+		(( number += minor * 1000 ))
+	fi
+	if [ ! -z $preRelease ]; then
+		(( number += preRelease ))
+	fi
+
+	# adjust number for release 
+	if [ -z $type ] || [ $type = '' ]; then
+		# if no preRelease part specified, the preRelease version needs to be it's maximum
+		# if a preRelease part is specified, use as is
+		#	(should never specify a preRelease for a released version !!!)
+		if [ -z $preRelease ] ||  [ $preRelease = '' ]; then
+			(( number += 999 ))
+		fi
+	# adjust number for alpha 
+	elif [ $type == 'a' ]; then
+		(( number += 300 ))
+	# adjust number for beta 
+	elif [ $type == 'b' ] || [ $type == '~' ]; then
+		(( number += 600 ))
+	fi
+	versionNumber=$number
+}
+
 

@@ -1,6 +1,6 @@
 # ServiceManager for SetupHelper
 # contains a functions to install, remove, start and stop a package's service
-
+#
 # managing a normal package's service is straight forward
 #
 # normally, services are connected via a symbolic link, but to avoid issues with
@@ -36,16 +36,22 @@ fi
 
 _startService ()
 {
-    local pkg=$1
-    rm -f "$serviceDir/$pkg/down"
+    svc -d "/service/$1"
+    if [ -e "$serviceDir/$1/log" ]; then
+		svc -d "/service/$1/log"
+	fi
+
+    rm -f "$serviceDir/$1/down"
     if $serviceOverlay ; then
-        rm -f "/service/$pkg/down"
-        svc -u "/service/$pkg"
+        rm -f "/service/$1/down"
     fi
-    svc -u "/service/$pkg"
-    if [ -e "$serviceDir/$pkg/log" ]; then
-        rm -f "$serviceDir/$pkg/log/down"
-        svc -u "/service/$pkg/log"
+    svc -u "/service/$1"
+    if [ -e "$serviceDir/$1/log" ]; then
+        rm -f "$serviceDir/$1/log/down"
+		if $serviceOverlay ; then
+			rm -f "/service/$1/log/down"
+        fi
+        svc -u "/service/$1/log"
     fi
 }
 
@@ -55,23 +61,21 @@ startService ()
     if [ $# -lt 1 ]; then
         return
     fi
-    local pkg=$1
 
-    if [ -e "$serviceDir/$pkg" ]; then
-        logMessage "starting $pkg service"
-        _startService $pkg
+    if [ -e "$serviceDir/$1" ]; then
+        logMessage "starting $1 service"
+        _startService $1
     fi
 }
 
 
 _stopService ()
 {
-    local pkg=$1
-    touch "$serviceDir/$pkg/down"
-    svc -d "/service/$pkg"
-    if [ -e "$serviceDir/$pkg/log" ]; then
-        touch "$serviceDir/$pkg/log/down"
-        svc -d "/service/$pkg/log"
+    touch "$serviceDir/$1/down"
+    svc -d "/service/$1"
+    if [ -e "$serviceDir/$1/log" ]; then
+        touch "$serviceDir/$1/log/down"
+        svc -d "/service/$1/log"
     fi
 }
 
@@ -81,11 +85,10 @@ stopService ()
     if [ $# -lt 1 ]; then
         return
     fi
-    local pkg=$1
 
-    if [ -e "$serviceDir/$pkg" ]; then
-        logMessage "stopping $pkg service"
-        _stopService $pkg
+    if [ -e "$serviceDir/$1" ]; then
+        logMessage "stopping $1 service"
+        _stopService $1
     fi
 }
 
@@ -95,16 +98,15 @@ stopService ()
 
 _removeService ()
 {
-    local pkg=$1
     # stop the service
-    _stopService $pkg
+    _stopService $1
 
     # remove the service directory
     # removing the service in the overlayed service directory doesn't remove it from /service
     # it needs to be removed from the overlay work directory also
-    rm -rf "$serviceDir/$pkg"
+    rm -rf "$serviceDir/$1"
     if $serviceOverlay ; then
-        rm -rf "$overlayWorkDir/$pkg"
+        rm -rf "$overlayWorkDir/$1"
     fi
 }
 
@@ -114,11 +116,10 @@ removeService ()
     if [ $# -lt 1 ]; then
         return
     fi
-    local pkg=$1
 
-    if [ -e "$serviceDir/$pkg" ]; then
-        logMessage "removing $pkg service"
-        _removeService $pkg
+    if [ -e "$serviceDir/$1" ]; then
+        logMessage "removing $1 service"
+        _removeService $1
     fi
 }
 
@@ -135,6 +136,7 @@ removeService ()
 
 installService ()
 {
+	local restartService=false
     # no package specified
     if [ $# -lt 1 ]; then
         return
@@ -146,31 +148,37 @@ installService ()
 
     local pkg=$1
 
-    if [ -L "$serviceDir/$pkg" ]; then
-        logMessage "removing old $pkg service (was symbolic link)"
-        rm -f "$serviceDir/$pkg"
+    if [ -L "$serviceDir/$1" ]; then
+        logMessage "removing old $1 service (was symbolic link)"
+        rm -f "$serviceDir/$1"
     fi
     # service not yet installed, COPY service directory to the active locaiton
-    if [ ! -e "$serviceDir/$pkg" ]; then
-        logMessage "installing $pkg service"
-        cp -R "$scriptDir/service" "$serviceDir/$pkg"
+    if [ ! -e "$serviceDir/$1" ]; then
+        logMessage "installing $1 service"
+        cp -R "$scriptDir/service" "$serviceDir/$1"
     # service already installed - only copy changed files, then restart service
     else
-        logMessage "restarting $pkg service"
+		restartService=true
+        logMessage "restarting $1 service"
         if [ -f "$scriptDir/service/run" ]; then
-            cmp -s "$scriptDir/service/run" "$serviceDir/$pkg/run" > /dev/null
+            cmp -s "$scriptDir/service/run" "$serviceDir/$1/run" > /dev/null
             if [ $? != 0 ]; then
-                cp "$scriptDir/service/run" "$serviceDir/$pkg/run"
+                cp "$scriptDir/service/run" "$serviceDir/$1/run"
             fi
         fi
         if [ -f "$scriptDir/service/log/run" ]; then
-            cmp -s "$scriptDir/service/log/run" "$serviceDir/$pkg/log/run" > /dev/null
+            cmp -s "$scriptDir/service/log/run" "$serviceDir/$1/log/run" > /dev/null
             if [ $? != 0 ]; then
-                cp "$scriptDir/service/log/run" "$serviceDir/$pkg/log/run"
+                cp "$scriptDir/service/log/run" "$serviceDir/$1/log/run"
            fi
         fi
     fi
-    _startService $pkg
+
+	# restart service if was previously installed
+	#	a service will start when newly installed so we don't want to restart it
+	if $restartService ; then
+		_startService $1
+	fi
 }
 
 

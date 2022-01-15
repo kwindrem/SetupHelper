@@ -14,17 +14,18 @@ source "$scriptDir/LogHandler"
 # disable outputting log messages to console
 runningAtBoot=true
 
+if [ ! -f "$reinstallScriptsList" ] ; then
+    logMessage "$reinstallScriptsList file not found"
+    exit
+fi
+
+logMessage "reinstallMods starting"
+
 # wait until dbus settings are active
 while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
     logMessage "waiting for dBus settings"
     sleep 2
 done
-
-
-if [ ! -f "$reinstallScriptsList" ] ; then
-    logMessage "$reinstallScriptsList file not found"
-    exit
-fi
 
 # read lines from script list file specified above
 # and call each script
@@ -50,4 +51,6 @@ done 9< "$reinstallScriptsList"
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
+else
+	logMessage "reinstallMods complete"
 fi

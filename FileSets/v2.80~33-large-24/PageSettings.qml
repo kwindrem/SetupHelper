@@ -170,20 +170,12 @@ MbPage {
 			subpage: ioSettings
 			show: ioSettings.haveSubMenus
 			PageSettingsIo { id: ioSettings }
-		}
-
-		MbSubMenu {
-			description: qsTr("Backup & Restore")
-			subpage: Component { PageSettingsBackup {} }
-		}
-
 		/*
 		MbSubMenu {
 			description: qsTr("Backup & Restore")
 			subpage: Component { PageSettingsBackup {} }
 		}
 		*/
-
 		MbSubMenu {
 			description: qsTr("Venus OS Large features")
 			subpage: Component { PageSettingsLarge {} }
@@ -193,8 +185,8 @@ MbPage {
 //////// added for package control and version display
         MbSubMenu
         {
-            description: qsTr("Package Versions")
-            subpage: Component { PageSettingsPackageControl {} }
+            description: qsTr("Package manager")
+            subpage: Component { PageSettingsPackageManager {} }
         }
 
 		MbSubMenu {

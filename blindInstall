@@ -1,25 +1,35 @@
 #!/bin/bash
 
-# this script is part of an autoInstall archive
+# this script is part of an autoInstall archive which installs SetupHelper
+#	previous versions of blindInstall also installed GuiMods but has since been removed
+# 	since PackageManager will install all package archives found on the SD/USB media so 
+#	the result is the same (or actually better)
+#
 # the archive makes use of the Venus OS update-data.sh script
-# archives named "venus-data.tar" are unpacked during boot
-# then for this archive, Venus must be rebooted, causing rcS.local to run,
+# archives named "venus-data.tar.gz" are unpacked during boot
+# overriting content in /data
+#
+# the archive unpacks to /data/SetupHelper-blind
+# then blindInstall compares versions between /data/SetupHelper-blind anc /data/SetupHelper
+# if blind is NEWER, SetupHelper-blind replaces SetupHelper, and the setup script is run
+#
+# for this archive, Venus must be rebooted a second time, causing this speial rcS.local to run,
 # which calls blindInstall as a background task.
 #
-# Package install scripts will append to rcS.local, so it must be moved out of the way
-# BEFORE running those scripts to force creation of a clean rcS.local
+# a call to /data/SetupHelper/reinstallMods is appended to rcS.local by all setup scripts
+# using SetupHelper CommonResources.
+# That call is included in the blind install rcS.local so that if the media is left inserted
+#	subsequent reboots will still check for reinstalls
 #
-# GitHub automatic updates are enabled to keep packages up to date.
+# the rcS.local from the blindInstall is removed when SetupHelper/setup is run to keep things clean
+#	SetupHelper/setup creates a new one
 #
-# the archive includes
-#   rcS.local and the packages themselves
-# 
 # the blindInstall script is run in the background so it can wait for dbus Settings resources
 # to become available before running the package install scripts.
 #
 
-source "/data/SetupHelper/EssentialResources"
-source "/data/SetupHelper/LogHandler"
+source "/data/SetupHelper-blind/EssentialResources"
+source "/data/SetupHelper-blind/LogHandler"
 
 # wait until dbus settings are active
 while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
@@ -29,28 +39,50 @@ done
 
 sleep 2
 
-logMessage "starting up"
+setupHelperBlind='/data/SetupHelper-blind'
+setupHelperInstalled='/data/SetupHelper'
 
-# a package setup script normally prompts for user input
-# reinstall force options insure the package is installed without user interaction
-#
-# currently VeCanSetup and RpiDisplaySetup require user responses during initial setup
-# so can't be installed via this mechanism
-
-# all packages rely on SetupHelper so it must be present and installed first
-if [ -f "/data/SetupHelper/setup" ]; then
-    # insure package reinstall doesn't get appended to the auto install rcS.local !!!
-    rm -f /data/rcS.local
-
-    sync
-    logMessage "installing SetupHelper"
-    /data/SetupHelper/setup reinstall force deferReboot
-    if [ -f "/data/GuiMods/setup" ]; then
-        logMessage "installing GuiMods"
-        /data/GuiMods/setup reinstall force deferReboot
-    fi
-
-    # enable GitHub automatic updates
-    dbus -y com.victronenergy.settings /Settings/PackageVersion/GitHubAutoUpdate SetValue 1 &> /dev/null
+runSetup=false
+if [ -d "$setupHelperBlind" ]; then
+	# compare versions
+	if [ -d "$setupHelperInstalled" ]; then
+		if [ -f "$setupHelperBlind/version" ]; then
+			versionStringToNumber $(cat "$setupHelperBlind/version")
+			blindVersion=$versionNumber
+		else
+			blindVersion=0
+		fi
+		if [ -f "$setupHelperInstalled/version" ]; then
+			versionStringToNumber $(cat "$setupHelperInstalled/version")
+			packageVersion=$versionNumber
+		else
+			packageVersion=0
+		fi
+		if (( blindVersion > packageVersion )); then
+			runSetup=true
+		fi
+	else
+		runSetup=true
+	fi
 fi
 
+# get rid of the blind install rcS.local so it can't run again
+# (unless the archive still exists on the media on next boot)
+# SetupHelper/setup will install the proper one
+rm -f /data/rcS.local
+
+if $runSetup ; then
+	logMessage "blind install SetupHelper"
+
+	# replace SetupHelper with the one from the archive
+	rm -rf "$setupHelperInstalled"
+	mv "$setupHelperBlind" "$setupHelperInstalled"
+
+	# eliminiate the blind install call in rcS.local
+	#	SetupHelper/setup will create a new one rcS.local
+	"$setupHelperInstalled/setup" reinstall
+# remove SetupHelper from archive - it wasn't newer
+else
+	logMessage "blind install did NOT update SetupHelper (probably an older version)"
+	rm -rf "$setupHelperBlind"
+fi

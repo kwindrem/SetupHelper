@@ -1,6 +1,6 @@
-//////// modified for package version and control
 import QtQuick 1.1
 import com.victron.velib 1.0
+import net.connman 0.1
 import "utils.js" as Utils
 
 MbPage {
@@ -109,9 +109,14 @@ MbPage {
 		}
 
 		MbSubMenu {
+			description: qsTr("Modbus TCP devices")
+			subpage: Component { PageSettingsModbus {} }
+		}
+
+		MbSubMenu {
 			id: ethernetItem
 			description: qsTr("Ethernet")
-			subpage: Component { PageSettingsTcpIp {} }
+			subpage: Component { PageSettingsTcpIp { showLinkLocal: true } }
 		}
 
 		MbSubMenu {
@@ -127,8 +132,14 @@ MbPage {
 		}
 
 		MbSubMenu {
+			description: qsTr("Bluetooth")
+			subpage: Component { PageSettingsBluetooth {} }
+			show: Connman.technologyList.indexOf("bluetooth") !== -1
+		}
+		
+		MbSubMenu {
 			description: qsTr("GPS")
-			subpage: Component { PageSettingsGps {} }
+			subpage: Component { PageSettingsGpsList {} }
 		}
 
 		MbSubMenu {
@@ -154,32 +165,21 @@ MbPage {
 		}
 
 		MbSubMenu {
-			// TODO: Find a better way to check if
-			// analog inputs are available on the device
-			property VBusItem analogIoSettings: VBusItem {
-				bind: Utils.path(bindPrefix,
-								 "/Settings/AnalogInput/Resistive/1/Function")
-			}
-			property VBusItem digitalIoSettings: VBusItem {
-				bind: Utils.path(bindPrefix,
-								 "/Settings/DigitalInput/1/Type")
-			}
 			description: qsTr("I/O")
-			subpage: Component { PageSettingsIo {} }
-			show: analogIoSettings.valid || digitalIoSettings.valid
+			subpage: ioSettings
+			show: ioSettings.haveSubMenus
+			PageSettingsIo { id: ioSettings }
 		}
 
-//////// added for package control and version display
-        MbSubMenu
-        {
-            description: qsTr("Package manager")
-            subpage: Component { PageSettingsPackageManager {} }
-        }
+		MbSubMenu {
+			description: qsTr("Backup & Restore")
+			subpage: Component { PageSettingsBackup {} }
+		}
 
 		MbSubMenu {
 			description: qsTr("Debug")
 			subpage: Component { PageDebug {} }
-			show: user.accessLevel >= User.AccessService
+			showAccessLevel: User.AccessService
 		}
 	}
 }

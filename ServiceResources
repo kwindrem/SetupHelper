@@ -9,7 +9,7 @@
 # If the active copy of the service already exists, the run and log/run files are updated
 # ONLY if there are changes. This leaves other files managed by supervise untouched.
 #
-# For all functions, $1 specifies the package name
+# For all functions, $1 specifies the service name
 #
 # functions that begin with _ skip checks and do not log activity
 
@@ -57,7 +57,7 @@ _startService ()
 
 startService ()
 {
-    # no package specified
+    # no service specified
     if [ $# -lt 1 ]; then
         return
     fi
@@ -81,7 +81,7 @@ _stopService ()
 
 stopService ()
 {
-    # no package specified
+    # no service specified
     if [ $# -lt 1 ]; then
         return
     fi
@@ -112,7 +112,7 @@ _removeService ()
 
 removeService ()
 {
-    # no package specified
+    # no service specified
     if [ $# -lt 1 ]; then
         return
     fi
@@ -130,14 +130,13 @@ removeService ()
 # it includes the 'down' flag file. This behavior is up to the service writer.
 #
 # If the service already exists, installService will stop it,
-# update the service files and stop all child processes
-# Then restart the service unless the down flag is set
+# update the service files then restart the service
 #
 
 installService ()
 {
 	local restartService=false
-    # no package specified
+    # no service specified
     if [ $# -lt 1 ]; then
         return
     fi
@@ -145,8 +144,6 @@ installService ()
     if [ ! -e "$scriptDir/service" ]; then
         return
     fi
-
-    local pkg=$1
 
     if [ -L "$serviceDir/$1" ]; then
         logMessage "removing old $1 service (was symbolic link)"
@@ -178,6 +175,10 @@ installService ()
 	#	a service will start when newly installed so we don't want to restart it
 	if $restartService ; then
 		_startService $1
+	# insure service starts up
+	# with overlays, this doesn't happen if the service was removed then added again
+	else
+		svc -u "/service/$1"
 	fi
 }
 

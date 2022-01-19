@@ -1,0 +1,559 @@
+#!/bin/bash
+
+
+# remove Settings associated with previous versions of SetupHelper
+# and those of the current verison
+# run this script to make a clean start
+
+source /data/SetupHelper/DbusSettingsResources
+
+removeDbusSettings	/Settings/PackageManager/Count \
+					/Settings/PackageManager/GitHubAutoUpdate \
+					/Settings/PackageManager/GitHubAutoDownload \
+					/Settings/PackageManager/AutoInstall \
+					/Settings/PackageManager/Edit/PackageName \
+					/Settings/PackageManager/Edit/GitHubUser \
+					/Settings/PackageManager/Edit/GitHubBranch \
+					/Settings/PackageManager/0/PackageName \
+					/Settings/PackageManager/0/GitHubUser \
+					/Settings/PackageManager/0/GitHubBranch \
+					/Settings/PackageManager/1/PackageName \
+					/Settings/PackageManager/1/GitHubUser \
+					/Settings/PackageManager/1/GitHubBranch \
+					/Settings/PackageManager/2/PackageName \
+					/Settings/PackageManager/2/GitHubUser \
+					/Settings/PackageManager/2/GitHubBranch \
+					/Settings/PackageManager/3/PackageName \
+					/Settings/PackageManager/3/GitHubUser \
+					/Settings/PackageManager/3/GitHubBranch \
+					/Settings/PackageManager/4/PackageName \
+					/Settings/PackageManager/4/GitHubUser \
+					/Settings/PackageManager/4/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/5/PackageName \
+					/Settings/PackageManager/5/GitHubUser \
+					/Settings/PackageManager/5/GitHubBranch \
+					/Settings/PackageManager/6/PackageName \
+					/Settings/PackageManager/6/GitHubUser \
+					/Settings/PackageManager/6/GitHubBranch \
+					/Settings/PackageManager/7/PackageName \
+					/Settings/PackageManager/7/GitHubUser \
+					/Settings/PackageManager/7/GitHubBranch \
+					/Settings/PackageManager/8/PackageName \
+					/Settings/PackageManager/8/GitHubUser \
+					/Settings/PackageManager/8/GitHubBranch \
+					/Settings/PackageManager/9/PackageName \
+					/Settings/PackageManager/9/GitHubUser \
+					/Settings/PackageManager/9/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/10/PackageName \
+					/Settings/PackageManager/10/GitHubUser \
+					/Settings/PackageManager/10/GitHubBranch \
+					/Settings/PackageManager/11/PackageName \
+					/Settings/PackageManager/11/GitHubUser \
+					/Settings/PackageManager/11/GitHubBranch \
+					/Settings/PackageManager/12/PackageName \
+					/Settings/PackageManager/12/GitHubUser \
+					/Settings/PackageManager/12/GitHubBranch \
+					/Settings/PackageManager/13/PackageName \
+					/Settings/PackageManager/13/GitHubUser \
+					/Settings/PackageManager/13/GitHubBranch \
+					/Settings/PackageManager/14/PackageName \
+					/Settings/PackageManager/14/GitHubUser \
+					/Settings/PackageManager/14/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/15/PackageName \
+					/Settings/PackageManager/15/GitHubUser \
+					/Settings/PackageManager/15/GitHubBranch \
+					/Settings/PackageManager/16/PackageName \
+					/Settings/PackageManager/16/GitHubUser \
+					/Settings/PackageManager/16/GitHubBranch \
+					/Settings/PackageManager/17/PackageName \
+					/Settings/PackageManager/17/GitHubUser \
+					/Settings/PackageManager/17/GitHubBranch \
+					/Settings/PackageManager/18/PackageName \
+					/Settings/PackageManager/18/GitHubUser \
+					/Settings/PackageManager/18/GitHubBranch \
+					/Settings/PackageManager/19/PackageName \
+					/Settings/PackageManager/19/GitHubUser \
+					/Settings/PackageManager/19/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/20/PackageName \
+					/Settings/PackageManager/20/GitHubUser \
+					/Settings/PackageManager/20/GitHubBranch \
+					/Settings/PackageManager/21/PackageName \
+					/Settings/PackageManager/21/GitHubUser \
+					/Settings/PackageManager/21/GitHubBranch \
+					/Settings/PackageManager/22/PackageName \
+					/Settings/PackageManager/22/GitHubUser \
+					/Settings/PackageManager/22/GitHubBranch \
+					/Settings/PackageManager/23/PackageName \
+					/Settings/PackageManager/23/GitHubUser \
+					/Settings/PackageManager/23/GitHubBranch \
+					/Settings/PackageManager/24/PackageName \
+					/Settings/PackageManager/24/GitHubUser \
+					/Settings/PackageManager/24/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/25/PackageName \
+					/Settings/PackageManager/25/GitHubUser \
+					/Settings/PackageManager/25/GitHubBranch \
+					/Settings/PackageManager/26/PackageName \
+					/Settings/PackageManager/26/GitHubUser \
+					/Settings/PackageManager/26/GitHubBranch \
+					/Settings/PackageManager/27/PackageName \
+					/Settings/PackageManager/27/GitHubUser \
+					/Settings/PackageManager/27/GitHubBranch \
+					/Settings/PackageManager/28/PackageName \
+					/Settings/PackageManager/28/GitHubUser \
+					/Settings/PackageManager/28/GitHubBranch \
+					/Settings/PackageManager/29/PackageName \
+					/Settings/PackageManager/29/GitHubUser \
+					/Settings/PackageManager/29/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/30/PackageName \
+					/Settings/PackageManager/30/GitHubUser \
+					/Settings/PackageManager/30/GitHubBranch \
+					/Settings/PackageManager/31/PackageName \
+					/Settings/PackageManager/31/GitHubUser \
+					/Settings/PackageManager/31/GitHubBranch \
+					/Settings/PackageManager/32/PackageName \
+					/Settings/PackageManager/32/GitHubUser \
+					/Settings/PackageManager/32/GitHubBranch \
+					/Settings/PackageManager/33/PackageName \
+					/Settings/PackageManager/33/GitHubUser \
+					/Settings/PackageManager/33/GitHubBranch \
+					/Settings/PackageManager/34/PackageName \
+					/Settings/PackageManager/34/GitHubUser \
+					/Settings/PackageManager/34/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/35/PackageName \
+					/Settings/PackageManager/35/GitHubUser \
+					/Settings/PackageManager/35/GitHubBranch \
+					/Settings/PackageManager/36/PackageName \
+					/Settings/PackageManager/36/GitHubUser \
+					/Settings/PackageManager/36/GitHubBranch \
+					/Settings/PackageManager/37/PackageName \
+					/Settings/PackageManager/37/GitHubUser \
+					/Settings/PackageManager/37/GitHubBranch \
+					/Settings/PackageManager/38/PackageName \
+					/Settings/PackageManager/38/GitHubUser \
+					/Settings/PackageManager/38/GitHubBranch \
+					/Settings/PackageManager/39/PackageName \
+					/Settings/PackageManager/39/GitHubUser \
+					/Settings/PackageManager/39/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/40/PackageName \
+					/Settings/PackageManager/40/GitHubUser \
+					/Settings/PackageManager/40/GitHubBranch \
+					/Settings/PackageManager/41/PackageName \
+					/Settings/PackageManager/41/GitHubUser \
+					/Settings/PackageManager/41/GitHubBranch \
+					/Settings/PackageManager/42/PackageName \
+					/Settings/PackageManager/42/GitHubUser \
+					/Settings/PackageManager/42/GitHubBranch \
+					/Settings/PackageManager/43/PackageName \
+					/Settings/PackageManager/43/GitHubUser \
+					/Settings/PackageManager/43/GitHubBranch \
+					/Settings/PackageManager/44/PackageName \
+					/Settings/PackageManager/44/GitHubUser \
+					/Settings/PackageManager/44/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/45/PackageName \
+					/Settings/PackageManager/45/GitHubUser \
+					/Settings/PackageManager/45/GitHubBranch \
+					/Settings/PackageManager/46/PackageName \
+					/Settings/PackageManager/46/GitHubUser \
+					/Settings/PackageManager/46/GitHubBranch \
+					/Settings/PackageManager/47/PackageName \
+					/Settings/PackageManager/47/GitHubUser \
+					/Settings/PackageManager/47/GitHubBranch \
+					/Settings/PackageManager/48/PackageName \
+					/Settings/PackageManager/48/GitHubUser \
+					/Settings/PackageManager/48/GitHubBranch \
+					/Settings/PackageManager/49/PackageName \
+					/Settings/PackageManager/49/GitHubUser \
+					/Settings/PackageManager/49/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/50/PackageName \
+					/Settings/PackageManager/50/GitHubUser \
+					/Settings/PackageManager/50/GitHubBranch \
+					/Settings/PackageManager/51/PackageName \
+					/Settings/PackageManager/51/GitHubUser \
+					/Settings/PackageManager/51/GitHubBranch \
+					/Settings/PackageManager/52/PackageName \
+					/Settings/PackageManager/52/GitHubUser \
+					/Settings/PackageManager/52/GitHubBranch \
+					/Settings/PackageManager/53/PackageName \
+					/Settings/PackageManager/53/GitHubUser \
+					/Settings/PackageManager/53/GitHubBranch \
+					/Settings/PackageManager/54/PackageName \
+					/Settings/PackageManager/54/GitHubUser \
+					/Settings/PackageManager/54/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/55/PackageName \
+					/Settings/PackageManager/55/GitHubUser \
+					/Settings/PackageManager/55/GitHubBranch \
+					/Settings/PackageManager/56/PackageName \
+					/Settings/PackageManager/56/GitHubUser \
+					/Settings/PackageManager/56/GitHubBranch \
+					/Settings/PackageManager/57/PackageName \
+					/Settings/PackageManager/57/GitHubUser \
+					/Settings/PackageManager/57/GitHubBranch \
+					/Settings/PackageManager/58/PackageName \
+					/Settings/PackageManager/58/GitHubUser \
+					/Settings/PackageManager/58/GitHubBranch \
+					/Settings/PackageManager/59/PackageName \
+					/Settings/PackageManager/59/GitHubUser \
+					/Settings/PackageManager/59/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/60/PackageName \
+					/Settings/PackageManager/60/GitHubUser \
+					/Settings/PackageManager/60/GitHubBranch \
+					/Settings/PackageManager/61/PackageName \
+					/Settings/PackageManager/61/GitHubUser \
+					/Settings/PackageManager/61/GitHubBranch \
+					/Settings/PackageManager/62/PackageName \
+					/Settings/PackageManager/62/GitHubUser \
+					/Settings/PackageManager/62/GitHubBranch \
+					/Settings/PackageManager/63/PackageName \
+					/Settings/PackageManager/63/GitHubUser \
+					/Settings/PackageManager/63/GitHubBranch \
+					/Settings/PackageManager/64/PackageName \
+					/Settings/PackageManager/64/GitHubUser \
+					/Settings/PackageManager/64/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/65/PackageName \
+					/Settings/PackageManager/65/GitHubUser \
+					/Settings/PackageManager/65/GitHubBranch \
+					/Settings/PackageManager/66/PackageName \
+					/Settings/PackageManager/66/GitHubUser \
+					/Settings/PackageManager/66/GitHubBranch \
+					/Settings/PackageManager/67/PackageName \
+					/Settings/PackageManager/67/GitHubUser \
+					/Settings/PackageManager/67/GitHubBranch \
+					/Settings/PackageManager/68/PackageName \
+					/Settings/PackageManager/68/GitHubUser \
+					/Settings/PackageManager/68/GitHubBranch \
+					/Settings/PackageManager/69/PackageName \
+					/Settings/PackageManager/69/GitHubUser \
+					/Settings/PackageManager/69/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/70/PackageName \
+					/Settings/PackageManager/70/GitHubUser \
+					/Settings/PackageManager/70/GitHubBranch \
+					/Settings/PackageManager/71/PackageName \
+					/Settings/PackageManager/71/GitHubUser \
+					/Settings/PackageManager/71/GitHubBranch \
+					/Settings/PackageManager/72/PackageName \
+					/Settings/PackageManager/72/GitHubUser \
+					/Settings/PackageManager/72/GitHubBranch \
+					/Settings/PackageManager/73/PackageName \
+					/Settings/PackageManager/73/GitHubUser \
+					/Settings/PackageManager/73/GitHubBranch \
+					/Settings/PackageManager/74/PackageName \
+					/Settings/PackageManager/74/GitHubUser \
+					/Settings/PackageManager/74/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/75/PackageName \
+					/Settings/PackageManager/75/GitHubUser \
+					/Settings/PackageManager/75/GitHubBranch \
+					/Settings/PackageManager/76/PackageName \
+					/Settings/PackageManager/76/GitHubUser \
+					/Settings/PackageManager/76/GitHubBranch \
+					/Settings/PackageManager/77/PackageName \
+					/Settings/PackageManager/77/GitHubUser \
+					/Settings/PackageManager/77/GitHubBranch \
+					/Settings/PackageManager/78/PackageName \
+					/Settings/PackageManager/78/GitHubUser \
+					/Settings/PackageManager/78/GitHubBranch \
+					/Settings/PackageManager/79/PackageName \
+					/Settings/PackageManager/79/GitHubUser \
+					/Settings/PackageManager/79/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/80/PackageName \
+					/Settings/PackageManager/80/GitHubUser \
+					/Settings/PackageManager/80/GitHubBranch \
+					/Settings/PackageManager/81/PackageName \
+					/Settings/PackageManager/81/GitHubUser \
+					/Settings/PackageManager/81/GitHubBranch \
+					/Settings/PackageManager/82/PackageName \
+					/Settings/PackageManager/82/GitHubUser \
+					/Settings/PackageManager/82/GitHubBranch \
+					/Settings/PackageManager/83/PackageName \
+					/Settings/PackageManager/83/GitHubUser \
+					/Settings/PackageManager/83/GitHubBranch \
+					/Settings/PackageManager/84/PackageName \
+					/Settings/PackageManager/84/GitHubUser \
+					/Settings/PackageManager/84/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/85/PackageName \
+					/Settings/PackageManager/85/GitHubUser \
+					/Settings/PackageManager/85/GitHubBranch \
+					/Settings/PackageManager/86/PackageName \
+					/Settings/PackageManager/86/GitHubUser \
+					/Settings/PackageManager/86/GitHubBranch \
+					/Settings/PackageManager/87/PackageName \
+					/Settings/PackageManager/87/GitHubUser \
+					/Settings/PackageManager/87/GitHubBranch \
+					/Settings/PackageManager/88/PackageName \
+					/Settings/PackageManager/88/GitHubUser \
+					/Settings/PackageManager/88/GitHubBranch \
+					/Settings/PackageManager/89/PackageName \
+					/Settings/PackageManager/89/GitHubUser \
+					/Settings/PackageManager/89/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/90/PackageName \
+					/Settings/PackageManager/90/GitHubUser \
+					/Settings/PackageManager/90/GitHubBranch \
+					/Settings/PackageManager/91/PackageName \
+					/Settings/PackageManager/91/GitHubUser \
+					/Settings/PackageManager/91/GitHubBranch \
+					/Settings/PackageManager/92/PackageName \
+					/Settings/PackageManager/92/GitHubUser \
+					/Settings/PackageManager/92/GitHubBranch \
+					/Settings/PackageManager/93/PackageName \
+					/Settings/PackageManager/93/GitHubUser \
+					/Settings/PackageManager/93/GitHubBranch \
+					/Settings/PackageManager/94/PackageName \
+					/Settings/PackageManager/94/GitHubUser \
+					/Settings/PackageManager/94/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/95/PackageName \
+					/Settings/PackageManager/95/GitHubUser \
+					/Settings/PackageManager/95/GitHubBranch \
+					/Settings/PackageManager/96/PackageName \
+					/Settings/PackageManager/96/GitHubUser \
+					/Settings/PackageManager/96/GitHubBranch \
+					/Settings/PackageManager/97/PackageName \
+					/Settings/PackageManager/97/GitHubUser \
+					/Settings/PackageManager/97/GitHubBranch \
+					/Settings/PackageManager/98/PackageName \
+					/Settings/PackageManager/98/GitHubUser \
+					/Settings/PackageManager/98/GitHubBranch \
+					/Settings/PackageManager/99/PackageName \
+					/Settings/PackageManager/99/GitHubUser \
+					/Settings/PackageManager/99/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/100/PackageName \
+					/Settings/PackageManager/100/GitHubUser \
+					/Settings/PackageManager/100/GitHubBranch \
+					/Settings/PackageManager/101/PackageName \
+					/Settings/PackageManager/101/GitHubUser \
+					/Settings/PackageManager/101/GitHubBranch \
+					/Settings/PackageManager/102/PackageName \
+					/Settings/PackageManager/102/GitHubUser \
+					/Settings/PackageManager/102/GitHubBranch \
+					/Settings/PackageManager/103/PackageName \
+					/Settings/PackageManager/103/GitHubUser \
+					/Settings/PackageManager/103/GitHubBranch \
+					/Settings/PackageManager/104/PackageName \
+					/Settings/PackageManager/104/GitHubUser \
+					/Settings/PackageManager/104/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/105/PackageName \
+					/Settings/PackageManager/105/GitHubUser \
+					/Settings/PackageManager/105/GitHubBranch \
+					/Settings/PackageManager/106/PackageName \
+					/Settings/PackageManager/106/GitHubUser \
+					/Settings/PackageManager/106/GitHubBranch \
+					/Settings/PackageManager/107/PackageName \
+					/Settings/PackageManager/107/GitHubUser \
+					/Settings/PackageManager/107/GitHubBranch \
+					/Settings/PackageManager/108/PackageName \
+					/Settings/PackageManager/108/GitHubUser \
+					/Settings/PackageManager/108/GitHubBranch \
+					/Settings/PackageManager/109/PackageName \
+					/Settings/PackageManager/109/GitHubUser \
+					/Settings/PackageManager/109/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/110/PackageName \
+					/Settings/PackageManager/110/GitHubUser \
+					/Settings/PackageManager/110/GitHubBranch \
+					/Settings/PackageManager/111/PackageName \
+					/Settings/PackageManager/111/GitHubUser \
+					/Settings/PackageManager/111/GitHubBranch \
+					/Settings/PackageManager/112/PackageName \
+					/Settings/PackageManager/112/GitHubUser \
+					/Settings/PackageManager/112/GitHubBranch \
+					/Settings/PackageManager/113/PackageName \
+					/Settings/PackageManager/113/GitHubUser \
+					/Settings/PackageManager/113/GitHubBranch \
+					/Settings/PackageManager/114/PackageName \
+					/Settings/PackageManager/114/GitHubUser \
+					/Settings/PackageManager/114/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/115/PackageName \
+					/Settings/PackageManager/115/GitHubUser \
+					/Settings/PackageManager/115/GitHubBranch \
+					/Settings/PackageManager/116/PackageName \
+					/Settings/PackageManager/116/GitHubUser \
+					/Settings/PackageManager/116/GitHubBranch \
+					/Settings/PackageManager/117/PackageName \
+					/Settings/PackageManager/117/GitHubUser \
+					/Settings/PackageManager/117/GitHubBranch \
+					/Settings/PackageManager/118/PackageName \
+					/Settings/PackageManager/118/GitHubUser \
+					/Settings/PackageManager/118/GitHubBranch \
+					/Settings/PackageManager/119/PackageName \
+					/Settings/PackageManager/119/GitHubUser \
+					/Settings/PackageManager/119/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/120/PackageName \
+					/Settings/PackageManager/120/GitHubUser \
+					/Settings/PackageManager/120/GitHubBranch \
+					/Settings/PackageManager/121/PackageName \
+					/Settings/PackageManager/121/GitHubUser \
+					/Settings/PackageManager/121/GitHubBranch \
+					/Settings/PackageManager/122/PackageName \
+					/Settings/PackageManager/122/GitHubUser \
+					/Settings/PackageManager/122/GitHubBranch \
+					/Settings/PackageManager/123/PackageName \
+					/Settings/PackageManager/123/GitHubUser \
+					/Settings/PackageManager/123/GitHubBranch \
+					/Settings/PackageManager/124/PackageName \
+					/Settings/PackageManager/124/GitHubUser \
+					/Settings/PackageManager/124/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/125/PackageName \
+					/Settings/PackageManager/125/GitHubUser \
+					/Settings/PackageManager/125/GitHubBranch \
+					/Settings/PackageManager/126/PackageName \
+					/Settings/PackageManager/126/GitHubUser \
+					/Settings/PackageManager/126/GitHubBranch \
+					/Settings/PackageManager/127/PackageName \
+					/Settings/PackageManager/127/GitHubUser \
+					/Settings/PackageManager/127/GitHubBranch \
+					/Settings/PackageManager/128/PackageName \
+					/Settings/PackageManager/128/GitHubUser \
+					/Settings/PackageManager/128/GitHubBranch \
+					/Settings/PackageManager/129/PackageName \
+					/Settings/PackageManager/129/GitHubUser \
+					/Settings/PackageManager/129/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/130/PackageName \
+					/Settings/PackageManager/130/GitHubUser \
+					/Settings/PackageManager/130/GitHubBranch \
+					/Settings/PackageManager/131/PackageName \
+					/Settings/PackageManager/131/GitHubUser \
+					/Settings/PackageManager/131/GitHubBranch \
+					/Settings/PackageManager/132/PackageName \
+					/Settings/PackageManager/132/GitHubUser \
+					/Settings/PackageManager/132/GitHubBranch \
+					/Settings/PackageManager/133/PackageName \
+					/Settings/PackageManager/133/GitHubUser \
+					/Settings/PackageManager/133/GitHubBranch \
+					/Settings/PackageManager/134/PackageName \
+					/Settings/PackageManager/134/GitHubUser \
+					/Settings/PackageManager/134/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/135/PackageName \
+					/Settings/PackageManager/135/GitHubUser \
+					/Settings/PackageManager/135/GitHubBranch \
+					/Settings/PackageManager/136/PackageName \
+					/Settings/PackageManager/136/GitHubUser \
+					/Settings/PackageManager/136/GitHubBranch \
+					/Settings/PackageManager/137/PackageName \
+					/Settings/PackageManager/137/GitHubUser \
+					/Settings/PackageManager/137/GitHubBranch \
+					/Settings/PackageManager/138/PackageName \
+					/Settings/PackageManager/138/GitHubUser \
+					/Settings/PackageManager/138/GitHubBranch \
+					/Settings/PackageManager/139/PackageName \
+					/Settings/PackageManager/139/GitHubUser \
+					/Settings/PackageManager/139/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/140/PackageName \
+					/Settings/PackageManager/140/GitHubUser \
+					/Settings/PackageManager/140/GitHubBranch \
+					/Settings/PackageManager/141/PackageName \
+					/Settings/PackageManager/141/GitHubUser \
+					/Settings/PackageManager/141/GitHubBranch \
+					/Settings/PackageManager/142/PackageName \
+					/Settings/PackageManager/142/GitHubUser \
+					/Settings/PackageManager/142/GitHubBranch \
+					/Settings/PackageManager/143/PackageName \
+					/Settings/PackageManager/143/GitHubUser \
+					/Settings/PackageManager/143/GitHubBranch \
+					/Settings/PackageManager/144/PackageName \
+					/Settings/PackageManager/144/GitHubUser \
+					/Settings/PackageManager/144/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/145/PackageName \
+					/Settings/PackageManager/145/GitHubUser \
+					/Settings/PackageManager/145/GitHubBranch \
+					/Settings/PackageManager/146/PackageName \
+					/Settings/PackageManager/146/GitHubUser \
+					/Settings/PackageManager/146/GitHubBranch \
+					/Settings/PackageManager/147/PackageName \
+					/Settings/PackageManager/147/GitHubUser \
+					/Settings/PackageManager/147/GitHubBranch \
+					/Settings/PackageManager/148/PackageName \
+					/Settings/PackageManager/148/GitHubUser \
+					/Settings/PackageManager/148/GitHubBranch \
+					/Settings/PackageManager/149/PackageName \
+					/Settings/PackageManager/149/GitHubUser \
+					/Settings/PackageManager/149/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/150/PackageName \
+					/Settings/PackageManager/150/GitHubUser \
+					/Settings/PackageManager/150/GitHubBranch \
+					/Settings/PackageManager/151/PackageName \
+					/Settings/PackageManager/151/GitHubUser \
+					/Settings/PackageManager/151/GitHubBranch \
+					/Settings/PackageManager/152/PackageName \
+					/Settings/PackageManager/152/GitHubUser \
+					/Settings/PackageManager/152/GitHubBranch \
+					/Settings/PackageManager/153/PackageName \
+					/Settings/PackageManager/153/GitHubUser \
+					/Settings/PackageManager/153/GitHubBranch \
+					/Settings/PackageManager/154/PackageName \
+					/Settings/PackageManager/154/GitHubUser \
+					/Settings/PackageManager/154/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/155/PackageName \
+					/Settings/PackageManager/155/GitHubUser \
+					/Settings/PackageManager/155/GitHubBranch \
+					/Settings/PackageManager/156/PackageName \
+					/Settings/PackageManager/156/GitHubUser \
+					/Settings/PackageManager/156/GitHubBranch \
+					/Settings/PackageManager/157/PackageName \
+					/Settings/PackageManager/157/GitHubUser \
+					/Settings/PackageManager/157/GitHubBranch \
+					/Settings/PackageManager/158/PackageName \
+					/Settings/PackageManager/158/GitHubUser \
+					/Settings/PackageManager/158/GitHubBranch \
+					/Settings/PackageManager/159/PackageName \
+					/Settings/PackageManager/159/GitHubUser \
+					/Settings/PackageManager/159/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/160/PackageName \
+					/Settings/PackageManager/160/GitHubUser \
+					/Settings/PackageManager/160/GitHubBranch \
+					/Settings/PackageManager/161/PackageName \
+					/Settings/PackageManager/161/GitHubUser \
+					/Settings/PackageManager/161/GitHubBranch \
+					/Settings/PackageManager/162/PackageName \
+					/Settings/PackageManager/162/GitHubUser \
+					/Settings/PackageManager/162/GitHubBranch \
+					/Settings/PackageManager/163/PackageName \
+					/Settings/PackageManager/163/GitHubUser \
+					/Settings/PackageManager/163/GitHubBranch \
+					/Settings/PackageManager/164/PackageName \
+					/Settings/PackageManager/164/GitHubUser \
+					/Settings/PackageManager/164/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/165/PackageName \
+					/Settings/PackageManager/165/GitHubUser \
+					/Settings/PackageManager/165/GitHubBranch \
+					/Settings/PackageManager/166/PackageName \
+					/Settings/PackageManager/166/GitHubUser \
+					/Settings/PackageManager/166/GitHubBranch \
+					/Settings/PackageManager/167/PackageName \
+					/Settings/PackageManager/167/GitHubUser \
+					/Settings/PackageManager/167/GitHubBranch \
+					/Settings/PackageManager/168/PackageName \
+					/Settings/PackageManager/168/GitHubUser \
+					/Settings/PackageManager/168/GitHubBranch \
+					/Settings/PackageManager/169/PackageName \
+					/Settings/PackageManager/169/GitHubUser \
+					/Settings/PackageManager/169/GitHubBranch > /dev/null

@@ -46,3 +46,34 @@ removeDbusSettings	/Settings/PackageManager/5/PackageName \
 					/Settings/PackageManager/9/GitHubUser \
 					/Settings/PackageManager/9/GitHubBranch > /dev/null
 
+removeDbusSettings	/Settings/PackageManager/10/PackageName \
+					/Settings/PackageManager/10/GitHubUser \
+					/Settings/PackageManager/10/GitHubBranch \
+					/Settings/PackageManager/11/PackageName \
+					/Settings/PackageManager/11/GitHubUser \
+					/Settings/PackageManager/11/GitHubBranch \
+					/Settings/PackageManager/12/PackageName \
+					/Settings/PackageManager/12/GitHubUser \
+					/Settings/PackageManager/12/GitHubBranch \
+					/Settings/PackageManager/13/PackageName \
+					/Settings/PackageManager/13/GitHubUser \
+					/Settings/PackageManager/13/GitHubBranch \
+					/Settings/PackageManager/14/PackageName \
+					/Settings/PackageManager/14/GitHubUser \
+					/Settings/PackageManager/14/GitHubBranch > /dev/null
+
+removeDbusSettings	/Settings/PackageManager/15/PackageName \
+					/Settings/PackageManager/15/GitHubUser \
+					/Settings/PackageManager/15/GitHubBranch \
+					/Settings/PackageManager/16/PackageName \
+					/Settings/PackageManager/16/GitHubUser \
+					/Settings/PackageManager/16/GitHubBranch \
+					/Settings/PackageManager/17/PackageName \
+					/Settings/PackageManager/17/GitHubUser \
+					/Settings/PackageManager/17/GitHubBranch \
+					/Settings/PackageManager/18/PackageName \
+					/Settings/PackageManager/18/GitHubUser \
+					/Settings/PackageManager/18/GitHubBranch \
+					/Settings/PackageManager/19/PackageName \
+					/Settings/PackageManager/19/GitHubUser \
+					/Settings/PackageManager/19/GitHubBranch > /dev/null

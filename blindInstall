@@ -78,8 +78,7 @@ if $runSetup ; then
 	rm -rf "$setupHelperInstalled"
 	mv "$setupHelperBlind" "$setupHelperInstalled"
 
-	# eliminiate the blind install call in rcS.local
-	#	SetupHelper/setup will create a new one rcS.local
+	# run the setup script
 	"$setupHelperInstalled/setup" reinstall
 # remove SetupHelper from archive - it wasn't newer
 else

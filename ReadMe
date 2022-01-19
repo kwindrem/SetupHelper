@@ -1,4 +1,4 @@
-New: SetupHelper includes a GUI based package mananager
+New: SetupHelper includes a GUI based package manager
 
 The SetupHelper package provides:
     a mechanism to automatically reinstall packages following a Venus OS update
@@ -57,13 +57,13 @@ CAUTION:
 Description:
 
 There are two parts to SetupHelper:
-1) Package Manager, controls automatic and manual updates to pacakges
+1) Package Manager, controls automatic and manual updates to packages
 
 2) Utilities used by other packages' setup scripts.
-	These resources simplfy the task of writing install/uninstall scripts
+	These resources simplify the task of writing install/uninstall scripts
 	and may be of help to others writing packages of their own.
 
-The latter is of concern only to those writing new Venus modificaitons
+The latter is of concern only to those writing new Venus modifications
 or modifying an existing setup script.
 These are described in detail later in the SetupHelperDescription document.
 
@@ -74,22 +74,22 @@ The Package Manager includes a set of menus on the GX device menu system
 	control automatic package updates
 	and manually install, uninstall, add and remove packages.
 	
-	A python program runs in the backgrouns (as a service) to do the actual
+	A python program runs in the background (as a service) to do the actual
 		work and to interface with the menus.
 
 	Package Manager menu:
 
 		The first line of this menu provides status for Package Manager,
-			indicating what it is currenly doing
+			indicating what it is currently doing
 
 		Automatic GitHub downloads controls if packages are automatically downloaded
 				from GitHub. This occurs if a newer version is available.
 			Modes:
 				Normal checks GitHub for a package once every 5 minutes 
-					and waits 10 minutes after a download has occured before checking another
+					and waits 10 minutes after a download has occurred before checking another
 				Fast checks GitHub for a package once every 5 seconds (10 seconds after a download),
 					then after one pass through all packages, the downloads are switched to Normal rate
-				Once checks GitHub for a package at the fast rate, but only once, then dowloads are turned off
+				Once checks GitHub for a package at the fast rate, but only once, then downloads are turned off
 				Disable disables GitHub downloads
 
 		Auto install packages:
@@ -106,10 +106,10 @@ The Package Manager includes a set of menus on the GX device menu system
 			
 			Version information is displayed for each package:
 				Git Hub shows the version found on GitHub
-				Stored shows the verison stored on the GX device
+				Stored shows the version stored on the GX device
 				Installed shows the version actually installed and running
 
-			Tappingn on one of the entries leads to the Package editor menu
+			Tapping on one of the entries leads to the Package editor menu
 
 		Inactive packages:
 			displays all INACTIVE packages
@@ -143,7 +143,7 @@ The Package Manager includes a set of menus on the GX device menu system
 			The parameters must exist to be saved
 			The parameters must exist to be updated during a restore
 
-			Note: Victron is working on a more compresenhive mechanism but is not working reliably yet
+			Note: Victron is working on a more comprehensive mechanism but is not working reliably yet
 				This part of PackageManager is temporary and will be removed when the Victron functionality is working
 
 
@@ -186,7 +186,7 @@ USB/SD updates:
 	When the GX device is not connected to the internet, a USB flash drive or microSD card provides an install/upgrade path.
 
 	To use the USB update process
-		Navigate to the GitHub, repo, click on tags and select the appropirate branch or specific version tag. 
+		Navigate to the GitHub, repo, click on tags and select the appropriate branch or specific version tag. 
 		Choose the .tar.gz download link.
 		(Do not download from the Code tab or download the .zip file. These won't work.)
 		Copy the archive file to a USB memory stick or microSD card.
@@ -199,8 +199,8 @@ USB/SD updates:
 			and update the package list with the new packages. 
 		If Auto install packages is turned on, the packages will then be installed
 		
-		NOTE: no vesion checks are made for packages found on SD/USB media!
+		NOTE: no version checks are made for packages found on SD/USB media!
 			Package Manager is quite content to transfer and install an older version!
 			So make sure you have the latest version especially if your GX device does not have internet access.
 
-If you are insterested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription (to be provided later)
+If you are interested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription (to be provided later)

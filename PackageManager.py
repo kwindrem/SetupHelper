@@ -1125,7 +1125,7 @@ class DbusIfClass:
 		self.DbusService.add_path ('/DefaultCount', 0 )
 
 		# a special package used for editing a package prior to adding it to Package list
-		self.EditPackage = PackageClass (section = "Edit")
+		self.EditPackage = PackageClass ( section = "Edit", packageName = "new" )
 		
 		self.rawDefaultPackages = []
 		self.defaultPackageList = []
@@ -1402,7 +1402,7 @@ class PackageClass:
 
 
 	def settingChangedHandler (self, name, old, new):
-		# when GitHub information changes, need to refresh GitHub version for this package
+		# when dbus information changes, need to refresh local mirrors
 		if name == 'packageName':
 			self.PackageName = new
 		elif name == 'gitHubBranch':
@@ -1468,7 +1468,11 @@ class PackageClass:
 		self.Incompatible = ''
 		self.RebootNeeded = ''
 		self.GuiRestartNeeded = ''
-		
+
+		# needed because settingChangeHandler may be called as soon as SettingsDevice is called
+		#	which is before actual package name is set below
+		#	so this avoids a crash
+		self.PackageName = ""
 
 		settingsList =	{'packageName': [ self.packageNamePath, '', 0, 0 ],
 						'gitHubUser': [ self.gitHubUserPath, '', 0, 0 ],
@@ -1476,11 +1480,13 @@ class PackageClass:
 						}
 		self.DbusSettings = SettingsDevice(bus=dbus.SystemBus(), supportedSettings=settingsList,
 				eventCallback=self.settingChangedHandler, timeout = 10)
+
 		# if packageName specified on init, use that name
 		if packageName != None:
 			self.DbusSettings['packageName'] = packageName
 			self.PackageName = packageName
 		# otherwise pull name from dBus Settings
+		#	 this happens when adding a package when it is already in dbus
 		else:
 			self.PackageName = self.DbusSettings['packageName']
 		self.GitHubUser = self.DbusSettings['gitHubUser']
@@ -1518,7 +1524,8 @@ class PackageClass:
 			return False
 		i = 0
 		while i < packageCount:
-			cls.PackageList.append(PackageClass (section = i))
+			# no package name tells PackageClas init to pull package name from dbus
+			cls.PackageList.append (PackageClass ( section = i ) )
 			i += 1
 		return True
 
@@ -1534,7 +1541,7 @@ class PackageClass:
 	#	name must be unique - that is not match any existing packages
 
 	rejectList = [ "-current", "-latest", "-main", "-test", "-debug", "-beta", "-backup1", "-backup2",
-					"-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
+					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
 
 	@classmethod
 	def AddStoredPackages (cls):
@@ -1673,16 +1680,25 @@ class PackageClass:
 	#		package from being re-added to the package list
 	#		flag file is deleted when package is manually installed again
 	#
+	#	Remove package must be passed either the package name or an index into PackageList
+	#
 	#	returns True if package was removed, False if not
 	#
 	#	this is all done while the package list is locked !!!!
 
 	@classmethod
-	def RemovePackage (cls, packageName ):
-		if packageName == "SetupHelper":
-			DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
+	def RemovePackage (cls, packageName=None, packageIndex=None ):
+		if packageName != None:
+			if packageName == "SetupHelper":
+				DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
+			else:
+				DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
+		elif packageIndex != None:
+				DbusIf.UpdateStatus ( message="removing " + package.PackageName, where='Editor', logLevel=WARNING )
+		# neither package name nor package instance passed - can't do anything
 		else:
-			DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
+			logging.error ( "RemovePackage: no package info passed - nothing done" )
+			return
 		DbusIf.LOCK ()
 		packages = PackageClass.PackageList
 		if len (packages) == 0:
@@ -1690,14 +1706,18 @@ class PackageClass:
 			return
 
 		# locate index of packageName
-		toIndex = 0
-		listLength = len (packages)
-		matchFound = False
-		while toIndex < listLength:
-			if packageName == packages[toIndex].PackageName:
-				matchFound = True
-				break
-			toIndex += 1
+		if packageName != None:
+			toIndex = 0
+			listLength = len (packages)
+			matchFound = False
+			while toIndex < listLength:
+				if packageName == packages[toIndex].PackageName:
+					matchFound = True
+					break
+				toIndex += 1
+		else:
+			toIndex = packageIndex
+			matchFound = True
 
 		if matchFound:
 			# move packages after the one to be remove down one slot (copy info)
@@ -2502,11 +2522,13 @@ class InstallPackagesClass (threading.Thread):
 			# set package GuiRestartNeeded so GUI can show the need - does NOT trigger a restart
 			package.SetGuiRestartNeeded (True)
 
-			logging.warning ( packageName + " " + direction + " requires GUI restart" )
 			if source == 'GUI':
+				DbusIf.UpdateStatus ( message=packageName + " " + direction + " requires GUI restart",
+											where=sendStatusTo, logLevel=WARNING )
 				DbusIf.SetGuiEditAction ( 'GuiRestartNeeded' )
 			# auto install triggers a GUI restart by setting the global flag - restart handled in main_loop
 			else:
+				logging.warning ( packageName + " " + direction + " requires GUI restart" )
 				global GuiRestart
 				GuiRestart = True
 		elif returnCode == EXIT_RUN_AGAIN:
@@ -3134,6 +3156,12 @@ def main():
 	PackageClass.AddPackagesFromDbus ()
 
 	DbusIf.TransferOldDbusPackageInfo ()
+	
+	# clean up package list - eliminate any packages without a name
+	#	field reported packages with no names so just making sure it doesn't happen
+	for (index, package) in enumerate (PackageClass.PackageList):
+		if package.PackageName == None or package.PackageName == "":
+			RemovePackage (packageIndex=index)
 
 	global UpdateGitHubVersion
 	UpdateGitHubVersion = UpdateGitHubVersionClass ()

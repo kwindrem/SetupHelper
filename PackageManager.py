@@ -1304,7 +1304,7 @@ class PackageClass:
 		optionsDir = "/data/setupOptions/"
 		optionsPath = optionsDir + packageName
 		if not os.path.isdir (optionsDir):
-			os.mkdir (optionsPath)
+			os.mkdir (optionsDir)
 		if not os.path.isdir (optionsPath):
 			os.mkdir (optionsPath)
 
@@ -2800,6 +2800,17 @@ class MediaScanClass (threading.Thread):
 						continue
 					shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
 					overlayCount += 1
+
+		# backup setup script options
+		optionsSourceDir = "/data/setupOptions"
+		optionsDestDir = backupPath + "/setupOptions"
+
+		# remove any previous options backups
+		if os.path.isdir (optionsDestDir):
+			shutil.rmtree (optionsDestDir)
+
+		if os.path.isdir (optionsSourceDir):
+			shutil.copytree ( optionsSourceDir, optionsDestDir )
 		
 		logging.warning ("settings backup completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
 
@@ -2835,6 +2846,17 @@ class MediaScanClass (threading.Thread):
 					shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
 					overlayCount += 1
 
+		# restore setup script options
+		optionsSourceDir = backupPath + "/setupOptions"
+		optionsDestDir = "/data/setupOptions"
+
+		# remove any previous options backups
+		if os.path.isdir (optionsDestDir):
+			shutil.rmtree (optionsDestDir)
+
+		if os.path.isdir (optionsSourceDir):
+			shutil.copytree ( optionsSourceDir, optionsDestDir )
+		
 		logging.warning ("settings restore completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
 
 

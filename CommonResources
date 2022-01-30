@@ -469,7 +469,7 @@ endScript ()
 				exit $EXIT_REBOOT
 			fi
 		else
-			echo "rebooting needed"
+			echo "reboot needed"
 			exit $EXIT_REBOOT
 		fi
 	elif $restartGui ; then

@@ -140,6 +140,7 @@ The Package Manager includes a set of menus on the GX device menu system
 					SystemSetup
 					Vrmlogger
 				Any logo files in /data/themes/overlay
+				Setup script options in /data/setupOptions
 			The parameters must exist to be saved
 			The parameters must exist to be updated during a restore
 

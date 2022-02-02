@@ -349,8 +349,8 @@ _checkFileSets ()
                 otherVersionDir="$pkgFileSets/$otherVersion"
                 otherFile="$pkgFileSets/$otherVersion/$baseName"
 
-                # skip future versions
-                if (( $versionNumber > $venusVersionNumber )); then
+                # skip this version
+                if (( $versionNumber == $venusVersionNumber )); then
                     continue
                 fi
                 # skip symbolic links and nonexistent originals
@@ -712,7 +712,7 @@ else
 	fi
 
 	if [ ! -d "$setupOptionsDir" ]; then
-		logMessage "creating package options directory to $setupOptionsDir"
+		logMessage "creating package options directory $setupOptionsDir"
 		mkdir $setupOptionsDir
 	fi
 fi

@@ -1,3 +1,8 @@
+v4.6:
+	fixed: released version file set skipped for versions still in beta
+		this typically only happens for a large version
+		after the small version is released
+
 v4.5:
 	forgot to update blind install files
 

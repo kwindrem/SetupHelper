@@ -1,3 +1,7 @@
+
+v4.7:
+	fixed: another bug matching original files from released and large verisons
+
 v4.6:
 	fixed: released version file set skipped for versions still in beta
 		this typically only happens for a large version

@@ -350,7 +350,7 @@ _checkFileSets ()
                 otherFile="$pkgFileSets/$otherVersion/$baseName"
 
                 # skip this version
-                if (( $versionNumber == $venusVersionNumber )); then
+                if [ "$venusVersion" = "$otherVersion" ]; then
                     continue
                 fi
                 # skip symbolic links and nonexistent originals

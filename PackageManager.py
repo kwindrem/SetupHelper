@@ -1540,7 +1540,7 @@ class PackageClass:
 	#	first character of version file must be 'v'
 	#	name must be unique - that is not match any existing packages
 
-	rejectList = [ "-current", "-latest", "-main", "-test", "-debug", "-beta", "-backup1", "-backup2",
+	rejectList = [ "-current", "-latest", "-main", "-test", "-temp", "-debug", "-beta", "-backup1", "-backup2",
 					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
 
 	@classmethod

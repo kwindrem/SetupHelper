@@ -62,3 +62,17 @@ logMessage ()
         echo "$shortScriptName: $*" | tai64n >> $packageLogFile
     fi
 }
+
+
+# truncates the log file if it's larger than 2000 lines
+# it is called from the initialization code in CommonResources
+# if NOT running at boot time
+
+pruneSetupLogFile ()
+{
+    if [ $(wc -l $setupLogFile | awk '{print $1}') -gt 2000 ]; then
+        tail -1000 $setupLogFile > $setupLogFile.tmp
+        mv $setupLogFile.tmp $setupLogFile
+        logMessage "log file truncated to last 1000 lines"
+    fi
+}

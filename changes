@@ -1,3 +1,6 @@
+v4.8:
+	fixed: blind install fails if stored SetupHelper version is newer than archive version
+		but SetupHelper not currently installed.
 
 v4.7:
 	fixed: another bug matching original files from released and large verisons

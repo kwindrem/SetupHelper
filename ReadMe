@@ -30,6 +30,10 @@ By far, the easiest way to install SetupHelper is the "blind install"
 		VERY IMPORTANT to prevent the next reboot from starting the process all over again
 		failure to do so could disable reinstalls following a Venus OS firmware update !!!
 
+	Note: Mac OS and Safari are set by default to unzip packages.
+		This Open "safe" files after downloading must be disabled in order to retain the
+			zip file. This option is at the bottom of Safair Preferences General
+
     CAUTION: This mechanism overwrites /data/rcS.local !!!!
         If you are using rcS.local to perform boot-time activities,
         /data/rcS.local must be recreated following this "blind" install
@@ -40,8 +44,12 @@ By far, the easiest way to install SetupHelper is the "blind install"
     venus-data.tgz is available here:
         https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz
         
-Other mechanisms to install SetupHelper require command-line interaction with the GX device
-	and are no longer recommended for SetupHelper or my other packages
+
+Another way to install SetupHelper is to use the following from the command line of the GX device:
+
+	wget -qO - https://github.com/kwindrem/SetupHelper/archive/latest.tar.gz | tar -xzf - -C /data
+	mv /data/SetupHelper-latest /data/SetupHelper
+	/data/SetupHelper/setup
 
 Once SetupHelper is installed, updates to it and other packages can be performed through the GUI
 using the PackageManager menus.
@@ -49,7 +57,7 @@ using the PackageManager menus.
 CAUTION:
 	Package Manager allows uninstalling SetupHelper.
 	This can not be undone since the menus to control Package Manager will go away
-	You would need to use the Blind Install again to reinstall SetupHelper
+	You would need to use the Blind Install or run /data/SetupHelper/setup again to reinstall SetupHelper
 	
 	Note that removal does not actually remove the package so other setup scripts
 	will continue to function.

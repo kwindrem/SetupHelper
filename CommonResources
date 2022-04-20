@@ -335,28 +335,27 @@ _checkFileSets ()
             continue
         fi
 
-        # if an active file exists
-        # find the LATEST match in PREVOUS file sets
+        # if an active file exists look for a match in another file set
         if [ ! -z "$activeFile" ]; then
-            # look for a match in another version
+            # search the version list backwards (slightly faster)
             matchFound=false
-            # search the version list backwards so the first match is the latest one
             local i=${#versionList[@]}
             while (( i > 0 )); do
                 (( i-- ))
                 otherVersion=$(basename ${versionList[i]})
-                versionStringToNumber $otherVersion
-                otherVersionDir="$pkgFileSets/$otherVersion"
-                otherFile="$pkgFileSets/$otherVersion/$baseName"
 
                 # skip this version
                 if [ "$venusVersion" = "$otherVersion" ]; then
                     continue
                 fi
+
+                otherFile="$pkgFileSets/$otherVersion/$baseName"
+
                 # skip symbolic links and nonexistent originals
                 if [ ! -f "$otherFile.orig" ] || [ -L "$otherFile.orig" ] ; then
                     continue
                 fi
+                
                 cmp -s "$activeFile" "$otherFile.orig" > /dev/null
                 # files match
                 if [ $? -eq 0 ]; then
@@ -369,10 +368,12 @@ _checkFileSets ()
 				if [ -e "$fileSet/$baseName.orig" ]; then
 					rm -rf "$fileSet/$baseName.orig"
 				fi
+                rm -f "$fileSet/$baseName.orig"
                 ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 rm -f "$fileSet/$baseName.NO_ORIG"
                 # if other file set contains a replacement file, link to it
                 if [ -f "$otherFile" ]; then
+					rm -f "$fileSet/$baseName"
                     ln -s "../$otherVersion/$baseName" "$fileSet/$baseName"
                     rm -f "$fileSet/$baseName.NO_REPLACEMENT"
                     rm -f "$fileSet/$baseName.USE_ORIGINAL"
@@ -638,6 +639,7 @@ if $reinstall ; then
 # not running from reinstallMods
 else
     runningAtBoot=false
+    pruneSetupLogFile
 fi
 
 # initialze integer version number for venus version

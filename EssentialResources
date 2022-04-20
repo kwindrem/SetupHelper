@@ -61,7 +61,6 @@ qmlDir=/opt/victronenergy/gui/qml
 # the ~Z portion indicates a pre-release version so a version without it is later than a version with it
 # the -W portion is like the ~Z for large builds
 # 	the large portion is IGNORED !!!!
-#	note part[0] is always null because there is nothing before v which is used as a separator
 #
 # the incoming verison string is split on every non-digit character
 # the first three of those pieces are combined into a single integer

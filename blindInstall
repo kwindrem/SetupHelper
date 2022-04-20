@@ -10,8 +10,8 @@
 # overriting content in /data
 #
 # the archive unpacks to /data/SetupHelper-blind
-# then blindInstall compares versions between /data/SetupHelper-blind anc /data/SetupHelper
-# if blind is NEWER, SetupHelper-blind replaces SetupHelper, and the setup script is run
+# then blindInstall compares versions between /data/SetupHelper-blind and the installed version of SetupHelper
+# if blind is DIFFERENT, SetupHelper-blind replaces SetupHelper and the setup script is run
 #
 # for this archive, Venus must be rebooted a second time, causing this speial rcS.local to run,
 # which calls blindInstall as a background task.
@@ -40,48 +40,50 @@ done
 sleep 2
 
 setupHelperBlind='/data/SetupHelper-blind'
-setupHelperInstalled='/data/SetupHelper'
+setupHelperStored='/data/SetupHelper'
+setupHelperInstalledVersion='/etc/venus/installedVersion-SetupHelper'
 
 runSetup=false
 if [ -d "$setupHelperBlind" ]; then
-	# compare versions
-	if [ -d "$setupHelperInstalled" ]; then
-		if [ -f "$setupHelperBlind/version" ]; then
-			versionStringToNumber $(cat "$setupHelperBlind/version")
-			blindVersion=$versionNumber
-		else
-			blindVersion=0
-		fi
-		if [ -f "$setupHelperInstalled/version" ]; then
-			versionStringToNumber $(cat "$setupHelperInstalled/version")
-			packageVersion=$versionNumber
-		else
-			packageVersion=0
-		fi
-		if (( blindVersion > packageVersion )); then
-			runSetup=true
-		fi
+	if [ -f "$setupHelperBlind/version" ]; then
+		versionStringToNumber $(cat "$setupHelperBlind/version")
+		blindVersion=$versionNumber
 	else
+		blindVersion=0
+	fi
+	if [ -f "$setupHelperInstalledVersion" ]; then
+		versionStringToNumber $(cat "$setupHelperInstalledVersion")
+		installedVersion=$versionNumber
+	else
+		installedVersion=0
+	fi
+	# no stored version of SetupHelper
+	if [ ! -d "$setupHelperStored" ]; then
+		runSetup=true
+	# versions differ
+	elif (( installedVersion != blindVersion )); then
 		runSetup=true
 	fi
+else
+	logMessage "SetupHelper-blind not extracted from the media - nothing to do"
 fi
 
 # get rid of the blind install rcS.local so it can't run again
-# (unless the archive still exists on the media on next boot)
+# (unless the archive still exists on the media on next boot which will reinstall rcS.local)
 # SetupHelper/setup will install the proper one
 rm -f /data/rcS.local
 
+# move the extracted archive into position and run the setup script
 if $runSetup ; then
-	logMessage "blind install SetupHelper"
+	logMessage "blind install installing SetupHelper"
 
 	# replace SetupHelper with the one from the archive
-	rm -rf "$setupHelperInstalled"
-	mv "$setupHelperBlind" "$setupHelperInstalled"
+	rm -rf "$setupHelperStored"
+	mv "$setupHelperBlind" "$setupHelperStored"
 
 	# run the setup script
-	"$setupHelperInstalled/setup" reinstall
-# remove SetupHelper from archive - it wasn't newer
+	"$setupHelperStored/setup" install
 else
-	logMessage "blind install did NOT update SetupHelper (probably an older version)"
+	logMessage "blind install did NOT update SetupHelper (probably same version)"
 	rm -rf "$setupHelperBlind"
 fi

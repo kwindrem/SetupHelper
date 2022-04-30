@@ -1,4 +1,4 @@
-v4.9:
+v4.9/10:
 	added dbus Settings cleanup to remove invalid packages
 
 v4.8:

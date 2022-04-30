@@ -682,7 +682,7 @@ class AddRemoveClass (threading.Thread):
 								gitHubUser=user, gitHubBranch=branch )
 
 			elif action == 'remove':
-				PackageClass.RemovePackage ( packageName )
+				PackageClass.RemovePackage ( packageName=packageName )
 
 			else:
 				logging.warning ( "received invalid action " + command + " from " + source + " - discarding" )
@@ -1530,6 +1530,29 @@ class PackageClass:
 		return True
 
 
+	#	PackageNameValid
+	# checks the package name to see if it is valid
+	#
+	# invalid names contain strings in the rejectList
+	#
+	# returns true if name is OK, false if in the reject list
+
+	rejectList = [ "-current", "-latest", "-main", "-test", "-temp", "-debug", "-beta", "-backup1", "-backup2",
+					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
+
+	@classmethod
+	def PackageNameValid (cls, packageName):
+
+		if packageName == None or packageName == "":
+			return False
+
+		for reject in cls.rejectList:
+			if reject in packageName:
+				return False
+
+		return True
+
+
 	#	AddStoredPackages
 	# add packages stored in /data to the package list
 	# in order to qualify as a package:
@@ -1540,9 +1563,6 @@ class PackageClass:
 	#	first character of version file must be 'v'
 	#	name must be unique - that is not match any existing packages
 
-	rejectList = [ "-current", "-latest", "-main", "-test", "-temp", "-debug", "-beta", "-backup1", "-backup2",
-					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
-
 	@classmethod
 	def AddStoredPackages (cls):
 		for path in os.listdir ("/data"):
@@ -1550,12 +1570,7 @@ class PackageClass:
 			if not os.path.isdir (packageDir):
 				continue
 			packageName = path
-			rejected = False
-			for reject in cls.rejectList:
-				if reject in packageName:
-					rejected = True
-					break
-			if rejected:
+			if not PackageClass.PackageNameValid (packageName):
 				continue
 
 			# skip if package was manually removed
@@ -1669,10 +1684,12 @@ class PackageClass:
 		DbusIf.UNLOCK ()
 	# end AddPackage
 
-	# packages are removed as a request from the GUI
+
+	# packages are removed as a request from the GUI (packageName specified)
+	# or during system initialization (packageIndex specified)
 	# to remove a package:
 	#	1) locate the entry matching package name  (if any)
-	#	2) move all packages after that entry the previous slot (if any)
+	#	2) move all packages after that entry to the previous slot (if any)
 	#	3) erase the last package slot to avoid confusion (by looking at dbus-spy)
 	#	3) remove the entry in PackageList (pop)
 	#	4) update the package count
@@ -1688,33 +1705,43 @@ class PackageClass:
 
 	@classmethod
 	def RemovePackage (cls, packageName=None, packageIndex=None ):
+		# packageName specified so this is a call from the package editor
 		if packageName != None:
+			manualRemove = True
 			if packageName == "SetupHelper":
 				DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
 			else:
 				DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
+		# no package name specified, so this is a call from system initialization - messages to log only
 		elif packageIndex != None:
-				DbusIf.UpdateStatus ( message="removing " + package.PackageName, where='Editor', logLevel=WARNING )
+			manualRemove = False
+			name = PackageClass.PackageList [packageIndex].PackageName
+			if name == None or name == "":
+				logging.error ( "RemovePackage: removing package without a name" )
+			else:
+				logging.error ( "RemovePackage: removing " + name )
 		# neither package name nor package instance passed - can't do anything
 		else:
 			logging.error ( "RemovePackage: no package info passed - nothing done" )
 			return
+
 		DbusIf.LOCK ()
 		packages = PackageClass.PackageList
+		listLength = len (packages)
 		if len (packages) == 0:
 			DbusIf.UNLOCK ()
 			return
 
 		# locate index of packageName
-		if packageName != None:
+		if manualRemove:
 			toIndex = 0
-			listLength = len (packages)
 			matchFound = False
 			while toIndex < listLength:
 				if packageName == packages[toIndex].PackageName:
 					matchFound = True
 					break
 				toIndex += 1
+		# called from init - already have index
 		else:
 			toIndex = packageIndex
 			matchFound = True
@@ -1773,15 +1800,16 @@ class PackageClass:
 		DbusIf.UNLOCK ()
 		# this package was manually removed block automatic adds
 		#	in the package directory
-		if matchFound:
-			# block automatic adds
-			PackageClass.SetAutoAddOk (packageName, False)
+		if manualRemove:
+			if matchFound:
+				# block automatic adds
+				PackageClass.SetAutoAddOk (packageName, False)
 
-			DbusIf.UpdateStatus ( message="", where='Editor' )
-			DbusIf.SetGuiEditAction ( '' )
-		else:
-			DbusIf.UpdateStatus ( message=packageName + " not removed - name not found", where='Editor', logLevel=ERROR )
-			DbusIf.SetGuiEditAction ( 'ERROR' )
+				DbusIf.UpdateStatus ( message="", where='Editor' )
+				DbusIf.SetGuiEditAction ( '' )
+			else:
+				DbusIf.UpdateStatus ( message=packageName + " not removed - name not found", where='Editor', logLevel=ERROR )
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 
 
 	#	UpdateFileFlagsAndVersions
@@ -3179,11 +3207,11 @@ def main():
 
 	DbusIf.TransferOldDbusPackageInfo ()
 	
-	# clean up package list - eliminate any packages without a name
-	#	field reported packages with no names so just making sure it doesn't happen
+	# clean up package list - eliminate any packages if its name is not valid
+	#	invalid package names may be left over from a previous version
 	for (index, package) in enumerate (PackageClass.PackageList):
-		if package.PackageName == None or package.PackageName == "":
-			RemovePackage (packageIndex=index)
+		if not PackageClass.PackageNameValid (package.PackageName):
+			PackageClass.RemovePackage (packageIndex=index)
 
 	global UpdateGitHubVersion
 	UpdateGitHubVersion = UpdateGitHubVersionClass ()

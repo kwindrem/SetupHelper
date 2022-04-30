@@ -1,3 +1,6 @@
+v4.9:
+	added dbus Settings cleanup to remove invalid packages
+
 v4.8:
 	fixed: blind install fails if stored SetupHelper version is newer than archive version
 		but SetupHelper not currently installed.

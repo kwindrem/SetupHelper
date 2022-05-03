@@ -1,3 +1,6 @@
+v4.11:
+	added support for Venus OS v2.90~3 firmware
+
 v4.9/10:
 	added dbus Settings cleanup to remove invalid packages
 

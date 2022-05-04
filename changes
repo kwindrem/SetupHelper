@@ -1,3 +1,6 @@
+v4.12:
+	added checks for file set errors before attempting auto install
+
 v4.11:
 	added support for Venus OS v2.90~3 firmware
 

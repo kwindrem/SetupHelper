@@ -1497,6 +1497,9 @@ class PackageClass:
 		self.DownloadPending = False
 		self.InstallPending = False
 
+		self.AutoInstallOk = False
+		self.FileSetOk = False
+
 
 
 	# dbus Settings is the primary non-volatile storage for packageManager
@@ -1832,6 +1835,9 @@ class PackageClass:
 	# must be called while LOCKED !!
 
 	def UpdateFileFlagsAndVersions (self):
+		global VersionToNumber
+		global VenusVersion
+		global VenusVersionNumber
 
 		packageName = self.PackageName
 
@@ -1855,6 +1861,7 @@ class PackageClass:
 		if not os.path.isdir (packageDir):
 			self.SetPackageVersion ("")
 			self.AutoInstallOk = False
+			self.FileSetOk = False
 			self.SetIncompatible ('')
 			return
 
@@ -1883,7 +1890,14 @@ class PackageClass:
 		if os.path.exists (flagFile):
 			self.AutoInstallOk = False
 		else:
-			self.AutoInstallOk =  True
+			self.AutoInstallOk = True
+
+		# also check to see if file set has errors
+		flagFile = packageDir + "/FileSets/" + VenusVersion + "/INCOMPLETE"
+		if os.path.exists (flagFile):
+			self.FileSetOk = False
+		else:
+			self.FileSetOk = True
 
 		# platform is OK, now check versions
 		if incompatible == False:
@@ -1902,9 +1916,6 @@ class PackageClass:
 			else:
 				obsoleteVersion = fd.readline().strip()
 			
-			global VersionToNumber
-			global VenusVersion
-			global VenusVersionNumber
 			firstVersionNumber = VersionToNumber (firstVersion)
 			obsoleteVersionNumber = VersionToNumber (obsoleteVersion)
 			if VenusVersionNumber < firstVersionNumber:
@@ -3061,7 +3072,7 @@ def mainLoop():
 			PushAction ( command='download' + ':' + packageName, source='AUTO' )
 			packageOperationOk = False	# don't allow other operations if download was triggered
 
-		if packageOperationOk and package.AutoInstallOk and package.Incompatible == ''\
+		if packageOperationOk and package.AutoInstallOk and package.FileSetOk and package.Incompatible == ''\
 					and DbusIf.GetAutoInstall () and package.InstallVersionCheck ():
 			PushAction ( command='install' + ':' + packageName, source='AUTO' )
 

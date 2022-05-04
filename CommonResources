@@ -28,6 +28,7 @@ source "$setupHelperDir/DbusSettingsResources"
 #  checkFileSets EXITS locally
 
 scriptAction='NONE'
+installFailed=false
 
 # flags to control setup script exit behavior
 rebootNeeded=false
@@ -213,6 +214,8 @@ updateActiveFile ()
             logMessage "ERROR: no replacement file for $sourceFile"
             thisFileUpdated=false
             scriptAction='UNINSTALL'
+			touch "$fileSet/INCOMPLETE"
+            installFailed=true
         fi
         return
     fi
@@ -445,15 +448,20 @@ endScript ()
             mv "$scriptDir/tmp" "$reinstallScriptsList"
         fi
 
-        # clean up only - flag not used since package is being removed
-        rm -f "$installedFlag"	# obsolete but remove it anyway
+        # flag package not installed since package is being removed
         rm -f "$installedVersionFile"
+        rm -f "$installedFlag"	# obsolete but remove it anyway
 	else
 		logMessage "unexpected script action $scriptAction - did not install or uninstall"
     fi
 
 	# prioritize exit
-	if $versionNotCompatible ; then
+	# if installation was attempted but failed, exit without checking anything else
+	#	or signaling GUI restart or reboot
+	if $installFailed ; then
+		logMessage "installation failed - package uninstalled - exiting"
+		exit $EXIT_FILE_SET_ERROR
+	elif $versionNotCompatible ; then
 		logMessage "version not compatible - exiting"
 		exit $EXIT_INCOMPATIBLE_VERSION
 	elif $platformNotCompatible ; then
@@ -722,11 +730,15 @@ fi
 # attempting an install without the comand line prompting
 #	and needed options have not been set yet
 #	can't continue
-if [ $scriptAction == 'INSTALL' ] && ! $optionsSet ; then
-	logMessage "required options have not been set - can't install"
-	exit $EXIT_OPTIONS_NOT_SET
+if [ $scriptAction == 'INSTALL' ]; then
+	if ! $optionsSet ; then
+		logMessage "required options have not been set - can't install"
+		exit $EXIT_OPTIONS_NOT_SET
+	fi
 fi
 # if forcing an uninstall, skip file set checks
 if [ $scriptAction != 'UNINSTALL' ]; then
+	# note _checkFileSets will exit if file set error exists
     _checkFileSets
 fi
+

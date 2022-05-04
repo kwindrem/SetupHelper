@@ -1,3 +1,6 @@
+v4.13:
+	add logs as part of settings backup
+
 v4.12:
 	added checks for file set errors before attempting auto install
 

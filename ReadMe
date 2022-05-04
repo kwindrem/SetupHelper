@@ -11,6 +11,10 @@ The SetupHelper package provides:
     a "blind" install of SetupHelper from SD/USB media
 
 	backup and restore SOME settings from com.victronenergy.settings
+		this includes custom logos and copying logs to removable media
+			SetupHelper
+			PackageManager
+			gui
 
 SetupHelper is also required for my other packages
 	and must be installed BEFORE running the other package setup scripts

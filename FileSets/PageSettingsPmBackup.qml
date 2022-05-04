@@ -19,7 +19,7 @@ MbPage {
         MbItemText
         {
 			id: info
-            text: qsTr ("Backup and restore SOME system settings\nthis is NOT the Victron mechanism currently under development")
+            text: qsTr ("Backup and restore\nSOME system settings, logs and logos\nthis is NOT the Victron mechanism\ncurrently under development")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
         }
@@ -44,7 +44,7 @@ MbPage {
         }
 		MbOK
 		{
-			description: qsTr("Backup settings")
+			description: qsTr("Backup settings, logos, logs")
 			value: qsTr("Press to backup settings")
 			onClicked: backupProgressItem.setValue (1)
 			show: mediaAvailable.valid && mediaAvailable.value == 1 && backupProgressItem.value == 0
@@ -52,7 +52,7 @@ MbPage {
 		}
 		MbOK
 		{
-			description: qsTr("Restore settings")
+			description: qsTr("Restore settings, logos")
 			value: qsTr("Press to restore settings")
 			onClicked: backupProgressItem.setValue (2)
 			show: settingsFileExists.valid && settingsFileExists.value == 1 && backupProgressItem.value == 0

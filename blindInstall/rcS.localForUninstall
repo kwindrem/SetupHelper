@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# this script is part of a "blind UNINSTALL" archive which
+# UNINSTALLS AND REMOVES packages
+
+packageDir=/data/SetupHelper
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall
+	rm -r $packageDir
+
+packageDir=/data/GuiMods
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall
+	rm -r $packageDir
+
+packageDir=/data/GeneratorConnector
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall deferReboot deferGuiRestart auto 
+	rm -r $packageDir
+
+packageDir=/data/RpiDisplaySetup
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall deferReboot deferGuiRestart auto 
+	rm -r $packageDir
+
+packageDir=/data/RpiGpioSetup
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall deferReboot deferGuiRestart auto 
+	rm -r $packageDir
+
+packageDir=/data/ShutDownMonitor
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall deferReboot deferGuiRestart auto 
+	rm -r $packageDir
+
+packageDir=/data/VeCanSetup
+script="$packageDir/setup"
+if [ -e $script ]; then
+	$script uninstall deferReboot deferGuiRestart auto 
+	rm -r $packageDir
+
+rm -f /data/rcS.local
+
+reboot

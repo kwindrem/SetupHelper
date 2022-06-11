@@ -25,28 +25,40 @@ By far, the easiest way to install SetupHelper is the "blind install"
 	which requires no command-line interaction.
 
     1) Download venus-data.tgz from the SetupHelper GitHub repo.
+
+	Note: Mac OS and Safari are set by default to unzip packages.
+		The Open "safe" files after downloading (bottom of Safair Preferences General)
+			must be disabled in order to retain the zip file. 
+
     2) copy it to the root of a freshly formatted SD card or USB memory stick
     3) place the media in the GX device (Cerbo, CCGX, etc)
-    4) reboot the GX device TWICE - allowing the system to display the GUI each time
-        after the second reboot, you should find the Package Manager menus
-        at the bottom of the Settings menu
-    5) REMOVE THE MEDIA from the GX device
+    4) reboot the GX device and allow the system to display the GUI
+
+    if you are running Venus OS v2.90 and beyond:
+        you should find the Package Manager menu at the bottom of the Settings menu
+        you should remove the media at this point
+            mechanisms are in place to prevent reinstallation, but removal is still a good idea
+
+    if you are running Venus OS prior to v2.90, perform these additional steps:
+
+    5) reboot the GX device a second time
+	6) WHILE the GX device is booting, REMOVE THE MEDIA from the GX device
 		VERY IMPORTANT to prevent the next reboot from starting the process all over again
 		failure to do so could disable reinstalls following a Venus OS firmware update !!!
 
-	Note: Mac OS and Safari are set by default to unzip packages.
-		This Open "safe" files after downloading must be disabled in order to retain the
-			zip file. This option is at the bottom of Safair Preferences General
+    you should find the Package Manager menu at the bottom of the Settings menu
 
-    CAUTION: This mechanism overwrites /data/rcS.local !!!!
+
+    venus-data.tgz is available here:
+        https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz
+
+
+    CAUTION: prior to v2,90, this mechanism overwrites /data/rcS.local !!!!
         If you are using rcS.local to perform boot-time activities,
         /data/rcS.local must be recreated following this "blind" install
         Note that SetupHelper also uses /data/rcS.local for
         reinstallation following a firmware update so use caution in
         recreating rcS.local.
-
-    venus-data.tgz is available here:
-        https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz
         
 
 Another way to install SetupHelper is to use the following from the command line of the GX device:
@@ -65,6 +77,63 @@ CAUTION:
 	
 	Note that removal does not actually remove the package so other setup scripts
 	will continue to function.
+
+
+System Recovery:
+
+It is highly unlikely, but some users have reported a package install leaving their system unresponsive
+or with a nonfuncitonal GUI (white screen). In this case, your options depend on the platform and the current state of the system.
+
+First, (as always) reboot
+Second, see if you can access the PackageManager menu. If so, you can remove pacakges one at a time from there.
+	If you find an offeding package, post an issue to the GitHub repo for that package and include:
+		Platform (Cerbo, CCGX, Raspberry PI, etc)
+		Venus OS firmware version
+		attach logs if you can get to them
+	Remove SetupHelper last since once you do, you loose the PackageManager menus!
+
+Third, if you have terminal or ssh access, try running the package setup scripts to uninstall packages one at a time.
+
+Fourth, if you have GUI access again, try booting to the previous Venus OS version (in Stored backup formware)
+	Then perform a fresh Online firmware update to the latest version or use the .swu update via removable media.
+	These procedures are documented: https://www.victronenergy.com/media/pg/Cerbo_GX/en/gx---how-to-update-firmware.html
+
+Fifth, perform the Blind uninstall procedure below.
+
+Sixth, perform the Victron "restore factory default" procedure:
+	https://www.victronenergy.com/media/pg/CCGX/en/factory-reset.html
+
+	Note: this will wipe out all settings and you'll need to reconfigure the GX device from scratch.
+
+Finally, if you are running on a Raspberry PI, you can reimage the system SD card.
+
+	Note: this will wipe out all settings and you'll need to reconfigure the GX device from scratch.
+
+
+Blind UNINSTALL:
+
+A blind uninstall mechanism is also provided which is similar to blind install described above.
+This can be used in extremely rare ases where a package install leaves the system unaccessible
+via GUI or ssh.
+This mechanism is a LAST RESORT. 
+This will run all package setup scripts to uninstall that package from system files,
+	then remove the package from /data and /data/rcS.local.
+
+CAUTION: Do NOT run the Victron restore to factory defaults script if you have an unresponsive system
+		after installing one of my packages. Doing so will remove the script that restores the file system
+		to their factory settings.
+		
+		Firmware reinstall requires access to the GUI so if you still don't have a working GUI after
+		the Victron restore to factory defaults, then you are pretty much out of luck.
+
+The archive for this is named venus-data.UninstallPackages.tar.gz.
+
+	1) Copy venus-data.UninstallPackages.tar.gz to a USB memory stick or SD card
+	2) Rename the copy to venus-data.tar.gz
+	3) Plug the removable media into the GX device
+	4) Reboot, wait 2 minutes and reboot a second time
+	5) when the system automatically reboots after the second manual one, remove the media
+
 
 Description:
 
@@ -154,11 +223,60 @@ The Package Manager includes a set of menus on the GX device menu system
 				Any logo files in /data/themes/overlay
 				Setup script options in /data/setupOptions
 			The parameters must exist to be saved
-			The parameters must exist to be updated during a restore
+			The parameters will be created and set to the backed up value during a restore
 
 			Note: Victron is working on a more comprehensive mechanism but is not working reliably yet
 				This part of PackageManager is temporary and will be removed when the Victron functionality is working
 
+		SETTINGS_AUTO_RESTORE:
+			An automatic settings restore will be performed when PackageManager if the file named
+				SETTINGS_AUTO_RESTORE is detected in the root of removable media
+
+			CAUTION: LEAVING THIS FLASH DRIVE IN THE SYSTEM WILL TRIGGER A SETTINGS RESTORE WITH EVERY BOOT
+					YOU MUST REMOVE THE FLASH DRIVE AFTER AUTO RESTORR
+
+		microSD / USB:
+			is a duplicate of the menu item in VRM online portal
+			it can be used to eject ALL removable media before physically removing them
+			NOTE: all media is ejected, so if you are using one for VRM logging,
+				you'll need to reboot or unplug, then replug that device.
+
+		AUTO_EJECT:
+			If this flag file is found on any removable media, ALL removable media is ejected
+				after the media is scanned AND if any transferrers were performed:
+					transfer a package from the media (as an archive file) to /data
+					restore backup settings
+				this will NOT occur for
+					manual settings backup or restore
+
+			Removable media can be corrupted if removed while the VRM logger is still writing to it
+				so the drive must be ejected to prevent corruption
+			A manual eject button is included in the PackageManager menu
+			This automatic eject is intended for unattended deployment and will only occur if the AUTO_EJECT file exists
+			Unfortunately, the eject mechanism ejects all removable media, not just a specific one.
+			The VRM logger automatically uses the first removable media found so there is no control over it,
+
+
+		AUTO_INSTALL_PACKAGES:
+			If the file AUTO_INSTALL_PACKAGES is found on removable media, packages will be installed
+			even if the Auto Install menu option is turned off. This is generally used only for system deployment (see below).
+
+		AUTO_UNINSTALL_PACKAGES:
+			As above, but will uninstall all packages found in /data
+			This is useful if you have not command line access and end up with a GUI that is unresponsive
+				or just to clean up a system, returning it (almost) to factory defaults
+			This flag file oerrides AUTO_INSTALL_PACKAGES if both are present
+
+			The system is rebooted after the uninstall all just to be sure there's nothing left behind.
+
+			Note: this uses PackageManager, so if SetupHelper isn't installed it will do nothing
+
+		INITIALZE_PACKAGE_MANAGER and menu item:
+			If present, the PackageManager's persistent storage (dbus Settings parameters) are initialized
+			and PackageManager restarted
+			On restart, PackageManager will rebuild the dbus Settings from packages found in /data
+			Only custom Git Hub user and branch information is lost.
+		
 
 		Package editor:
 			This menu facilitates:
@@ -193,7 +311,6 @@ The Package Manager includes a set of menus on the GX device menu system
 			however this will remove the Package Manager itself.
 			Once removed, the Blind Install mechanism will be needed again !!
 
-
 USB/SD updates:
 
 	When the GX device is not connected to the internet, a USB flash drive or microSD card provides an install/upgrade path.
@@ -216,4 +333,19 @@ USB/SD updates:
 			Package Manager is quite content to transfer and install an older version!
 			So make sure you have the latest version especially if your GX device does not have internet access.
 
-If you are interested in the inner workings of Setup Manager and Package Manager, read: SetupHelperDescription (to be provided later)
+
+
+System automatic configuration and package installation:
+	It is possible to use SetupHelper to set up a new system based on a template saved from a working system.
+	Setup the working system the way you want the new system to behave including custom icons,
+	then perform a Settings backup.
+	Remove the flash drive from the GX device and plug into a computer that has internet access.
+	Copy venus-data.tgz from the SetupHelper GitHub repo to the same flash drive.
+	If you wish packages to also be installed, copy the package -latest.tgz file from those repos as well.
+	Create SETTINGS_AUTO_RESTORE on the flash drive (contents don't matter - file may be empty).
+	Create AUTO_INSTALL_PACKAGES on the flash drive as well.
+	Place the flash drive into the GX device to be configured and reboot (once for v2.90 or twice for prior versions).
+	REMOVE THE FLASH DRIVE after you have verified that all packages have been installed (check Active packages in PackageManager).
+
+
+If you are interested in the inner workings of Setup Manager and Package Manager or wish to create a package that can be managed by PackageManager, contact me through the issues part of SetupHelper on GitHub.

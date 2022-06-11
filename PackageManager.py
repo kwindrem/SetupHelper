@@ -78,6 +78,9 @@ ONE_DOWNLOAD = 3
 #			'remove' - remove package from list TBD ?????
 # 		 	'reboot' - reboot
 #			'restartGui' - restart the GUI
+#			'INITIALIZE' - install PackageManager's persistent storage (dbus Settings)
+#						so that the storage will be rebuilt when PackageManager restarts
+#						PackageManager will exit when this command is received
 #
 #		the GUI must wait for PackageManager to signal completion of one operation before initiating another
 #
@@ -254,6 +257,36 @@ ERROR_NO_SETUP_FILE = 		999
 #		if no GitHub information is contained in the package, the user must add it manually via the GUI
 #			in so automatic downloads from GitHub can occur
 #
+#	PackageManager has a mechnism for backing up and restoring settings:
+#		SOME dbus Settings
+#		custom icons
+#		backing up gui, SetupHelper and PackageManager logs
+#
+#	PackageManager checks for several flag files on removable media:
+#		SETTINGS_AUTO_RESTORE
+#			Triggers automatically restore dbus Settings and custom icons
+#			A previous settings backup operation must have been performed
+#			This creates a settingsBackup fiile and icons folder on the removable media
+#			that is used by settings restore (manual or triggered by this flag
+#
+#		AUTO_INSTALL_PACKAGES
+#			If present, any packages found in /data will be automatically installed
+#			This is identical behavior to turning on the auto install option in the PackageManager menu
+#
+#		AUTO_UNINSTALL_PACKAGES
+#			As above but uninstalls INCLUDING SetupHelper !!!!
+#
+#		AUTO_EJECT
+#			If present, all removable media is ejected after related "automatic" work is finished
+#
+#		INITIALIZE_PACKAGE_MANAGER
+#			If present, the PackageManager's persistent storage (dbus Settings parameters) are initialized
+#			and PackageManager restarted
+#			On restart, PackageManager will rebuild the dbus Settings from packages found in /data
+#			Only custom Git Hub user and branch information is lost.
+#
+#		A menu item with the same function as INITIALIZE_PACKAGE_MANAGER is also provided
+#
 # classes/instances/methods:
 #	AddRemoveClass
 #		AddRemove (thread)
@@ -264,8 +297,7 @@ ERROR_NO_SETUP_FILE = 		999
 #			SetGuiEditAction ()
 #			UpdateStatus ()
 #			LocateRawDefaultPackage ()
-#			handleGuiEditAction
-#			 ()
+#			handleGuiEditAction ()
 #			UpdatePackageCount ()
 #			various Gets and Sets for dbus parameters
 #			TransferOldDbusPackageInfo
@@ -324,6 +356,7 @@ ERROR_NO_SETUP_FILE = 		999
 #	AutoRebootCheck ()
 
 
+
 import platform
 import argparse
 import logging
@@ -372,6 +405,8 @@ global GuiRestart
 global PackageIndex
 
 global AllVersionsRefreshed
+
+global InitializePackageManager
 
 
 #	PushAction
@@ -439,6 +474,11 @@ def PushAction (command=None, source=None):
 		# set the flag - reboot is done in main_loop
 		global GuiRestart
 		GuiRestart = True
+	elif action == 'INITIALIZE':
+		logging.warning ( "received PackageManager INITIALIZE request from " + source)
+		# set the flag - Initialize will quit the main loop, then work is done in main
+		global InitializePackageManager
+		InitializePackageManager = True
 	# ignore blank action - this occurs when PackageManager changes the action on dBus to 0
 	#	which acknowledges a GUI action
 	elif action == '':
@@ -2517,7 +2557,7 @@ class InstallPackagesClass (threading.Thread):
 		DbusIf.UpdateStatus ( message=direction + "ing " + packageName,
 								where=sendStatusTo, logLevel=WARNING )
 		try:
-			proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart' ],
+			proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 			proc.wait()
 			stdout, stderr = proc.communicate ()
@@ -2707,6 +2747,7 @@ class InstallPackagesClass (threading.Thread):
 #
 #	actual installation is handled in the InstallPackages run() thread
 
+
 class MediaScanClass (threading.Thread):
 
 	# transferPackage unpacks the archive and moves it into postion in /data
@@ -2784,6 +2825,8 @@ class MediaScanClass (threading.Thread):
 		threading.Thread.__init__(self)
 		self.MediaQueue = queue.Queue (maxsize = 10) # used only for STOP
 		self.threadRunning = True
+		self.AutoInstallOverride = False
+		self.AutoUninstall = False
 
 	#
 	#	settingsBackup
@@ -2814,10 +2857,34 @@ class MediaScanClass (threading.Thread):
 				for line in listFile:
 					setting = line.strip()
 					try:
-						value = bus.get_object("com.victronenergy.settings", setting).GetValue()
+						value =  bus.get_object("com.victronenergy.settings", setting).GetValue()
+						attributes = bus.get_object("com.victronenergy.settings", setting).GetAttributes()
 					except:
 						continue
-					backupSettings.write ( setting + '=' + str(value) + '\n' )
+					dataType = type (value)
+					if dataType is dbus.Double:
+						typeId = 'f'
+					elif dataType is dbus.Int32 or dataType is dbus.Int64:
+						typeId = 'i'
+					elif dataType is dbus.String:
+						typeId = 's'
+					else:
+						typeId = ''
+						logging.error ("settingsBackup - invalid data type " + typeId + " - can't include parameter attributes " + setting)
+
+					value = str ( value )
+					default = str (attributes[0])
+					min = str (attributes[1])
+					max = str (attributes[2])
+					silent = str (attributes[3])
+					
+					# create entry with just settng path and value without a valid data type
+					if typeId == '':
+						line = ','.join ( [ setting, value ]) + '\n'
+					else:
+						line = ','.join ( [ setting, value, typeId, default, min, max, silent ]) + '\n'
+
+					backupSettings.write (line)
 					settingsCount += 1
 
 			backupSettings.close ()
@@ -2902,12 +2969,61 @@ class MediaScanClass (threading.Thread):
 		settingsCount = 0
 		with open (backupFile, 'r') as fd:
 			for line in fd:
-				parts = line.strip().split ('=')
+				parameterExists = False
+				# ( setting path, value, attributes)
+				parts = line.strip().split (',')
+				numberOfParts = len (parts)
+				# full entry with attributes
+				if numberOfParts == 7:
+					typeId = parts[2]
+					default = parts[3]
+					min = parts[4]
+					max = parts[5]
+					silent = parts[6]
+				# only path and name - old settings file format
+				elif numberOfParts == 2:
+					typeId = ''
+					default = ''
+					min = ''
+					max = ''
+					silent = ''
+				else:
+					logging.error ("settingsRestore: invalid line in file " + line)
+					continue
+				
+				path = parts[0]
+				value = parts[1]
 				try:
-					bus.get_object("com.victronenergy.settings", parts[0]).SetValue(parts[1])
+					bus.get_object("com.victronenergy.settings", path).GetValue()
+					parameterExists = True
 				except:
 					pass
-				settingsCount += 1
+
+				if not parameterExists:
+					if typeId == '':
+						logging.error ("settingsRestore: no attributes in settingsBackup file - can't create " + path)
+					# parameter does not yet exist, create it
+					else:
+						# silent uses a different method
+						if silent == 1:
+							method = 'AddSettingSilent'
+						else:
+							method = 'AddSetting'
+
+						try:
+							proc = subprocess.Popen ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
+											path, default, typeId, min, max ], 
+											stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+							proc.wait()
+							parameterExists = True
+							logging.warning ("settingsRestore: creating " + path)
+						except:
+							logging.error ("settingsRestore: settings create failed for " + path)
+
+				# update parameter's value if it exists (or was just created)
+				if parameterExists:
+					bus.get_object("com.victronenergy.settings", path).SetValue (value)
+					settingsCount += 1
 
 		# restore logo overlays
 		overlaySourceDir = backupPath + "/logoBackup"
@@ -2955,6 +3071,10 @@ class MediaScanClass (threading.Thread):
 		separator = '/'
 		root = "/media"
 		archiveSuffix = ".tar.gz"
+		autoRestore = False
+		autoRestoreComplete = False
+		autoEject = False
+		bus = dbus.SystemBus()
 
 		# list of accepted branch/version substrings
 		acceptList = [ "-current", "-latest", "-main", "-test", "-debug", "-beta", "-install", 
@@ -2977,6 +3097,16 @@ class MediaScanClass (threading.Thread):
 			if command == 'STOP' or self.threadRunning == False:
 				return
 
+			# automaticTransfers is used to signal when anything is AUTOMATICALLY
+			# transferred from or to removable media
+			# this includes:
+			#	transfrring a package from removable media to /data
+			#	performing an automatic settings restore
+			# Manually triggered operations do not update these operations
+			#	manually triggered settings backup
+			#	manually triggered settings restore
+			automaticTransfers = False
+
 			try:
 				drives = os.listdir (root)
 			except:
@@ -2998,6 +3128,7 @@ class MediaScanClass (threading.Thread):
 
 			for drive in drives:
 				drivePath = separator.join ( [ root, drive ] )
+
 				# process settings backup and restore
 				# check for settings backup file
 				settingsBackupPath = root + "/" + drive
@@ -3010,50 +3141,102 @@ class MediaScanClass (threading.Thread):
 					backupSettingsFileExists = False
 
 				if backupMediaExists:
+					autoRestoreFile = settingsBackupPath + "/SETTINGS_AUTO_RESTORE"
+					if os.path.exists (autoRestoreFile):
+						autoRestore = True
+
+					autoEjectFile = settingsBackupPath + "/AUTO_EJECT"
+					if os.path.exists (autoEjectFile):
+						autoEject = True
+
+					initializeFile = settingsBackupPath + "/INITIALIZE_PACKAGE_MANAGER"
+					if os.path.exists (initializeFile):
+						global InitializePackageManager
+						InitializePackageManager = True
+
+					
+					# set the auto install flag for use elsewhere
+					autoUnInstallFile = settingsBackupPath + "/AUTO_UNINSTALL_PACKAGES"
+					if os.path.exists (autoUnInstallFile):
+						self.AutoUninstall = True
+						self.AutoInstallOverride = False
+
+					# set the auto install flag for use elsewhere
+					# auto Uninstall overrides auto install
+					if not self.AutoUninstall:
+						autoInstallFile = settingsBackupPath + "/AUTO_INSTALL_PACKAGES"
+						if os.path.exists (autoInstallFile):
+							self.AutoInstallOverride = True
+					
 					backupProgress = DbusIf.GetBackupProgress ()
 					# GUI triggered backup
 					if backupProgress == 1:
 						DbusIf.SetBackupProgress (3)
 						self.settingsBackup (settingsBackupPath)
 						DbusIf.SetBackupProgress (0)
-					elif backupProgress == 2:
+					elif backupProgress == 2 or ( autoRestore and not autoRestoreComplete ):
 						if backupSettingsFileExists:
 							DbusIf.SetBackupProgress (4)
 							self.settingsRestore (settingsBackupPath)
+							if autoRestore:
+								autoRestoreComplete = True
+								automaticTransfers = True
 						DbusIf.SetBackupProgress (0)
 
-				if drive in alreadyScanned:
-					continue
-
-				# check any file name ending with the achive suffix
-				#	all others are skipped
-				for path in glob.iglob (drivePath + "/*" + archiveSuffix):
-					accepted = False
-					if os.path.isdir (path):
-						continue
-					else:
+				# if we've scanned this drive previously, it won't have any new packages to transfer
+				# 	so skip it to avoid doing it again
+				if drive not in alreadyScanned:
+					# check any file name ending with the achive suffix
+					#	all others are skipped
+					for path in glob.iglob (drivePath + "/*" + archiveSuffix):
 						accepted = False
-						baseName = os.path.basename (path)
-						# verify the file name contains one of the accepted branch/version identifiers
-						#	if not found in the list, the archive is rejected
-						for accept in acceptList:
-							if accept in baseName:
-								accepted = True
-								break
-						# discovered what appears to be a valid archive
-						# unpack it, do further tests and move it to /data 
-						if accepted:
-							self.transferPackage (path)
-							if self.threadRunning == False:
-								return
+						if os.path.isdir (path):
+							continue
 						else:
-							logging.warning (path + " not a valid archive name - rejected")
+							accepted = False
+							baseName = os.path.basename (path)
+							# verify the file name contains one of the accepted branch/version identifiers
+							#	if not found in the list, the archive is rejected
+							for accept in acceptList:
+								if accept in baseName:
+									accepted = True
+									break
+							# discovered what appears to be a valid archive
+							# unpack it, do further tests and move it to /data 
+							if accepted:
+								if self.transferPackage (path):
+									automaticTransfers = True
+								
+								if self.threadRunning == False:
+									return
+							else:
+								logging.warning (path + " not a valid archive name - rejected")
+					# mark this drive so it won't get scanned again
+					#	this prevents repeated installs
+					alreadyScanned.append (drive)
+					# end if drive not in alreadyScanned
 				# end for path
-
-				# mark this drive so it won't get scanned again
-				#	this prevents repeated installs
-				alreadyScanned.append (drive)
 			#end for drive
+
+			# we have arrived at a point where all removable media has been scanned
+			# and all possible work has been done
+
+			# eject removable media if work has been done and the
+			# the AUTO_EJECT flag file was fouund on removable media during the most recent scan
+			# NOTE: this ejects ALL removable media whether or not they are involved in transfers
+			if automaticTransfers and autoEject:
+				logging.warning ("automatic media transfers have occured, ejecting ALL removable media")
+				bus.get_object("com.victronenergy.logger", "/Storage/MountState").SetValue (2)
+
+			if not backupMediaExists:
+				autoRestore = False
+				autoEject = False
+				autoRestoreComplete = False
+				self.AutoInstallOverride = False
+				self.AutoUninstall = False
+				InitializePackageManager = False
+
+		# end while
 	# end run ()
 # end MediaScanClass
 
@@ -3069,8 +3252,19 @@ def mainLoop():
 	global lastDownloadMode # initialized in main
 	global currentDownloadMode # initialized in main
 	global noActionCount
+	global MediaScan
+	global InitializePackageManager
+	global SetupHelperUninstall
+
+	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
+	# exit mainLoop and do uninstall in main, then reboot
+	# skip all processing below !
+	if MediaScan.AutoUninstall:
+		mainloop.quit()
+		return False
 
 	delayStart = 0.0
+	SetupHelperUninstall = False
 
 	# detect download mode changes and switch back to fast scan
 	lastDownloadMode = currentDownloadMode
@@ -3103,6 +3297,7 @@ def mainLoop():
 		package = PackageClass.PackageList [PackageIndex]
 		PackageIndex += 1
 		packageName = package.PackageName
+
 		package.UpdateFileFlagsAndVersions ()
 		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
@@ -3113,7 +3308,7 @@ def mainLoop():
 			packageOperationOk = False	# don't allow other operations if download was triggered
 
 		if packageOperationOk and package.AutoInstallOk and package.FileSetOk and package.Incompatible == ''\
-					and DbusIf.GetAutoInstall () and package.InstallVersionCheck ():
+					and ( DbusIf.GetAutoInstall () or MediaScan.AutoInstallOverride ) and package.InstallVersionCheck ():
 			PushAction ( command='install' + ':' + packageName, source='AUTO' )
 
 	# check all packages before looking for reboot or GUI restart
@@ -3139,9 +3334,9 @@ def mainLoop():
 		noActionCount += 1
 
 	# wait for two complete passes with nothing happening
-	# 	before triggerinng reboot or GUI restart
+	# 	before triggerinng reboot, GUI restart or initializing PackageManager Settings
 	if noActionCount >= 2:
-		if SystemReboot:
+		if SystemReboot or InitializePackageManager or SetupHelperUninstall:
 				# exit the main loop
 				mainloop.quit()
 				return False
@@ -3164,6 +3359,60 @@ def mainLoop():
 
 	# continue the main loop
 	return True
+
+
+# uninstall a package with a direct call to it's setup script
+# used to do a blind uninstall in main () below
+
+def	directUninstall (packageName):
+	try:
+		setupFile = "/data/" + packageName + "/setup"
+		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
+			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'deferReboot', 'deferGuiRestart', 'auto' ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			proc.wait()
+			stdout, stderr = proc.communicate ()
+			# convert from binary to string
+			stdout = stdout.decode ().strip ()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
+	except:
+		pass
+
+
+# remove all packages found in /data
+# package must be a directory with a file named version
+# with the first character of that file 'v'
+# and an executale file named 'setup' must exist in the directory
+# no other checks are made
+# SetupHelper is NOT removed since it's running this service
+# if found, returns true if it was found so it can be done later
+#	just before the program ends
+
+def removeAllPackages ():
+	deferredSetupHelperRemove = False
+	for path in os.listdir ("/data"):
+		packageDir = "/data/" + path
+		if not os.path.isdir (packageDir):
+			continue
+		packageName = path
+
+		versionFile = packageDir + "/version"
+		try:
+			fd = open (versionFile, 'r')
+			version = fd.readline().strip()
+			fd.close ()
+		except:
+			continue
+		if version[0] != 'v':
+			continue
+		if packageName == "SetupHelper":
+			deferredSetupHelperRemove = True
+		else:
+			directUninstall (packageName)
+
+	return deferredSetupHelperRemove
+
 #	main
 #
 # ######## code begins here
@@ -3176,12 +3425,14 @@ def main():
 	global GuiRestart
 	global PackageIndex
 	global noActionCount
-	
+	global InitializePackageManager
+	global SetupHelperUninstall
 	SystemReboot = False
 	GuiRestart = False
+	InitializePackageManager = False
+	SetupHelperUninstall = False
 	PackageIndex = 0
 	noActionCount = 0
-
 
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )
@@ -3315,20 +3566,31 @@ def main():
 
 	# this section of code runs only after the mainloop quits
 
-	# stop threads, remove service from dbus
-	if SystemReboot:
+	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
+	if MediaScan.AutoUninstall:
+		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Download')
+		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
+		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
+
+
+		# remove all pacakges - returns True if SetupHelper was found and skipped
+		#	 so it can be done later
+		SetupHelperUninstall = removeAllPackages ()
+
+	elif SystemReboot:
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Download')
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Editor' )
 		logging.warning (">>>> REBOOTING: to complete package installation")
 
 
+	# stop threads, remove service from dbus
 	logging.warning ("stopping threads")
 	UpdateGitHubVersion.StopThread ()
 	DownloadGitHub.StopThread ()
 	InstallPackages.StopThread ()
 	AddRemove.StopThread ()
 	MediaScan.StopThread ()
-	DbusIf.RemoveDbusService ()
+
 	try:
 		UpdateGitHubVersion.join (timeout=30.0)
 		DownloadGitHub.join (timeout=30.0)
@@ -3338,14 +3600,35 @@ def main():
 		logging.critical ("attempt to join threads failed - one or more threads failed to exit")
 		pass
 
+	# if initializing PackageManager persistent storage, set PackageCount to 0
+	#	which will cause the package list to be rebuilt from packages found in /data
+	#	user-specified Git Hub user and branch are lost
+	if InitializePackageManager:
+		DbusIf.DbusSettings['packageCount'] = 0
+
+	DbusIf.RemoveDbusService ()
+
+	# reboot with SetupHelper uninstall
+	if SetupHelperUninstall:
+		try:
+			logging.critical (">>>> uninstalling SetupHelper and exiting")
+			# schedule reboot for 30 seconds later since this script will die during the ininstall
+			# this should give enough time for the uninstall to finish before reboot
+			subprocess.Popen ( [ 'nohup', 'bash', '-c', 'sleep 30; shutdown -r now', '&' ], stdout=subprocess.PIPE, stderr=subprocess.PIPE  )
+		except:
+			pass
+
+		directUninstall ("SetupHelper")
+
 	# check for reboot
-	if SystemReboot:
+	elif SystemReboot:
 		try:
 			proc = subprocess.Popen ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
 			# for debug:    proc = subprocess.Popen ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
 		except:
 			logging.critical ("shutdown failed")
 
+	if SystemReboot or SetupHelperUninstall:
 		# insure the package manager service doesn't restart when we exit
 		#	it will start up again after the reboot
 		try:

@@ -1,11 +1,12 @@
 #!/bin/bash
 
 
-# remove Settings associated with previous versions of SetupHelper
-# and those of the current verison
+# remove Settings associated with PackageManager
 # run this script to make a clean start
 
 source /data/SetupHelper/DbusSettingsResources
+
+svc -d /service/PackageManager
 
 removeDbusSettings	/Settings/PackageManager/Count \
 					/Settings/PackageManager/GitHubAutoUpdate \
@@ -77,3 +78,5 @@ removeDbusSettings	/Settings/PackageManager/15/PackageName \
 					/Settings/PackageManager/19/PackageName \
 					/Settings/PackageManager/19/GitHubUser \
 					/Settings/PackageManager/19/GitHubBranch > /dev/null
+
+svc -u /service/PackageManager

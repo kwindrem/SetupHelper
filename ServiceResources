@@ -14,11 +14,16 @@
 # functions that begin with _ skip checks and do not log activity
 
 
+
 # starting with v2.80~10, services are stored in this directory which is overlayed onto /service
 # all services need to be added there rather than /service
 # Note: service calls (eg svc) are still made on /service/...
 # there is an unknown interaction between /service and the overlay source
 # so code here operates on both directories
+
+# starting with v2.90~3, additions to /opt/victronenergy/service do not populate to /service
+# a reboot is necessary !
+# tempFsOverlay at least for now, new services will be copied to both places !!!!!!!!!
 
 victronServicesDir="/opt/victronenergy/service"
 overlayWorkDir="/run/overlays/service"
@@ -29,6 +34,16 @@ else
     serviceDir="/service"
     serviceOverlay=false
 fi
+
+versionStringToNumber "v2.90~3"
+tempFsStartVersion=$versionNumber
+versionStringToNumber $venusVersion
+if  (( $versionNumber >= $tempFsStartVersion )) ; then
+	tempFsOverlay=true
+else
+	tempFsOverlay=false
+fi
+
 
 # startService and stopService start and stop the service, respectively
 # the 'down' flag is also cleared/set to control service runs in the future
@@ -72,9 +87,15 @@ startService ()
 _stopService ()
 {
     touch "$serviceDir/$1/down"
+	if $tempFsOverlay ; then
+		touch "/service/$1/down"
+	fi
     svc -d "/service/$1"
     if [ -e "$serviceDir/$1/log" ]; then
         touch "$serviceDir/$1/log/down"
+		if $tempFsOverlay ; then
+			touch "/service/$1/log/down"
+		fi
         svc -d "/service/$1/log"
     fi
 }
@@ -105,7 +126,9 @@ _removeService ()
     # removing the service in the overlayed service directory doesn't remove it from /service
     # it needs to be removed from the overlay work directory also
     rm -rf "$serviceDir/$1"
-    if $serviceOverlay ; then
+	if $tempFsOverlay ; then
+		rm -rf "/service/$1"
+    elif $serviceOverlay ; then
         rm -rf "$overlayWorkDir/$1"
     fi
 }
@@ -152,7 +175,11 @@ installService ()
     # service not yet installed, COPY service directory to the active locaiton
     if [ ! -e "$serviceDir/$1" ]; then
         logMessage "installing $1 service"
+		sleep 5
         cp -R "$scriptDir/service" "$serviceDir/$1"
+		if $tempFsOverlay ; then
+			cp -R "$scriptDir/service" "/service/$1"
+		fi
     # service already installed - only copy changed files, then restart service
     else
 		restartService=true
@@ -161,12 +188,18 @@ installService ()
             cmp -s "$scriptDir/service/run" "$serviceDir/$1/run" > /dev/null
             if [ $? != 0 ]; then
                 cp "$scriptDir/service/run" "$serviceDir/$1/run"
+				if $tempFsOverlay ; then
+					cp "$scriptDir/service/run" "/service/$1/run"
+				fi
             fi
         fi
         if [ -f "$scriptDir/service/log/run" ]; then
             cmp -s "$scriptDir/service/log/run" "$serviceDir/$1/log/run" > /dev/null
             if [ $? != 0 ]; then
                 cp "$scriptDir/service/log/run" "$serviceDir/$1/log/run"
+				if $tempFsOverlay ; then
+					cp "$scriptDir/service/log/run" "/service/$1/log/run"
+				fi
            fi
         fi
     fi
@@ -178,6 +211,7 @@ installService ()
 	# insure service starts up
 	# with overlays, this doesn't happen if the service was removed then added again
 	else
+		sleep 5
 		svc -u "/service/$1"
 	fi
 }

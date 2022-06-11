@@ -119,5 +119,14 @@ MbPage {
             subpage: Component { PageSettingsPmBackup {} }
             show: showControls
         }
+		MbMountState {
+			description: qsTr("microSD / USB")
+		}
+		MbSubMenu
+        {
+            description: qsTr("Initialize PackageManager ...")
+            subpage: Component { PageSettingsPmInitialize {} }
+            show: showControls
+        }
     }
 }

@@ -1,3 +1,46 @@
+v4.15:
+	released - no changes
+
+v4.15~7:
+	added delays in install service so things get initialized properly
+
+v4.15~6:
+	added blind UNINSTALL via a special venus-data.tar.gz file
+		see instructions in the ReadMe
+
+v4.14~5:
+	added PackageManager persistent storage initialize
+		Both the INITIALZE_PACKAGE_MANAGER flag file on removable media
+		and a menu item has been added that will trigger the 
+		PackageManager dbus Setting storageto be initialized,
+		then PackageManager restarted.
+		The storage is then rebuilt when PackageManager starts back up.
+	added UNNSTALL_ALL_PACKAGES removable media flag
+		If this file is found on removable media, PackageManager
+		will UNINSTALL ALL packages including SetupHelper
+	these additions help recover systems without a user interface to factory conditions,
+	including a blank or unresponsive GUI
+
+v4.14~4:
+	updated ReadMe
+	fixed: auto eject occured on manual settings restore
+		should be just AUTOMATIC restores
+
+v4.14~3:
+	add auto eject
+	fixed: couldn't backup or restore settings
+
+v4.14~2:
+	settings restore now creates missing parameters
+	rewrote blind install to use the pre/post hooks for v2.90
+		blind install still works with prior Venus OS versions
+	added AUTO_INSTALL_PACKAGES flag file on removable media
+		functions same as enabling auto install in PackageManager menu
+	added support for new /service mechanisms in v2.90
+
+v4.14~1:
+	add settings auto restore if SETTINGS_AUTO_RESTORE flag file exists on removable media
+
 v4.13:
 	add logs as part of settings backup
 

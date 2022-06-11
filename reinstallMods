@@ -36,6 +36,7 @@ while read -u 9 line ; do
         # strip command parameters to make sure the path/command exists
         command=$(awk '{print var $1}' <<< $line)
         if [ -f $command ] ; then
+			line=$(echo "$line auto")
             $line
             if [ $? == $exitReboot ] ; then
                 logMessage "$command requested reboot"

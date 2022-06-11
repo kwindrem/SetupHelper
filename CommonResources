@@ -412,6 +412,11 @@ endScript ()
     if [ $scriptAction == 'INSTALL' ] ; then
         # assume that if we get this far, any command line opitons have already been set
 		touch "$setupOptionsDir/optionsSet"
+		
+		# clear flag preventing auto installs in PackageManager
+		if $userInteraction ; then
+			rm -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL"
+		fi
 
         # set up reinstallMods to run this script again after a VenusOS update
         if [ ! -f "$reinstallScriptsList" ] || [ $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
@@ -441,6 +446,10 @@ endScript ()
             cp "$scriptDir/version" "$installedVersionFile"
 		fi
     elif [ $scriptAction == 'UNINSTALL' ] ; then
+		# set flag preventing auto installs in PackageManager
+		if $userInteraction ; then
+			touch "$setupOptionsDir/DO_NOT_AUTO_INSTALL"
+		fi
         # remove this script from reinstallScriptsList to prevent further calls during boot
         if [ -f "$reinstallScriptsList" ] && [ ! $(grep -c "$fullScriptName" "$reinstallScriptsList") == 0 ]; then
             logMessage removing "$shortScriptName" from $(basename "$reinstallScriptsList")    
@@ -468,7 +477,7 @@ endScript ()
 		logMessage "platform not compatible - exiting"
 		exit $EXIT_INCOMPATIBLE_PLATFOM
 	elif $rebootNeeded ; then
-		if $logToConsole ; then
+		if $userInteraction ; then
 			yesNoPrompt "Reboot system now (y) or do it manually later (n): "
 			if $yesResponse ; then
 				echo "rebooting ..."
@@ -482,14 +491,14 @@ endScript ()
 			exit $EXIT_REBOOT
 		fi
 	elif $restartGui ; then
-		if $logToConsole ; then
+		if $userInteraction ; then
 			yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): "
 			if $yesResponse ; then
 				echo "restarting GUI ..."
 				svc -t /service/gui
 				exit $EXIT_SUCCESS
 			else
-				echo "GUI must be restarted activate components"
+				echo "GUI must be restarted to activate components"
 				exit $EXIT_RESTART_GUI
 			fi
 		else
@@ -533,22 +542,19 @@ endScript ()
 #
 #
 # logToConsole is set to true in the LogHandler script
-# It is set to false here if the command line parameters suggest
-#	the setup script is being run without the aid of the command line interface
-#	in which case the user will not be prompted and apprporiate actions are taken automatically
-#	exit code returned by the setup script indicates additional actions that
-#	need to be taken by the caller (if any) or the reason the script could not be completed
+# It is set to false here the 'auto' parameter is passed on the command line
+#	which indicates this script is NOT being run from the command line
 
 # collect command line options
 reinstall=false
 force=false
 deferReboot=false
 deferGuiRestart=false
+userInteraction=true
 while [ $# -gt 0 ]; do
         case $1 in
             $reinstallParam)
                 reinstall=true
-                logToConsole=false
                 ;;
             "force")
                 force=true
@@ -561,11 +567,13 @@ while [ $# -gt 0 ]; do
                 ;;
             "install")
                 scriptAction='INSTALL'
-                logToConsole=false
                 ;;
             "uninstall")
                 scriptAction='UNINSTALL'
+                ;;
+            "auto")
                 logToConsole=false
+				userInteraction=false
                 ;;
             *)
         esac
@@ -642,7 +650,6 @@ if $reinstall ; then
     else
         exit $EXIT_SUCCESS
     fi
-    logToConsole=false
 
 # not running from reinstallMods
 else

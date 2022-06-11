@@ -56,7 +56,6 @@ if [ $scriptAction == 'NONE' ] ; then
 fi
 
 if [ $scriptAction == 'INSTALL' ] ; then
-
     updateActiveFile "$qmlDir/PageSettings.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
@@ -66,6 +65,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
     updateActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
     updateActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
     updateActiveFile "$qmlDir/PageSettingsPmBackup.qml"
+    updateActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
 
     installService PackageManager
 
@@ -82,6 +82,7 @@ if [ $scriptAction == 'UNINSTALL' ] ; then
 	restoreActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
 	restoreActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
 	restoreActiveFile "$qmlDir/PageSettingsPmBackup.qml"
+	restoreActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
 
     removeService PackageManager
 

@@ -270,11 +270,24 @@ ERROR_NO_SETUP_FILE = 		999
 #			that is used by settings restore (manual or triggered by this flag
 #
 #		AUTO_INSTALL_PACKAGES
-#			If present, any packages found in /data will be automatically installed
-#			This is identical behavior to turning on the auto install option in the PackageManager menu
+#			If present on the media, any packages found on the media will be automatically installed
 #
 #		AUTO_UNINSTALL_PACKAGES
 #			As above but uninstalls INCLUDING SetupHelper !!!!
+#			Only applies if present on media (not in /data or a package direcory)
+#
+#		AUTO_INSTALL
+#			If present in a package directory, the package is installed
+#				even if the automatic installs are disabled in the PackageManager menu
+#				DO_NOT_AUTO_INSTALL overrides this flag
+#
+#		ONE_TIME_INSTALL
+#			If present in a package directory, the package is automatically installed
+#				even if automatic installs are diabled and the DO_NOT_INSTALL flag is set
+#			This flag file is removed when the install is performed
+#				to prevent repeated installs
+#			Packages may be deployed with this flag set to insure it is installed
+#				when a new version is transferred from removable media or downloaded from GitHub
 #
 #		AUTO_EJECT
 #			If present, all removable media is ejected after related "automatic" work is finished
@@ -321,7 +334,7 @@ ERROR_NO_SETUP_FILE = 		999
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
-#		SetAutoInstallOk ()
+#		UpdateDoNotInstall ()
 #		MoveFlagFiles ()
 #		InstallVersionCheck ()
 #	UpdateGitHubVersionClass
@@ -405,7 +418,7 @@ global GuiRestart
 global PackageIndex
 
 global AllVersionsRefreshed
-
+	
 global InitializePackageManager
 
 
@@ -1216,7 +1229,7 @@ class DbusIfClass:
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
-#		SetAutoInstallOk ()
+#		UpdateDoNotInstall ()
 #		MoveFlagFiles ()
 #		InstallVersionCheck ()
 #
@@ -1303,13 +1316,13 @@ class PackageClass:
 					open (flagFile, 'a').close()
 
 
-	def SetAutoInstallOk (self, state):
+	def UpdateDoNotInstall (self, state):
 		packageName = self.PackageName
 		if packageName == None:
-			logging.error ("SetAutoInstallOk - no packageName")
+			logging.error ("UpdateDoNotInstall - no packageName")
 			return
 
-		# if package options directory exists set/clear auto add flag
+		# if package options directory exists set/clear auto install flag
 		# directory may not exist if package was never downloaded or transferred from media
 		#	or if package was added manually then never acted on
 		optionsDir = "/data/setupOptions/" + packageName
@@ -1581,7 +1594,7 @@ class PackageClass:
 	# returns true if name is OK, false if in the reject list
 
 	rejectList = [ "-current", "-latest", "-main", "-test", "-temp", "-debug", "-beta", "-backup1", "-backup2",
-					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", " " ]
+					"-blind", "-0", "-1", "-2", "-3", "-4", "-5", "-6", "-7", "-8", "-9", "ccgx", " " ]
 
 	@classmethod
 	def PackageNameValid (cls, packageName):
@@ -1624,6 +1637,11 @@ class PackageClass:
 			if os.path.exists (packageDir + "/raspberryPiOnly") and Platform[0:4] != 'Rasp':
 				continue
 
+			# check for a setup file - skip if none
+			if not os.path.exists (packageDir + "/setup"):
+				continue
+
+			# check for a valid version file - skip if no file or not a valid version
 			versionFile = packageDir + "/version"
 			try:
 				fd = open (versionFile, 'r')
@@ -1923,9 +1941,7 @@ class PackageClass:
 				self.SetIncompatible ('PLATFORM')
 				incompatible = True
 
-		# if package options directory exists set/clear auto install flag
-		# directory may not exist if package was never downloaded or transferred from media
-		#	or if package was added manually then never acted on
+		# update local auto install flag based on DO_NOT_AUTO_INSTALL
 		flagFile = "/data/setupOptions/" + packageName + "/DO_NOT_AUTO_INSTALL"
 		if os.path.exists (flagFile):
 			self.AutoInstallOk = False
@@ -2512,11 +2528,11 @@ class InstallPackagesClass (threading.Thread):
 			sendStatusTo = 'Editor'
 			# uninstall sets the uninstall flag file to prevent auto install
 			if direction == 'uninstall':
-				package.SetAutoInstallOk (False)
+				package.UpdateDoNotInstall (False)
 				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
 			else:
-				package.SetAutoInstallOk (True)
+				package.UpdateDoNotInstall (True)
 				logging.warning (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
 			sendStatusTo = 'Install'
@@ -2754,7 +2770,7 @@ class MediaScanClass (threading.Thread):
 	#
 	#	path is the full path to the archive
 
-	def transferPackage (self, path):
+	def transferPackage (self, path, autoInstallOverride=False):
 		packageName = os.path.basename (path).split ('-', 1)[0]
 
 		# create an empty temp directory in ram disk
@@ -2813,6 +2829,11 @@ class MediaScanClass (threading.Thread):
 		shutil.move (unpackedPath, packagePath)
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
+		# set package one-time install flag so this package is installed regardless of other flags
+		#	this flag is removed when the install is preformed
+		if autoInstallOverride:
+			open ( packagePath + "ONE_TIME_INSTALL", 'a').close()
+
 		DbusIf.UNLOCK ()
 		shutil.rmtree (tempDirectory, ignore_errors=True)
 		time.sleep (5.0)
@@ -2825,7 +2846,6 @@ class MediaScanClass (threading.Thread):
 		threading.Thread.__init__(self)
 		self.MediaQueue = queue.Queue (maxsize = 10) # used only for STOP
 		self.threadRunning = True
-		self.AutoInstallOverride = False
 		self.AutoUninstall = False
 
 	#
@@ -3128,12 +3148,12 @@ class MediaScanClass (threading.Thread):
 
 			for drive in drives:
 				drivePath = separator.join ( [ root, drive ] )
+				self.AutoUninstall = False
 
 				# process settings backup and restore
 				# check for settings backup file
-				settingsBackupPath = root + "/" + drive
-				settingsBackupFile = settingsBackupPath + "/settingsBackup"
-				if os.path.exists (settingsBackupFile):
+				mediaSettingsBackupPath = root + "/" + drive
+				if os.path.exists (mediaSettingsBackupPath + "/settingsBackup"):
 					DbusIf.SetBackupSettingsFileExist (True)
 					backupSettingsFileExists = True
 				else:
@@ -3141,43 +3161,44 @@ class MediaScanClass (threading.Thread):
 					backupSettingsFileExists = False
 
 				if backupMediaExists:
-					autoRestoreFile = settingsBackupPath + "/SETTINGS_AUTO_RESTORE"
+					autoRestoreFile = mediaSettingsBackupPath + "/SETTINGS_AUTO_RESTORE"
 					if os.path.exists (autoRestoreFile):
 						autoRestore = True
 
-					autoEjectFile = settingsBackupPath + "/AUTO_EJECT"
+					autoEjectFile = mediaSettingsBackupPath + "/AUTO_EJECT"
 					if os.path.exists (autoEjectFile):
 						autoEject = True
 
-					initializeFile = settingsBackupPath + "/INITIALIZE_PACKAGE_MANAGER"
+					initializeFile = mediaSettingsBackupPath + "/INITIALIZE_PACKAGE_MANAGER"
 					if os.path.exists (initializeFile):
 						global InitializePackageManager
 						InitializePackageManager = True
 
 					
 					# set the auto install flag for use elsewhere
-					autoUnInstallFile = settingsBackupPath + "/AUTO_UNINSTALL_PACKAGES"
+					autoInstallOverride = False
+					autoUnInstallFile = mediaSettingsBackupPath + "/AUTO_UNINSTALL_PACKAGES"
 					if os.path.exists (autoUnInstallFile):
 						self.AutoUninstall = True
-						self.AutoInstallOverride = False
 
 					# set the auto install flag for use elsewhere
 					# auto Uninstall overrides auto install
 					if not self.AutoUninstall:
-						autoInstallFile = settingsBackupPath + "/AUTO_INSTALL_PACKAGES"
+						# check for auto install on media
+						autoInstallFile = mediaSettingsBackupPath + "/AUTO_INSTALL_PACKAGES"
 						if os.path.exists (autoInstallFile):
-							self.AutoInstallOverride = True
+							autoInstallOverride = True 	
 					
 					backupProgress = DbusIf.GetBackupProgress ()
 					# GUI triggered backup
 					if backupProgress == 1:
 						DbusIf.SetBackupProgress (3)
-						self.settingsBackup (settingsBackupPath)
+						self.settingsBackup (mediaSettingsBackupPath)
 						DbusIf.SetBackupProgress (0)
 					elif backupProgress == 2 or ( autoRestore and not autoRestoreComplete ):
 						if backupSettingsFileExists:
 							DbusIf.SetBackupProgress (4)
-							self.settingsRestore (settingsBackupPath)
+							self.settingsRestore (mediaSettingsBackupPath)
 							if autoRestore:
 								autoRestoreComplete = True
 								automaticTransfers = True
@@ -3204,9 +3225,8 @@ class MediaScanClass (threading.Thread):
 							# discovered what appears to be a valid archive
 							# unpack it, do further tests and move it to /data 
 							if accepted:
-								if self.transferPackage (path):
+								if self.transferPackage (path, autoInstallFile):
 									automaticTransfers = True
-								
 								if self.threadRunning == False:
 									return
 							else:
@@ -3232,8 +3252,6 @@ class MediaScanClass (threading.Thread):
 				autoRestore = False
 				autoEject = False
 				autoRestoreComplete = False
-				self.AutoInstallOverride = False
-				self.AutoUninstall = False
 				InitializePackageManager = False
 
 		# end while
@@ -3248,7 +3266,7 @@ def mainLoop():
 	global GuiRestart
 	global PackageIndex
 	global PushAction
-	global AllVersionsRefreshed  # initialized in main - set in UpdateGitHubVersion 
+	global AllVersionsRefreshed  # initialized and set in UpdateGitHubVersion 
 	global lastDownloadMode # initialized in main
 	global currentDownloadMode # initialized in main
 	global noActionCount
@@ -3307,9 +3325,28 @@ def mainLoop():
 			PushAction ( command='download' + ':' + packageName, source='AUTO' )
 			packageOperationOk = False	# don't allow other operations if download was triggered
 
-		if packageOperationOk and package.AutoInstallOk and package.FileSetOk and package.Incompatible == ''\
-					and ( DbusIf.GetAutoInstall () or MediaScan.AutoInstallOverride ) and package.InstallVersionCheck ():
-			PushAction ( command='install' + ':' + packageName, source='AUTO' )
+		# validate package for install
+		if packageOperationOk and package.FileSetOk and package.Incompatible == '':
+			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
+			installOk = False
+
+			# check for one time install flag to force installation, overriding auto install conditions and DO_NOT_INSTALL flag
+			if os.path.exists (oneTimeInstallFile):
+				installOk = True
+			# auto install is enabled and it's OK to auto install this package
+			elif package.AutoInstallOk and package.InstallVersionCheck ():
+				if DbusIf.GetAutoInstall ():
+					installOk = True
+				else:
+					autoInstallFile = "/data/" + packageName + "/AUTO_INSTALL"
+					if os.path.exists (autoInstallFile):
+						installOk = True
+				
+			if installOk:
+				PushAction ( command='install' + ':' + packageName, source='AUTO' )
+				# remove one-time install flag to prevent repeated installs
+				if os.path.exists (oneTimeInstallFile):
+					os.remove (oneTimeInstallFile)
 
 	# check all packages before looking for reboot or GUI restart
 	rebootNeeded = False

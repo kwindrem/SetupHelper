@@ -84,6 +84,11 @@ qmlDir=/opt/victronenergy/gui/qml
 
 function versionStringToNumber ()
 {
+	if [ "$" == "" ]; then
+		versionNumber=0
+		return
+	fi
+
 	local version
 	local type
 	local major

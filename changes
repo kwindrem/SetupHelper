@@ -1,3 +1,12 @@
+v4.17:
+	fixed: reinstall not working after OS update
+	added AUTO_INSTALL_PACKAGES flag to /data
+		this flag is easier to build into an archive than the one on removable media
+		but is removed following the auto install to prevent repeats
+	added AUTO_INSTALL flag in each package
+		this overides the user auto install preferece
+	dropped support for Venus OS v2.4x and 2.5x
+
 v4.16:
 	fixed: white screen in Venus v2.73 and earlier
 

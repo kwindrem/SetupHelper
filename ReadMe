@@ -271,6 +271,19 @@ The Package Manager includes a set of menus on the GX device menu system
 
 			Note: this uses PackageManager, so if SetupHelper isn't installed it will do nothing
 
+		AUTO_INSTALL:
+			If the file AUTO_INSTALL is present in a package directory, the package will be installed
+				as if the auto install option is set in the PackageManager menu
+			Version checks are still performed and DO_NOT_INSTALL is honored
+
+		ONE_TIME_INSTALL
+			If the file ONE_TIME_INSTALL is present in a package directory, the package is automatically installed
+				even if automatic installs are diabled and the DO_NOT_INSTALL flag is set
+			This ONE_TIME_INSTALL is removed when the install is performed
+				to prevent repeated installs
+			Packages may be deployed with this flag set to insure it is installed
+				when a new version is transferred from removable media or downloaded from GitHub
+
 		INITIALZE_PACKAGE_MANAGER and menu item:
 			If present, the PackageManager's persistent storage (dbus Settings parameters) are initialized
 			and PackageManager restarted

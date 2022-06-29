@@ -590,7 +590,7 @@ fi
 if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
 	installedVersion=$(cat "$installedFlag")
 	if [ -z $installedVersion ]; then
-		installedVersion="unknown"
+		installedVersion=""
 	else
 		echo $installedVersion > "$installedVersionFile"
 	fi
@@ -632,24 +632,37 @@ fi
 
 # called from reinstallMods at boot time
 if $reinstall ; then
-	installedVersion=$(cat "$installedVersionFile")
-	versionStringToNumber $installedVersion
-	installedVersionNumber=$versionNumber
-	packageVersion=$(cat "$scriptDir/version")
-	versionStringToNumber $packageVersion
-	packageVersionNumber=$versionNumber
-
     runningAtBoot=true
     if $force ; then
         scriptAction='INSTALL'
+	# not installed, do it now
     elif [ ! -f "$installedVersionFile" ]; then
         scriptAction='INSTALL'
-	# trigger install if version numbers differ
-	elif (( installedVersionNumber != packageVersionNumber )); then
-        scriptAction='INSTALL'
-    else
-        exit $EXIT_SUCCESS
-    fi
+        installedVersion=""
+		installedVersionNumber=0
+	# check versions and install only if package version is newer than installed version
+	else
+		installedVersion=$(cat "$installedVersionFile")
+		versionStringToNumber $(cat "$installedVersionFile")
+		installedVersionNumber=$versionNumber
+
+		scriptVersionFile="$scriptDir/version"
+		if [ -f "$scriptVersionFile" ]; then
+			packageVersion=$(cat "$scriptVersionFile")
+			versionStringToNumber $packageVersion
+			packageVersionNumber=$versionNumber
+		else
+			packageVersion=""
+			packageVersionNumber=0
+		fi
+
+		# trigger install if version numbers differ
+		if (( installedVersionNumber != packageVersionNumber )); then
+			scriptAction='INSTALL'
+		else
+			exit $EXIT_SUCCESS
+		fi
+	fi
 
 # not running from reinstallMods
 else

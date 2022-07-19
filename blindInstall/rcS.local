@@ -60,33 +60,25 @@ sync
 
 setupHelperBlind='/data/SetupHelper-blind'
 blindVersionFile="$setupHelperBlind/version"
-installedVersionFile='/etc/venus/installedVersion-SetupHelper'
 setupHelperStored='/data/SetupHelper'
+storedVersionFile="$setupHelperStored/version"
 
+# if SetupHelper-blind exists and is different version than what's stored in the package directory
+#	install the blind package
 doInstall=false
-# SetupHelper is currently stored in /data
-# check to see if it needs to be updated
-if [ -d "$setupHelperStored" ]; then
-	if [ -f "$blindVersionFile" ]; then
-		blindVersion=$(cat "$blindVersionFile")
-	else
-		logMessage "Error: no blind version"
-		blindVersion=""
-	fi
-	if [ -f "$installedVersionFile" ]; then
-		installedVersion=$(cat "$installedVersionFile")
-	else
-		installedVersion=""
-	fi
-
-	if [ "$installedVersion" != "$blindVersion" ]; then
-		doInstall=true
-	fi
-# no SetupHelper found, skip version checks and install
+if [ -f "$blindVersionFile" ]; then
+	blindVersion=$(cat "$blindVersionFile")
 else
+	blindVersion=""
+fi
+if [ -f "$storedVersionFile" ]; then
+	storedVersion=$(cat "$storedVersionFile")
+else
+	storedVersion=""
+fi
+if [ "$storedVersion" != "$blindVersion" ]; then
 	doInstall=true
 fi
-
 
 if $doInstall ; then
 	script="$setupHelperBlind/blindInstall/blindInstall.sh"
@@ -96,16 +88,19 @@ if $doInstall ; then
 		sync
 		nohup "$script" > /dev/null &
 	fi
-else
-	logMessage "no update needed"
+elif [ -d "$setupHelperBlind" ]; then
+	logMessage "no update needed - removing blind copy"
 	rm -rf "$setupHelperBlind"
-	# SetupHelper reinstall all Venus mods
-	# this is here in case /data/rcS.local installed by SetupHelper is replaced
-	#	by this one during the first part of the blind install process
-	scrpit="/data/SetupHelper/reinstallMods"
-	if [ -f "$script" ]; then
-		nohup "$script" > /dev/null &
-	fi
+fi
+
+# SetupHelper reinstall all Venus mods
+# this is here in case /data/rcS.local installed by SetupHelper is replaced
+#	by this one during the first part of the blind install process
+script="/data/SetupHelper/reinstallMods"
+if [ -f "$script" ]; then
+	nohup "$script" > /dev/null &
+else
+	logMessage "Error: no reinstallMods script"
 fi
 
 logMessage "end"

@@ -1957,11 +1957,10 @@ class PackageClass:
 
 		# platform is OK, now check versions
 		if incompatible == False:
-			# check version compatibility
 			try:
 				fd = open (packageDir + "/firstCompatibleVersion", 'r')
 			except:
-				firstVersion = "v2.40"
+				firstVersion = "v2.40" # TODO: change to v2.66 ??????????????????????????
 			else:
 				firstVersion = fd.readline().strip()
 				fd.close ()
@@ -2766,9 +2765,13 @@ class InstallPackagesClass (threading.Thread):
 
 class MediaScanClass (threading.Thread):
 
+
 	# transferPackage unpacks the archive and moves it into postion in /data
 	#
 	#	path is the full path to the archive
+	#
+	#	if true, autoInstallOverride causes the ONE_TIME_INSTALL flag to be set
+	#		this happens if the caller detects the AUTO_INSTALL_PACKAGES flag on removable media
 
 	def transferPackage (self, path, autoInstallOverride=False):
 		packageName = os.path.basename (path).split ('-', 1)[0]
@@ -2808,6 +2811,7 @@ class MediaScanClass (threading.Thread):
 
 		# attempt to locate a package directory in the tree below tempDirectory
 		unpackedPath = LocatePackagePath (tempDirectory)
+
 		if unpackedPath == None:
 			logging.warning (packageName + " archive doesn't contain a package directory - rejected" )
 			shutil.rmtree (tempDirectory)
@@ -2815,11 +2819,32 @@ class MediaScanClass (threading.Thread):
 			DbusIf.UpdateStatus ( message="", where='Media')
 			return False
 
+		# compare versions and proceed only if they are different
+		packagePath = "/data/" + packageName
+		try:
+			fd = open (packagePath + "/version", 'r')
+		except:
+			packageVersion = 0
+		else:
+			packageVersion = VersionToNumber (fd.readline().strip())
+			fd.close ()
+		try:
+			fd = open (unpackedPath + "/version", 'r')
+		except:
+			unpackedVersion = 0
+		else:
+			unpackedVersion = VersionToNumber (fd.readline().strip())
+			fd.close ()
+		if packageVersion == unpackedVersion:
+			logging.warning ("transferPackages: " + packageName + " versions are the same - skipping transfer")
+			shutil.rmtree (tempDirectory)
+			DbusIf.UpdateStatus ( message="", where='Media')
+			return False
+
 		# move unpacked archive to package location
 		# LOCK this critical section of code to prevent others
 		#	from accessing the directory while it's being updated
 		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=WARNING )
-		packagePath = "/data/" + packageName
 		tempPackagePath = packagePath + "-temp"
 		DbusIf.LOCK () 
 		if os.path.exists (tempPackagePath):
@@ -2832,7 +2857,8 @@ class MediaScanClass (threading.Thread):
 		# set package one-time install flag so this package is installed regardless of other flags
 		#	this flag is removed when the install is preformed
 		if autoInstallOverride:
-			open ( packagePath + "ONE_TIME_INSTALL", 'a').close()
+			logging.warning ("Auto Install - setting ONE_TIME_INSTALL for " + packageName )
+			open ( packagePath + "/ONE_TIME_INSTALL", 'a').close()
 
 		DbusIf.UNLOCK ()
 		shutil.rmtree (tempDirectory, ignore_errors=True)
@@ -3225,7 +3251,7 @@ class MediaScanClass (threading.Thread):
 							# discovered what appears to be a valid archive
 							# unpack it, do further tests and move it to /data 
 							if accepted:
-								if self.transferPackage (path, autoInstallFile):
+								if self.transferPackage (path, autoInstallOverride):
 									automaticTransfers = True
 								if self.threadRunning == False:
 									return
@@ -3330,9 +3356,16 @@ def mainLoop():
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
 			installOk = False
 
-			# check for one time install flag to force installation, overriding auto install conditions and DO_NOT_INSTALL flag
+			# check for one time install flag to force installation, overriding auto install conditions and DO_NOT_INSTALL flag - but DO check versions
 			if os.path.exists (oneTimeInstallFile):
-				installOk = True
+				if package.InstallVersionCheck ():
+					installOk = True
+				else:
+					logging.warning ("One-time install - versions are the same - skipping " + packageName )
+				
+				# but remove the one time install flag even if install won't be performed
+				os.remove (oneTimeInstallFile)
+
 			# auto install is enabled and it's OK to auto install this package
 			elif package.AutoInstallOk and package.InstallVersionCheck ():
 				if DbusIf.GetAutoInstall ():
@@ -3344,9 +3377,6 @@ def mainLoop():
 				
 			if installOk:
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
-				# remove one-time install flag to prevent repeated installs
-				if os.path.exists (oneTimeInstallFile):
-					os.remove (oneTimeInstallFile)
 
 	# check all packages before looking for reboot or GUI restart
 	rebootNeeded = False

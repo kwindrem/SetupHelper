@@ -30,21 +30,49 @@ done
 # read lines from script list file specified above
 # and call each script
 rebootNeeded=false
+guiRestartNeeded=false
 while read -u 9 line ; do
     # ignore blank and comment lines
     if [ ! -z "$line" ] && ! [[ "$line" == \#* ]]; then
-        # strip command parameters to make sure the path/command exists
+
+        # strip command parameters and add new ones here
         command=$(awk '{print var $1}' <<< $line)
-        if [ -f $command ] ; then
-			line=$(echo "$line auto")
-            $line
-            if [ $? == $exitReboot ] ; then
-                logMessage "$command requested reboot"
-                rebootNeeded=true
-            fi
-        else
-            logMessage "$command not found"
-        fi
+		scriptDir=$(dirname $command)
+		packageName=$(basename $scriptDir)
+		packageVersionFile="$scriptDir/version"
+		installedVersionFile="$installedVersionPrefix$packageName"
+		doReinstall=false
+		# skip calling setup script if versions match or not currently installed
+		if [ -f "$installedVersionFile" ]; then
+			installedVersion=$(cat "$installedVersionFile")
+		else
+			installedVersion=""
+			doReinstall=true
+		fi
+		if [ -f "$packageVersionFile" ]; then
+			packageVersion=$(cat "$packageVersionFile")
+		else
+			packageVersion=""
+		fi
+		if [ "$packageVersion" != "$installedVersion" ]; then
+			doReinstall=true
+		fi
+
+        if $doReinstall ; then
+				if [ -f $command ] ; then
+				fullCommand=$(echo "$command reinstall auto deferReboot deferGuiRestart")
+				$fullCommand
+				if [ $? == $EXIT_REBOOT ] ; then
+					logMessage "$packageName requested reboot"
+					rebootNeeded=true
+				elif [ $? == $EXIT_RESTART_GUI ] ; then
+					logMessage "$packageName requested GUI restart"
+					guiRestartNeeded=true
+				fi
+			else
+				logMessage "$command not found"
+			fi
+		fi
     fi
 done 9< "$reinstallScriptsList"
 
@@ -52,6 +80,8 @@ done 9< "$reinstallScriptsList"
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
-else
-	logMessage "reinstallMods complete"
+elif $guiRestartNeeded ; then
+    logMessage "restarting GUI"
+    svc -t /service/gui
 fi
+logMessage "reinstallMods complete"

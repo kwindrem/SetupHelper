@@ -545,6 +545,29 @@ endScript ()
 # It is set to false here the 'auto' parameter is passed on the command line
 #	which indicates this script is NOT being run from the command line
 
+# initialize version strings and numbers for future checks
+
+if [ -f "$installedVersionFile" ]; then
+	installedVersion=$(cat "$installedVersionFile")
+	versionStringToNumber $(cat "$installedVersionFile")
+	installedVersionNumber=$versionNumber
+else
+	installedVersion=""
+	installedVersionNumber=0
+fi
+
+packageVersionFile="$scriptDir/version"
+if [ -f "$packageVersionFile" ]; then
+	packageVersion=$(cat "$packageVersionFile")
+	versionStringToNumber $packageVersion
+	packageVersionNumber=$versionNumber
+else
+	packageVersion=""
+	packageVersionNumber=0
+fi
+
+logMessage "--- starting setup script $packageVersion"
+
 # collect command line options
 reinstall=false
 force=false
@@ -630,32 +653,17 @@ else
 	optionsSet=true
 fi
 
+
 # called from reinstallMods at boot time
 if $reinstall ; then
     runningAtBoot=true
     if $force ; then
         scriptAction='INSTALL'
 	# not installed, do it now
-    elif [ ! -f "$installedVersionFile" ]; then
+    elif (( installedVersionNumber == 0 )); then
         scriptAction='INSTALL'
-        installedVersion=""
-		installedVersionNumber=0
 	# check versions and install only if package version is newer than installed version
 	else
-		installedVersion=$(cat "$installedVersionFile")
-		versionStringToNumber $(cat "$installedVersionFile")
-		installedVersionNumber=$versionNumber
-
-		scriptVersionFile="$scriptDir/version"
-		if [ -f "$scriptVersionFile" ]; then
-			packageVersion=$(cat "$scriptVersionFile")
-			versionStringToNumber $packageVersion
-			packageVersionNumber=$versionNumber
-		else
-			packageVersion=""
-			packageVersionNumber=0
-		fi
-
 		# trigger install if version numbers differ
 		if (( installedVersionNumber != packageVersionNumber )); then
 			scriptAction='INSTALL'

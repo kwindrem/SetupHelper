@@ -39,8 +39,8 @@
 # That call is included in the blind install rcS.local so that if the media is left inserted
 #	subsequent reboots will still check for reinstalls (applies only to firmwire before v2.90)
 #
-# the rcS.local from the blindInstall is removed at the end of blindInstall.sh
-#	SetupHelper/setup creates a new one
+# the rcS.local from the blindInstall is removed/restored at the end of blindInstall.sh
+#	SetupHelper/setup creates a new one or appends to the original rcS.local
 #
 # blindInstall.sh is run in the background so it can wait for dbus Settings resources
 # to become available before running the package install script.
@@ -48,6 +48,8 @@
 
 source "/data/SetupHelper-blind/EssentialResources"
 source "/data/SetupHelper-blind/LogHandler"
+
+logMessage "starting"
 
 # wait until dbus settings are active
 while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
@@ -59,9 +61,6 @@ sleep 2
 
 setupHelperBlind='/data/SetupHelper-blind'
 setupHelperStored='/data/SetupHelper'
-setupHelperInstalledVersion='/etc/venus/installedVersion-SetupHelper'
-blindVersionFile="$setupHelperBlind/version"
-installedVersionFile='/etc/venus/installedVersion-SetupHelper'
 
 # move the extracted archive into position and run the setup script
 if [ -e "$setupHelperBlind" ]; then
@@ -72,7 +71,19 @@ if [ -e "$setupHelperBlind" ]; then
 	logMessage "moving SetupHelper archive into position"
 	mv "$setupHelperBlind" "$setupHelperStored"
 else
-	logMessage "can't move SetupHelper archive into position"
+	logMessage "SetupHelper archive not found - no changes to package"
+fi
+
+# restore /data/rcS.local from pre-hook backup
+if [ -f /data/rcS.local.orig ] ; then
+	logMessage "restoring rcS.local"
+	mv /data/rcS.local.orig /data/rcS.local
+# if rcS.local was from blind install - remove it
+elif [ -f "/data/rcS.local" ]; then
+	if  [ $(grep -c "blind install" /data/rcS.local) > 0 ]; then
+		logMessage "removing rcS.local from blind install"
+		rm "/data/rcS.local"
+	fi
 fi
 
 # run the setup script
@@ -83,5 +94,8 @@ else
 	logMessage "error - can't install SetupHelper"
 fi
 
-logMessage "end"
+# remove the blind install SetupHelper from the archive if still present
+rm -rf "$setupHelperBlind"
+
+logMessage "completed"
 

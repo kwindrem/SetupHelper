@@ -423,9 +423,15 @@ endScript ()
             logMessage "adding $shortScriptName" to $(basename "$reinstallScriptsList")
             echo "$fullScriptName" "$reinstallParam" >> "$reinstallScriptsList"
         fi
+
         if [ ! -f "$rcLocal" ]; then
             logMessage "creating $rcLocal"
-            cat "$setupHelperDir/rcS.local" > "$rcLocal"
+            cp "$setupHelperDir/rcS.local" "$rcLocal"
+            chmod +x "$rcLocal"
+        elif  [ $(grep -c "blind install" "$rcLocal") -gt 0 ]; then
+            logMessage "REPLACING blind install $rcLocal with the standard one"
+			rm -f "$rcLocal"
+            cp "$setupHelperDir/rcS.local" "$rcLocal"
             chmod +x "$rcLocal"
         elif  [ $(grep -c "SetupHelper" "$rcLocal") == 0 ]; then
             logMessage "adding SetupHelper reinstall script to $rcLocal"
@@ -487,7 +493,7 @@ endScript ()
 				exit $EXIT_REBOOT
 			fi
 		else
-			echo "reboot needed"
+			echo "completed - reboot needed"
 			exit $EXIT_REBOOT
 		fi
 	elif $restartGui ; then
@@ -503,11 +509,11 @@ endScript ()
 			fi
 		else
 			if $deferGuiRestart ; then
-				logMessage "GUI restart needed"
+				logMessage "completed - GUI restart needed"
 				exit $EXIT_RESTART_GUI
 			# GUI restart NOT deferred - do it now
 			else
-				logMessage "restarting GUI"
+				logMessage "completed - restarting GUI"
 				svc -t /service/gui
 				exit $EXIT_SUCCESS
 			fi

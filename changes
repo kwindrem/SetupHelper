@@ -1,3 +1,7 @@
+v4.19:
+	fixed: after a blind install rcS.local did not get updated
+	optimized reinstallMods - wait for dbus only if script needs to run
+
 v4.18:
 	check versions before installing a package from removable media
 	check versions before transferring a package from removable media

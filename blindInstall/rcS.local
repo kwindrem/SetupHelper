@@ -39,8 +39,8 @@
 # That call is included in the blind install rcS.local so that if the media is left inserted
 #	subsequent reboots will still check for reinstalls (applies only to firmwire before v2.90)
 #
-# the rcS.local from the blindInstall is removed at the end of blindInstall.sh
-#	SetupHelper/setup creates a new one
+# the rcS.local from the blindInstall is removed/restored at the end of blindInstall.sh
+#	SetupHelper/setup creates a new one or appends to the original rcS.local
 #
 # blindInstall.sh is run in the background so it can wait for dbus Settings resources
 # to become available before running the package install script.
@@ -84,12 +84,10 @@ if $doInstall ; then
 	script="$setupHelperBlind/blindInstall/blindInstall.sh"
 	if [ -f "$script" ]; then
 		logMessage "running blindInstall.sh"
-		rm -f "/data/rcS.local"
-		sync
 		nohup "$script" > /dev/null &
 	fi
 elif [ -d "$setupHelperBlind" ]; then
-	logMessage "no update needed - removing blind copy"
+	logMessage "no update needed - removing SetupHelper-blind"
 	rm -rf "$setupHelperBlind"
 fi
 
@@ -99,8 +97,9 @@ fi
 script="/data/SetupHelper/reinstallMods"
 if [ -f "$script" ]; then
 	nohup "$script" > /dev/null &
-else
+# surpress error message since script probably won't exist after the blind install
+elif ! $doInstall ; then
 	logMessage "Error: no reinstallMods script"
 fi
 
-logMessage "end"
+logMessage "completed"

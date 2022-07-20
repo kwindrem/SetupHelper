@@ -39,8 +39,8 @@
 # That call is included in the blind install rcS.local so that if the media is left inserted
 #	subsequent reboots will still check for reinstalls (applies only to firmwire before v2.90)
 #
-# the rcS.local from the blindInstall is removed at the end of blindInstall.sh
-#	SetupHelper/setup creates a new one
+# the rcS.local from the blindInstall is removed/restored at the end of blindInstall.sh
+#	SetupHelper/setup creates a new one or appends to the original rcS.local
 #
 # blindInstall.sh is run in the background so it can wait for dbus Settings resources
 # to become available before running the package install script.
@@ -54,7 +54,7 @@ logMessage ()
 }
 
 
-logMessage "start"
+logMessage "starting"
 
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 blindVersionFile="$scriptDir/SetupHelperVersion"
@@ -84,19 +84,19 @@ if [ -d "$setupHelperStored" ]; then
 else
 	doInstall=true
 fi
-echo "blindVersion $blindVersion installedVersion $installedVersion doInstall $doInstall" >> /data/blindLog
 # returning with 0 will trigger unpacking and run post-hook.sh
 if $doInstall ; then
 	# back up /data/rcS.local for restoration in post.sh
 	rm -rf /data/rcS.local.orig
 	if [ -r /data/rcS.local ] ; then
+		logMessage "backing up rcS.local"
 		cp /data/rcS.local /data/rcS.local.orig
 	fi
-	logMessage "will do install"
+	logMessage "completed - will do install"
 	exit 0
 # returning non-zero will prevent unpacking
 # there won't be an archive to unpack andpost-hook.sh will NOT run 
 else
-	logMessage "skipping unpack and install"
+	logMessage "completed - skipping unpack and install"
 	exit -1
 fi

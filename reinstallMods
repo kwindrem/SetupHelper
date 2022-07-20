@@ -21,20 +21,15 @@ fi
 
 logMessage "reinstallMods starting"
 
-# wait until dbus settings are active
-while [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; do
-    logMessage "waiting for dBus settings"
-    sleep 2
-done
-
 # read lines from script list file specified above
 # and call each script
 rebootNeeded=false
 guiRestartNeeded=false
+settingsAlive=false
+
 while read -u 9 line ; do
     # ignore blank and comment lines
     if [ ! -z "$line" ] && ! [[ "$line" == \#* ]]; then
-
         # strip command parameters and add new ones here
         command=$(awk '{print var $1}' <<< $line)
 		scriptDir=$(dirname $command)
@@ -42,7 +37,7 @@ while read -u 9 line ; do
 		packageVersionFile="$scriptDir/version"
 		installedVersionFile="$installedVersionPrefix$packageName"
 		doReinstall=false
-		# skip calling setup script if versions match or not currently installed
+		# call setup script if versions are different or package not currently installed
 		if [ -f "$installedVersionFile" ]; then
 			installedVersion=$(cat "$installedVersionFile")
 		else
@@ -59,18 +54,28 @@ while read -u 9 line ; do
 		fi
 
         if $doReinstall ; then
-				if [ -f $command ] ; then
+			if [ -f $command ] ; then
 				fullCommand=$(echo "$command reinstall auto deferReboot deferGuiRestart")
+				# wait until dbus settings are active before calling setup script
+				while ! $settingsAlive ; do
+					if [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; then
+						logMessage "waiting for dBus settings"
+					else
+						settingsAlive=true
+					fi
+					sleep 2
+				done
+
 				$fullCommand
 				if [ $? == $EXIT_REBOOT ] ; then
-					logMessage "$packageName requested reboot"
+					logMessage "$packageName reinstall requested reboot"
 					rebootNeeded=true
 				elif [ $? == $EXIT_RESTART_GUI ] ; then
-					logMessage "$packageName requested GUI restart"
+					logMessage "$packageName reinstall requested GUI restart"
 					guiRestartNeeded=true
 				fi
 			else
-				logMessage "$command not found"
+				logMessage "Error: $packageName setup script not found"
 			fi
 		fi
     fi

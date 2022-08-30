@@ -76,7 +76,7 @@ yesNoPrompt ()
 #
 # $1 indicates if there are additional prompts needed during installaiton
 # if this parameter is 'MORE_PROMPTS', installaiton does NOT change scriptAction
-# if this parameter does not exist, installation WILL change scriptAction to install
+# if this parameter does not exist, installation WILL change scriptAction to INSTALL
 # this provides backaward compatibility with scripts written prior to the reinstall logic
 #
 
@@ -226,7 +226,7 @@ updateActiveFile ()
     if $mayHaveBeenUpdated ; then
         cmp -s "$sourceFile" "$destinationFile" > /dev/null
         # already updated - no change to active file
-        if [ $? == 0 ]; then
+        if (( $? == 0 )); then
             needToUpdate=false
         fi
     fi
@@ -361,7 +361,7 @@ _checkFileSets ()
                 
                 cmp -s "$activeFile" "$otherFile.orig" > /dev/null
                 # files match
-                if [ $? -eq 0 ]; then
+                if (( $? == 0 )); then
                     matchFound=true
                     break
                 fi

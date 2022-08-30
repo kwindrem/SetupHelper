@@ -1,3 +1,7 @@
+v4.22:
+	fixed: reinstallMods does not reboot or restart the GUI if needed
+	included detailed description / help creating setup scripts and file sets
+
 v4.21:
 	add missing settings to backup/restore
 v4.20:

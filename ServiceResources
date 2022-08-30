@@ -186,7 +186,7 @@ installService ()
         logMessage "restarting $1 service"
         if [ -f "$scriptDir/service/run" ]; then
             cmp -s "$scriptDir/service/run" "$serviceDir/$1/run" > /dev/null
-            if [ $? != 0 ]; then
+            if (( $? != 0 )); then
                 cp "$scriptDir/service/run" "$serviceDir/$1/run"
 				if $tempFsOverlay ; then
 					cp "$scriptDir/service/run" "/service/$1/run"
@@ -195,7 +195,7 @@ installService ()
         fi
         if [ -f "$scriptDir/service/log/run" ]; then
             cmp -s "$scriptDir/service/log/run" "$serviceDir/$1/log/run" > /dev/null
-            if [ $? != 0 ]; then
+            if (( $? != 0 )); then
                 cp "$scriptDir/service/log/run" "$serviceDir/$1/log/run"
 				if $tempFsOverlay ; then
 					cp "$scriptDir/service/log/run" "/service/$1/log/run"

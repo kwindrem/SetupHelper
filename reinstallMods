@@ -67,10 +67,11 @@ while read -u 9 line ; do
 				done
 
 				$fullCommand
-				if [ $? == $EXIT_REBOOT ] ; then
+				returnCode=$?
+				if (( $returnCode == $EXIT_REBOOT )) ; then
 					logMessage "$packageName reinstall requested reboot"
 					rebootNeeded=true
-				elif [ $? == $EXIT_RESTART_GUI ] ; then
+				elif (( $returnCode == $EXIT_RESTART_GUI )) ; then
 					logMessage "$packageName reinstall requested GUI restart"
 					guiRestartNeeded=true
 				fi

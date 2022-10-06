@@ -1,3 +1,6 @@
+v4.24:
+	fixed: incompatible version check somtimes fails
+
 v4.23:
 	added Cerbo tanks and temps backup/restore
 v4.22:

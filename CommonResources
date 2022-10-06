@@ -707,7 +707,7 @@ if [ -f "$scriptDir/raspberryPiOnly" ]; then
 			scriptAction='UNINSTALL'
 		else
 			logMessage "can't determine Venus device type - exiting"
-			exit $INCOMPATIBLE_PLATFORM
+			exit $EXIT_INCOMPATIBLE_PLATFOM
 		fi
 	elif [ $machine != "raspberrypi2" ] && [ $machine != "raspberrypi4" ]; then
 		platformNotCompatible=true
@@ -742,7 +742,7 @@ elif [ -f "$scriptDir/obsoleteVersion" ]; then
 fi
 if $versionNotCompatible ; then
 	# if not installed, log message and exit
-	if $isInstalled ; then
+	if ! $isInstalled ; then
 		logMessage "$packageName not compatible with Venus $venusVersion - can't install"
 			exit $EXIT_INCOMPATIBLE_VERSION
 	else

@@ -361,4 +361,4 @@ System automatic configuration and package installation:
 	REMOVE THE FLASH DRIVE after you have verified that all packages have been installed (check Active packages in PackageManager).
 
 
-If you are interested in the inner workings of Setup Manager and Package Manager or wish to create a package that can be managed by PackageManager, contact me through the issues part of SetupHelper on GitHub.
+If you are interested in the inner workings of Setup Manager and Package Manager or wish to create a package that can be managed by PackageManager, the document "Package development guidelines"  contains assitional information. Feel free to contact me through the issues part of SetupHelper on GitHub.

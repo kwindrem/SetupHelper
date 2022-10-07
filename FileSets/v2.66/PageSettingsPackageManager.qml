@@ -46,9 +46,8 @@ MbPage {
             bind: Utils.path (settingsPrefix, "/GitHubAutoDownload")
             possibleValues:
             [
-                MbOption { description: "Normal"; value: 1 },
-                MbOption { description: "Fast, then Normal"; value: 2 },
-                MbOption { description: "Once (Fast)"; value: 3 },
+                MbOption { description: "On"; value: 1 },
+                MbOption { description: "Once"; value: 2 },
                 MbOption { description: "Off"; value: 0 }
             ]
             writeAccessLevel: User.AccessInstaller

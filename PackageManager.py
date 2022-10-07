@@ -23,17 +23,13 @@
 #
 #		/Settings/PackageManager/GitHubAutoDownload 	set by the GUI to control automatic updates from GitHub
 #			0 - no GitHub auto downloads (version checks still occur)
-#			1 - normal updates - one download every 10 minutes
-#			2 - fast updates - one download update every 10 seconds, then at the normal rate after one pass
+#			1 - updates enabled - one download update every 10 seconds, then one download every 10 minutes
 #			3 - one update pass at the fast rate, then to no updates
 #				changing to one of the fast scans, starts from the first package
-#
-#		if no download is needed, checks for downloads are fast: every 5 seconds, slow: every 2 minutes
 
 AUTO_DOWNLOADS_OFF = 0
 NORMAL_DOWNLOAD = 1
-FAST_DOWNLOAD = 2
-ONE_DOWNLOAD = 3
+ONE_DOWNLOAD = 2
 
 #		/Settings/PackageManager/AutoInstall
 #			0 - no automatic install
@@ -84,7 +80,7 @@ ONE_DOWNLOAD = 3
 #
 #		the GUI must wait for PackageManager to signal completion of one operation before initiating another
 #
-#		  set by packageMonitor when the task is complete
+#		  set by PackageManager when the task is complete
 #	return codes - set by PackageManager
 #			'' - action completed without errors (idle)
 #			'ERROR' - error during action - error reported in /GuiEditStatus:
@@ -953,7 +949,7 @@ class DbusIfClass:
 
 	#	handleGuiEditAction (internal use only)
 	#
-	# the GUI uses packageMonitor service /GuiEditAction
+	# the GUI uses PackageManager service /GuiEditAction
 	# to inform PackageManager of an action
 	# a command is formed as "action":"packageName"
 	#
@@ -2105,7 +2101,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 	#		prioirty package to update it's GitHub version 
 	#		"STOP" - indicating run should return
 	#		"FAST" - indicating the loop should speed up
-	#			wake is used when download refresh mode/rates change
+	#			this is used when download refresh mode/rates change
 	#		checks the threadRunning flag and returns if it is False,
 	#	when run returns, the main method should catch the tread with join ()
 
@@ -2118,10 +2114,9 @@ class UpdateGitHubVersionClass (threading.Thread):
 	def run (self):
 		global AllVersionsRefreshed
 
-		AllVersionsRefreshed = False
-
+		delay = 2.0
 		gitHubVersionPackageIndex = 0
-		delay = 10.0
+		AllVersionsRefreshed = False
 		
 		while self.threadRunning:
 			command = ""
@@ -2144,8 +2139,9 @@ class UpdateGitHubVersionClass (threading.Thread):
 
 			# the FAST command speeds up the loop and starts with the first package
 			if (command == 'FAST'):
-				delay = 10.0
+				delay = 2.0
 				gitHubVersionPackageIndex = 0
+				AllVersionsRefreshed = False
 			# command contains a package name for priority update
 			elif command != "":
 				priorityPackageName = command
@@ -2391,25 +2387,15 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 	#	DownloadGitHub run (the thread)
 	#
-	# updates GitHub versions
-	#	a priority update triggered when GitHub info changes
-	#	a backgroud update
-	# downloads packages from
+	# downloads packages placed on its queue from
 	#	GUI requests
-	#	a background loop
-	# the background loop always starts at the beginning of PackageList
-	#	and stops when a package needing a download is found
-	# on the next pass, (hopefully) that package download will have
-	#	been satisfied and a new one will be found
-	# when no updates are found, the download scan rate slows
-	#	but a change in auto download mode will speed it up again
+	#	a background loop in mainLoop
 	#
 	# run () checks the threadRunning flag and returns if it is False,
 	#	essentially taking the thread off-line
 	#	the main method should catch the tread with join ()
 
 	def run (self):
-		lastAutoDownloadTime = 0.0
 		while self.threadRunning:	# loop forever
 			# process one GUI download request
 			# if there was one, skip auto downloads until next pass
@@ -2445,33 +2431,13 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				time.sleep (5.0)
 				continue
 
-			# set version refresh rate and download delay
-			currentMode = DbusIf.GetAutoDownloadMode ()
-			if currentMode == ONE_DOWNLOAD or currentMode == FAST_DOWNLOAD:
-				downloadDelay = 10.0
-			else:
-				downloadDelay = 600.0
-
-			# wait here until it is time to do the download
-			while True:
-				timeToGo = downloadDelay + lastAutoDownloadTime - time.time()
-				if timeToGo <= 0:
-					break
-				# it's not time to download yet - update status message with countdown
-				if timeToGo > 90:
-					statusMessage = packageName + " download begins in " + "%0.1f minutes" % ( timeToGo / 60 )
-				elif  timeToGo > 1.0:
-					statusMessage = packageName + " download begins in " + "%0.0f seconds" % ( timeToGo )
-				if source == 'GUI':
-					DbusIf.UpdateStatus ( message=statusMessage, where='Editor' )
-				else:
-					DbusIf.UpdateStatus ( message=statusMessage, where='Download' )
-
-				time.sleep (5.0)
-
 			# do the download here
+			downloadStartTime = time.time()
 			self.GitHubDownload (packageName=packageName, source=source )
-			lastAutoDownloadTime = time.time()
+
+			# sleep twice the time it took to download the archive to avoid flooding internet connection
+			downloadTime = (time.time() - downloadStartTime) * 2
+			time.sleep (downloadTime)
 		# end while True
 	# end run
 # end DownloadGitHubPackagesClass
@@ -3290,15 +3256,18 @@ def mainLoop():
 	global mainloop
 	global SystemReboot
 	global GuiRestart
-	global PackageIndex
+	global PackageIndex # initialized in main
 	global PushAction
-	global AllVersionsRefreshed  # initialized and set in UpdateGitHubVersion 
+	global AllVersionsRefreshed  # initialized main and set in UpdateGitHubVersion 
 	global lastDownloadMode # initialized in main
 	global currentDownloadMode # initialized in main
 	global noActionCount
 	global MediaScan
 	global InitializePackageManager
 	global SetupHelperUninstall
+	global LastAutoDownloadTime # initialized in main
+	global PackageScanComplete # initialized in main
+	global downloadDelay # initialized in main
 
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
 	# exit mainLoop and do uninstall in main, then reboot
@@ -3307,27 +3276,43 @@ def mainLoop():
 		mainloop.quit()
 		return False
 
-	delayStart = 0.0
 	SetupHelperUninstall = False
+	statusMessage = ""
 
 	# detect download mode changes and switch back to fast scan
 	lastDownloadMode = currentDownloadMode
 	currentDownloadMode = DbusIf.GetAutoDownloadMode ()
+	autoInstall = DbusIf.GetAutoInstall ()
+
 	# UpdateGitHubVersion is responsible for fetching GitHub versions
 	#	when it has checked all versions it sets AllVersionsRefreshed
 	#	so we can update the download mode
-	#	slowing or stopping the downloads
-	if AllVersionsRefreshed:
+	# skip all package processing until the update is complete
+
+	# prevent downloads while refreshing GitHub version info
+	if not AllVersionsRefreshed:
+		statusMessage = "refreshing GitHub version information"
+		PackageScanComplete = False
+		PackageIndex = 0	# make sure new scan starts at beginning
+
+	# after a complete scan, change modes if appropirate
+	if PackageScanComplete:
+		# set GitHub download delay to background rate
+		downloadDelay = 600.0
 		if currentDownloadMode == ONE_DOWNLOAD:
 			DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
-		elif currentDownloadMode == FAST_DOWNLOAD:
-			DbusIf.SetAutoDownload (NORMAL_DOWNLOAD)
-		AllVersionsRefreshed = False
-	# signal mode change to the GitHub threads
+		PackageScanComplete = False
+
 	if currentDownloadMode != lastDownloadMode:
-		if currentDownloadMode == ONE_DOWNLOAD or currentDownloadMode == FAST_DOWNLOAD:
+		# signal mode change to the GitHub threads
+		if currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF:
+			# reset index to start of package list when mode changes
+			PackageIndex = 0
+			PackageScanComplete = False
+			AllVersionsRefreshed = False
 			UpdateGitHubVersion.GitHubVersionQueue.put ('FAST')
-	
+			downloadDelay = 10.0
+
 	PackageClass.AddStoredPackages ()
 
 	DbusIf.UpdateDefaultPackages ()
@@ -3338,9 +3323,15 @@ def mainLoop():
 	if packageListLength > 0:
 		if PackageIndex >= packageListLength:
 			PackageIndex = 0
+			PackageScanComplete = True
+	else:
+		PackageIndex = 0
+		PackageScanComplete = False
+
+	if AllVersionsRefreshed:
 		package = PackageClass.PackageList [PackageIndex]
-		PackageIndex += 1
 		packageName = package.PackageName
+		PackageIndex += 1
 
 		package.UpdateFileFlagsAndVersions ()
 		# disallow operations on this package if anything is pending
@@ -3348,8 +3339,22 @@ def mainLoop():
 
 		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
 					and DownloadGitHub.DownloadVersionCheck (package):
-			PushAction ( command='download' + ':' + packageName, source='AUTO' )
-			packageOperationOk = False	# don't allow other operations if download was triggered
+			# don't allow install if download is needed
+			packageOperationOk = False
+
+			timeToGo = downloadDelay + LastAutoDownloadTime - time.time()
+			# it's time - queue the download request
+			if timeToGo <= 0:
+				statusMessage = "downloading " + packageName + " ..."
+				PushAction ( command='download' + ':' + packageName, source='AUTO' )
+				LastAutoDownloadTime = time.time ()
+			# it's not time to download yet - update status message with countdown
+			if timeToGo > 90:
+				if statusMessage == "":
+					statusMessage = packageName + " download begins in " + "%0.1f minutes" % ( timeToGo / 60 )
+			elif  timeToGo > 1.0:
+				if statusMessage == "":
+					statusMessage = packageName + " download begins in " + "%0.0f seconds" % ( timeToGo )
 
 		# validate package for install
 		if packageOperationOk and package.FileSetOk and package.Incompatible == '':
@@ -3376,7 +3381,9 @@ def mainLoop():
 						installOk = True
 				
 			if installOk:
+				statusMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
+	# end if PackageScanComplete
 
 	# check all packages before looking for reboot or GUI restart
 	rebootNeeded = False
@@ -3409,12 +3416,12 @@ def mainLoop():
 				return False
 		elif GuiRestart:
 			logging.warning ("restarting GUI")
+			statusMessage = "restarting GUI ..."
 			try:
 				proc = subprocess.Popen ( [ 'svc', '-t', '/service/gui' ] )
 			except:
 				logging.critical ("GUI restart failed")
 			GuiRestart = False
-			DbusIf.SetInstallStatus ("")
 			DbusIf.SetEditStatus ("")
 			DbusIf.SetGuiEditAction ('')
 			# clear all package GUI restart needed flags
@@ -3423,6 +3430,16 @@ def mainLoop():
 				package.SetGuiRestartNeeded (False)
 			# the ActionNeeded flag could be 'reboot' but that's addressed in main below anyway
 			DbusIf.SetActionNeeded ('')
+
+		if statusMessage == "":
+			if currentDownloadMode != AUTO_DOWNLOADS_OFF:
+				statusMessage = "checking for downloads"
+				if autoInstall:
+					statusMessage += " and installs"
+			elif autoInstall:
+				statusMessage = "checking for installs"
+
+	DbusIf.UpdateStatus ( statusMessage, where='Download' )
 
 	# continue the main loop
 	return True
@@ -3494,12 +3511,20 @@ def main():
 	global noActionCount
 	global InitializePackageManager
 	global SetupHelperUninstall
+	global LastAutoDownloadTime
+	global PackageScanComplete
+	global AllVersionsRefreshed  # set in UpdateGitHubVersion used in mainLoop
+	global downloadDelay
+	PackageScanComplete = False
 	SystemReboot = False
 	GuiRestart = False
 	InitializePackageManager = False
 	SetupHelperUninstall = False
 	PackageIndex = 0
 	noActionCount = 0
+	LastAutoDownloadTime = 0.0
+	AllVersionsRefreshed = False
+	downloadDelay = 600.0
 
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )

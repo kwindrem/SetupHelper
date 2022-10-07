@@ -166,12 +166,14 @@ The Package Manager includes a set of menus on the GX device menu system
 		Automatic GitHub downloads controls if packages are automatically downloaded
 				from GitHub. This occurs if a newer version is available.
 			Modes:
-				Normal checks GitHub for a package once every 5 minutes 
-					and waits 10 minutes after a download has occurred before checking another
-				Fast checks GitHub for a package once every 5 seconds (10 seconds after a download),
-					then after one pass through all packages, the downloads are switched to Normal rate
-				Once checks GitHub for a package at the fast rate, but only once, then downloads are turned off
-				Disable disables GitHub downloads
+				On checks GitHub for a package that is newer than what is stored on the system 
+				If multiple downloads are detected, PackageManager waits after a download has occurred before checking another
+					The wait time is 10 seconds for the first pass through the active packages.
+					After one pass through all packages, the downloads spaced 10 MINUTES apart
+				Once checks GitHub for a package, then downloads are turned off
+				Off disables GitHub downloads
+
+			Note that when switching on automatic downloads, PackageManager first refreshes the version information from GitHub
 
 		Auto install packages:
 			Controls whether new versions of a package are automatically installed.

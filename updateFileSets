@@ -30,8 +30,8 @@
 allPackages="SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup RpiTemp ShutdownMonitor TankRepeater VeCanSetup"
 
 # set these as appropriate to your system
-packageRoot="/Users/Kevin/Documents/VenusMods"
-originalFiles="$packageRoot/OriginalFiles"
+packageRoot="/Users/Kevin/Documents/GitHub"
+originalFiles="$packageRoot/OriginalVenusOsFiles"
 
 
 versionList=($(ls -d "$originalFiles"/v*))

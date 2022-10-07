@@ -1,3 +1,10 @@
+v4.25:
+	fixed: downloads triggered from the PackageManager edit menu
+		are sometimes are delayed by automatic download checks
+	fixed: fast download sometimes ends before all packages are checked
+	removed Fast, then Normal download mode
+		fast downloads are now automatic when enabling downloads
+
 v4.24:
 	fixed: incompatible version check somtimes fails
 

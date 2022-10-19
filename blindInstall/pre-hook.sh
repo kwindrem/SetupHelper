@@ -61,6 +61,10 @@ blindVersionFile="$scriptDir/SetupHelperVersion"
 installedVersionFile='/etc/venus/installedVersion-SetupHelper'
 setupHelperStored='/data/SetupHelper'
 
+# remove GitHub project data just in case it ends up on the target
+#	(it's large (about 20 MB) and could get in the way of package replacement
+rm -rf $setupHelperStored/.git
+
 doInstall=false
 # SetupHelper is currently stored in /data
 # check to see if it needs to be updated

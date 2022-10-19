@@ -1,3 +1,6 @@
+v4.27:
+	fixed 20 MB size for blind isntall archive
+
 v4.25:
 	fixed: downloads triggered from the PackageManager edit menu
 		are sometimes are delayed by automatic download checks

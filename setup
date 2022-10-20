@@ -56,7 +56,28 @@ if [ $scriptAction == 'NONE' ] ; then
 fi
 
 if [ $scriptAction == 'INSTALL' ] ; then
-    updateActiveFile "$qmlDir/PageSettings.qml"
+	# modify PageSettings here so SetupHelper is independent of Venus OS verison
+	if [ -f "$qmlDir/PageSettings.qml.orig" ]; then
+		origFile="$qmlDir/PageSettings.qml.orig"
+	else
+		origFile="$qmlDir/PageSettings.qml"
+	fi
+	if (( $(grep -c "PackageManager" $origFile) > 0)); then
+		logMessage "ERROR: PageSettings.qml already modified for PackageManager -- skipping that modification"
+	else
+		rm -f "/var/volatile/tmp/PageSettings.qml"
+		echo "//////// modified to insert PackageManager menu" > "/var/volatile/tmp/PageSettings.qml"
+		# find line with second to last }
+		#################insertBefore=$(awk '{print NR  " " $s}' "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
+		insertBefore=$(cat -n "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
+		((insertBefore -= 1))
+		# include all lines before that one
+		head -n $insertBefore $origFile >> "/var/volatile/tmp/PageSettings.qml"
+		# file with PackageManager menu code includes the last two }
+		cat "$pkgFileSets/PackageManagerMenu.txt" >> "/var/volatile/tmp/PageSettings.qml"
+		updateActiveFile "/var/volatile/tmp/PageSettings.qml" "$qmlDir/PageSettings.qml"
+		rm -f "/var/volatile/tmp/PageSettings.qml"
+	fi
     updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageEdit.qml"

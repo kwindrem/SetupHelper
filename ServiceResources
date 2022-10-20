@@ -174,7 +174,7 @@ installService ()
     fi
     # service not yet installed, COPY service directory to the active locaiton
     if [ ! -e "$serviceDir/$1" ]; then
-        logMessage "installing $1 service"
+        logMessage "installing $1 service - please wait"
 		sleep 5
         cp -R "$scriptDir/service" "$serviceDir/$1"
 		if $tempFsOverlay ; then

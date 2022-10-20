@@ -1,0 +1,8 @@
+//////// added for PackageManager
+		MbSubMenu
+		{
+			description: qsTr("Package manager")
+			subpage: Component { PageSettingsPackageManager {} }
+		}
+	}
+}

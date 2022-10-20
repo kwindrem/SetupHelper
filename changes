@@ -1,3 +1,6 @@
+v4.28:
+	make SetupHelper independent of Venus OS version
+
 v4.27:
 	fixed 20 MB size for blind isntall archive
 

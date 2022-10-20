@@ -9,6 +9,7 @@ MbPage {
 	title: qsTr("Package manager")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
+	property string bindVrmloggerPrefix: "com.victronenergy.logger"
     VBusItem { id: downloadStatus; bind: Utils.path(servicePrefix, "/GitHubUpdateStatus") }
     VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
     VBusItem { id: mediaStatus; bind: Utils.path(servicePrefix, "/MediaUpdateStatus") }
@@ -118,8 +119,35 @@ MbPage {
             subpage: Component { PageSettingsPmBackup {} }
             show: showControls
         }
-		MbMountState {
+		MbOK {
+			property int notMounted: 0
+			property int mounted: 1
+			property int unmountRequested: 2
+			property int unmountBusy: 3
+
+			function mountStateToText(s)
+			{
+				switch (s) {
+				case mounted:
+					return qsTr("Press to eject");
+				case unmountRequested:
+				case unmountBusy:
+					return qsTr("Ejecting, please wait");
+				default:
+					return qsTr("No storage found");
+				}
+			}
+
+			VBusItem {
+				id: vMountState
+				bind: Utils.path(bindVrmloggerPrefix, "/Storage/MountState")
+			}
 			description: qsTr("microSD / USB")
+			value: mountStateToText(vMountState.value)
+			writeAccessLevel: User.AccessUser
+			onClicked: vMountState.setValue(unmountRequested);
+			editable: vMountState.value === mounted
+			cornerMark: false
 		}
 		MbSubMenu
         {

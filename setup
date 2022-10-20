@@ -68,8 +68,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		rm -f "/var/volatile/tmp/PageSettings.qml"
 		echo "//////// modified to insert PackageManager menu" > "/var/volatile/tmp/PageSettings.qml"
 		# find line with second to last }
-		#################insertBefore=$(awk '{print NR  " " $s}' "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
-		insertBefore=$(cat -n "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
+		insertBefore=$(awk '{print NR  " " $s}' "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
 		((insertBefore -= 1))
 		# include all lines before that one
 		head -n $insertBefore $origFile >> "/var/volatile/tmp/PageSettings.qml"

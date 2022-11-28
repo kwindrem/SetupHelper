@@ -1,6 +1,6 @@
 # the DEFAULT list of packages managed by SetupHelper
 # actual list is based on what is stored on the system
-# this list assists in adding new pacakges
+# this list assists in adding new packages
 # lines beginning with # are ignored and can be used
 #       to remove a package from auto and manual updates
 #       or as comments
@@ -17,3 +17,4 @@ VeCanSetup	    	kwindrem    latest
 RpiDisplaySetup     kwindrem    latest
 RpiGpioSetup        kwindrem    latest
 123SmartBMS-Venus	123electric	latest
+FroniusSmartmeter   SirUli      main

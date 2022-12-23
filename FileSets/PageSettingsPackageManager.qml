@@ -64,13 +64,13 @@ MbPage {
         {
             description: qsTr("Active packages")
             subpage: Component { PageSettingsPackageVersions {} }
-            show: showControls
+            visible: showControls
         }
 		MbSubMenu
         {
             description: qsTr("Inactive packages")
             subpage: Component { PageSettingsAddPackageList {} }
-            show: showControls
+            visible: showControls
         }
         MbOK
         {
@@ -110,14 +110,14 @@ MbPage {
 					editAction.setValue ( 'restartGui' )
 				}
 			}
-            show: actionNeeded.valid && actionNeeded.value != ''
+            visible: actionNeeded.valid && actionNeeded.value != ''
             writeAccessLevel: User.AccessInstaller
         }
 		MbSubMenu
         {
             description: qsTr("Backup & restore settings")
             subpage: Component { PageSettingsPmBackup {} }
-            show: showControls
+            visible: showControls
         }
 		MbOK {
 			property int notMounted: 0
@@ -153,7 +153,7 @@ MbPage {
         {
             description: qsTr("Initialize PackageManager ...")
             subpage: Component { PageSettingsPmInitialize {} }
-            show: showControls
+            visible: showControls
         }
     }
 }

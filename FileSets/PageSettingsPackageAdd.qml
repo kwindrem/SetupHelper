@@ -89,7 +89,7 @@ MbPage {
             item.bind: getSettingsBind ("PackageName")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-            show: showControls
+            visible: showControls
         }
         MbEditBox
         {
@@ -99,7 +99,7 @@ MbPage {
             item.bind: getSettingsBind ("GitHubUser")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			show: showControls
+			visible: showControls
         }
         MbEditBox
         {
@@ -109,7 +109,7 @@ MbPage {
             item.bind: getSettingsBind ("GitHubBranch")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			show: showControls
+			visible: showControls
         }
         MbOK
         {
@@ -119,7 +119,7 @@ MbPage {
             description: ""
             value: editAction == '' ? qsTr("Cancel") : qsTr("OK") 
             onClicked: cancelEdit ()
-            show: showControls
+            visible: showControls
         }
         MbOK
         {
@@ -129,7 +129,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: showControls && editAction == ''
+            visible: showControls && editAction == ''
             writeAccessLevel: User.AccessInstaller
         }
         Text

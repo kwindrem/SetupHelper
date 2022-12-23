@@ -139,7 +139,7 @@ MbPage {
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
             readonly: true
-            show: showControls
+            visible: showControls
         }
         MbRowSmall
         {
@@ -149,28 +149,28 @@ MbPage {
             {
                 text: "GitHub:"
                 font.pixelSize: 10
-				show: showControls
+				visible: showControls
             }
-			show: showControls
+			visible: showControls
             MbTextBlock
             {
                 id: gitHubVersion
                 item { bind: getServiceBind("GitHubVersion") }
                 height: 25; width: 80
-				show: showControls
+				visible: showControls
             }
             Text
             {
                 text: qsTr ("stored:")
                 font.pixelSize: 10
-				show: showControls
+				visible: showControls
             }
             MbTextBlock
             {
                 id: packageVersion
                 item { bind: getServiceBind("PackageVersion") }
                 height: 25; width: 80
-				show: showControls
+				visible: showControls
             }
             Text
             {
@@ -186,14 +186,14 @@ MbPage {
 				horizontalAlignment: Text.AlignRight
 				width: 50
                 font.pixelSize: 10
-				show: showControls && incompatibleReason.value == ""
+				visible: showControls && incompatibleReason.value == ""
             }
             MbTextBlock
             {
                 id: installedVersion
                 item { bind: getServiceBind("InstalledVersion") }
                 height: 25; width: 80
-				show: showControls && incompatibleReason.value == ""
+				visible: showControls && incompatibleReason.value == ""
             }
             Text
             {
@@ -212,7 +212,7 @@ MbPage {
 				horizontalAlignment: Text.AlignHCenter
 				width: 50 + 80 + 3
                 font.pixelSize: 10
-				show: showControls && ! incompatibleReason.value == ""
+				visible: showControls && ! incompatibleReason.value == ""
 			}
         }
         MbEditBox
@@ -223,7 +223,7 @@ MbPage {
             item.bind: getSettingsBind ("GitHubUser")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			show: showControls
+			visible: showControls
         }
         MbEditBox
         {
@@ -233,7 +233,7 @@ MbPage {
             item.bind: getSettingsBind ("GitHubBranch")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			show: showControls
+			visible: showControls
         }
         MbOK
         {
@@ -245,7 +245,7 @@ MbPage {
             onClicked: remove ()
             writeAccessLevel: User.AccessInstaller
             opacity:  installedValid ? 0.0001 : 1.0
-            show: navigate
+            visible: navigate
         }
         MbOK
         {
@@ -255,7 +255,7 @@ MbPage {
             description: ""
             value: qsTr("Cancel")
             onClicked: cancelEdit ()
-            show: showControls && ! navigate && ! waitForAction
+            visible: showControls && ! navigate && ! waitForAction
         }
         MbOK
         {
@@ -265,7 +265,7 @@ MbPage {
             description: ""
             value: qsTr("OK")
             onClicked: cancelEdit ()
-            show: showControls && editAction.value == 'ERROR'
+            visible: showControls && editAction.value == 'ERROR'
         }
         MbOK
         {
@@ -275,7 +275,7 @@ MbPage {
             description: ""
             value: qsTr("Later")
             onClicked: cancelEdit ()
-            show: moreActions
+            visible: moreActions
         }
         MbOK
         {
@@ -285,7 +285,7 @@ MbPage {
             description: ""
             value: qsTr("Now")
             onClicked: signalAdditionalAction ()
-            show: moreActions
+            visible: moreActions
         }
         MbOK
         {
@@ -295,7 +295,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: showControls && ! navigate && actionPending
+            visible: showControls && ! navigate && actionPending
             writeAccessLevel: User.AccessInstaller
         }
         Text
@@ -320,7 +320,7 @@ MbPage {
 				else
 					return ""
 			}
-            show: waitForAction || actionPending
+            visible: waitForAction || actionPending
         }
 
         // bottom row of buttons
@@ -332,7 +332,7 @@ MbPage {
             description: ""
             value: qsTr("Previous")
             onClicked: previousIndex ()
-            show:
+            visible:
             {
 				if (! showControls)
 					return false
@@ -350,7 +350,7 @@ MbPage {
             description: ""
             value: qsTr("Next")
             onClicked: nextIndex ()
-            show:
+            visible:
             {
 				if (! showControls)
 					return false
@@ -368,7 +368,7 @@ MbPage {
             description: ""
             value: qsTr ("Download")
 			onClicked: gitHubDownload ()
-			show: navigate && downloadOk
+			visible: navigate && downloadOk
             writeAccessLevel: User.AccessInstaller
         }
         MbOK
@@ -379,7 +379,7 @@ MbPage {
             description: ""
             value: qsTr ("Install")
             onClicked: install ()
-            show: navigate && installOk 
+            visible: navigate && installOk 
             writeAccessLevel: User.AccessInstaller
         }
         MbOK
@@ -390,7 +390,7 @@ MbPage {
             description: ""
             value: qsTr("Uninstall")
             onClicked: uninstall ()
-            show: navigate && installedValid
+            visible: navigate && installedValid
             writeAccessLevel: User.AccessInstaller
         }
     }

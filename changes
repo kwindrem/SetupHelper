@@ -1,4 +1,13 @@
-v4.28/v2.89:
+v4.30:
+	fixed: can't select many items in PackageManager menus
+	add Cerbo SGX platform
+	add ExtTransferSwitch to default package list
+	add FroniusSmartmeter to default package list
+	add dbus-i2c to default package list
+	add DCSystemAggregator to default package list
+	add gatt-exec-server to default package list
+
+v4.28/v4.29:
 	make SetupHelper independent of Venus OS version
 
 v4.27:

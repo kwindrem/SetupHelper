@@ -139,6 +139,7 @@ ERROR_NO_SETUP_FILE = 		999
 #									machine			Platform
 #									ccgx			CCGX
 #									einstein		Cerbo GX
+#									cerbosgx		Cerbo SGX
 #									bealglebone		Venus GX
 #									canvu500		CanVu 500
 #									nanopi			Multi/Easy Solar GX
@@ -1157,7 +1158,7 @@ class DbusIfClass:
 		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
 		self.DbusService.add_mandatory_paths (
 							processname = 'PackageManager', processversion = 1.0, connection = 'none',
-							deviceinstance = 0, productid = 1, productname = 'Package Monitor',
+							deviceinstance = 0, productid = 1, productname = 'Package Manager',
 							firmwareversion = 1, hardwareversion = 0, connected = 1)
 		self.DbusService.add_path ( '/GitHubUpdateStatus', "", writeable = True )
 		self.DbusService.add_path ( '/InstallStatus', "", writeable = True )
@@ -3408,7 +3409,7 @@ def mainLoop():
 		noActionCount += 1
 
 	# wait for two complete passes with nothing happening
-	# 	before triggerinng reboot, GUI restart or initializing PackageManager Settings
+	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
 	if noActionCount >= 2:
 		if SystemReboot or InitializePackageManager or SetupHelperUninstall:
 				# exit the main loop
@@ -3577,6 +3578,8 @@ def main():
 		machine = file.readline().strip()
 		if machine == "einstein":
 			Platform = "Cerbo GX"
+		if machine == "cerbosgx":
+			Platform = "Cerbo SGX"
 		elif machine == "bealglebone":
 			Platform = "Venus GX"
 		elif machine == "ccgx":

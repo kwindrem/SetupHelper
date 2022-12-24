@@ -6,7 +6,7 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: platform.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
+	title: platformItem.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     property int packageIndex: 0
@@ -21,7 +21,6 @@ MbPage {
     property VBusItem rebootNeeded: VBusItem { bind: getServiceBind ( "RebootNeeded") }
     property VBusItem guiRestartNeeded: VBusItem { bind: getServiceBind ( "GuiRestartNeeded") }
     property VBusItem incompatibleReason: VBusItem { bind: getServiceBind ( "Incompatible") }
-    property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
 
     property bool showControls: editAction.valid
     property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
@@ -41,6 +40,13 @@ MbPage {
     property VBusItem editPackageName: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "PackageName" ) }
     property VBusItem editGitHubUser: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubUser" ) }
     property VBusItem editGitHubBranch: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubBranch" ) }
+
+    VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageManager", "/Platform" ) }
+    property string platform: platformItem.valid ? platformItem.value : "???"
+	// version info may be in platform service or in vePlatform.version
+    VBusItem { id: osVersionItem; bind: Utils.path("com.victronenergy.platform", "/Firmware/Installed/Version" ) }
+    property string osVersion: osVersionItem.valid ? osVersionItem.value : vePlatform.version
+
 
 
 	Component.onCompleted:
@@ -72,9 +78,11 @@ MbPage {
 		packageIndex += 1
 		if (packageIndex >= packageCount.value)
 						packageIndex = packageCount.value - 1
+		cancelEdit ()
    }
     function previousIndex ()
     {
+		cancelEdit ()
 		packageIndex -= 1
 		if (packageIndex < 0)
 			packageIndex = 0
@@ -141,7 +149,7 @@ MbPage {
             readonly: true
             visible: showControls
         }
-        MbRowSmall
+        MbItemRow
         {
             description: qsTr ("Versions")
             height: 25
@@ -201,13 +209,13 @@ MbPage {
 				text:
 				{
 					if (incompatibleReason.value == 'PLATFORM')
-						return ( qsTr ("not compatible with\n") + platformItem.value )
+						return ( qsTr ("not compatible with\n") + platform )
 					else if (incompatibleReason.value == 'VERSION')
-						return ( qsTr ("not compatible with\n") + vePlatform.version )
+						return ( qsTr ("not compatible with\n") + osVersion )
 					else if (incompatibleReason.value == 'CMDLINE')
 						return qsTr ("must install\nfrom command line" )
 					else
-						return qsTr ("compatible ???" ) // compatible for unknown reason
+						return qsTr ("not compatible ???" ) // compatible for unknown reason
 				}
 				horizontalAlignment: Text.AlignHCenter
 				width: 50 + 80 + 3
@@ -235,53 +243,41 @@ MbPage {
             writeAccessLevel: User.AccessInstaller
 			visible: showControls
         }
+        MbOK // for some reasion must be before removeButton or clicks do not work
+        {
+            id: cancelButton
+            width: 90
+            anchors { right: parent.right }
+            description: ""
+            value:
+            {
+				if (editAction.value == 'ERROR')
+					return qsTr("OK")
+				else if (moreActions)
+					return  qsTr("Later")
+				else
+					return qsTr("Cancel")
+            }
+            onClicked: cancelEdit ()
+            visible: showControls && ! navigate || waitForAction
+        }
         MbOK
         {
             id: removeButton
             width: 170
-            anchors { right: parent.right}
+            anchors { right: parent.right; bottom: cancelButton.bottom}
             description: ""
             value: qsTr("Remove package")
             onClicked: remove ()
             writeAccessLevel: User.AccessInstaller
-            opacity:  installedValid ? 0.0001 : 1.0
+            opacity: installedValid ? 0.0001 : 1.0
             visible: navigate
-        }
-        MbOK
-        {
-            id: cancelButton
-            width: 90
-            anchors { right: parent.right; bottom: removeButton.bottom }
-            description: ""
-            value: qsTr("Cancel")
-            onClicked: cancelEdit ()
-            visible: showControls && ! navigate && ! waitForAction
-        }
-        MbOK
-        {
-            id: dismissErrorButton
-            width: 90
-            anchors { right: parent.right; bottom: removeButton.bottom }
-            description: ""
-            value: qsTr("OK")
-            onClicked: cancelEdit ()
-            visible: showControls && editAction.value == 'ERROR'
-        }
-        MbOK
-        {
-            id: laterButton
-            width: 90
-            anchors { right: parent.right; bottom: removeButton.bottom }
-            description: ""
-            value: qsTr("Later")
-            onClicked: cancelEdit ()
-            visible: moreActions
         }
         MbOK
         {
             id: nowButton
             width: 90
-            anchors { right: laterButton.left; bottom: removeButton.bottom }
+            anchors { right: cancelButton.left; bottom: cancelButton.bottom }
             description: ""
             value: qsTr("Now")
             onClicked: signalAdditionalAction ()
@@ -291,7 +287,7 @@ MbPage {
         {
             id: confirmButton
             width: 375
-            anchors { left: parent.left; bottom: removeButton.bottom }
+            anchors { left: parent.left; bottom: cancelButton.bottom }
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
@@ -303,7 +299,7 @@ MbPage {
             id: statusMessage
             width: 250
             wrapMode: Text.WordWrap
-            anchors { left: parent.left; leftMargin: 10; bottom: removeButton.bottom; bottomMargin: 5 }
+            anchors { left: parent.left; leftMargin: 10; bottom: cancelButton.bottom; bottomMargin: 5 }
             font.pixelSize: 12
             color: actionPending && isSetupHelper ? "red" : "black"
             text:
@@ -328,7 +324,7 @@ MbPage {
         {
             id: previousButton
             width: 100
-            anchors { left: parent.left ; top:removeButton.bottom }
+            anchors { left: parent.left ; top:cancelButton.bottom }
             description: ""
             value: qsTr("Previous")
             onClicked: previousIndex ()
@@ -386,7 +382,7 @@ MbPage {
         {
             id: uninstallButton
             width: 100
-            anchors { right: parent.right; bottom: installButton.bottom }
+            anchors { right: parent.right; bottom: previousButton.bottom }
             description: ""
             value: qsTr("Uninstall")
             onClicked: uninstall ()

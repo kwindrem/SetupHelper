@@ -17,11 +17,15 @@ MbItem {
     property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
     property bool guiRestartNeeded: guiRestartNeededItem.valid && guiRestartNeededItem.value == 1
 
-    VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageManager", "/Platform" ) }
     VBusItem { id: incompatibleItem; bind: getServiceBind ( "Incompatible" ) }
     property string incompatibleReason: incompatibleItem.valid ? incompatibleItem.value : ""
     property bool compatible: incompatibleReason == ""
-    property string platform: platformItem.valid ? platformItem.value : "??"
+    VBusItem { id: platformItem; bind: Utils.path("com.victronenergy.packageManager", "/Platform" ) }
+    property string platform: platformItem.valid ? platformItem.value : "???"
+
+	// version info may be in platform service or in vePlatform.version
+    VBusItem { id: osVersionItem; bind: Utils.path("com.victronenergy.platform", "/Firmware/Installed/Version" ) }
+    property string osVersion: osVersionItem.valid ? osVersionItem.value : vePlatform.version
 
 	onClicked: rootWindow.pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml", {packageIndex: packageIndex})
 
@@ -35,7 +39,7 @@ MbItem {
 		else if (incompatibleReason == 'PLATFORM')
 			return qsTr ( "  not compatible with " + platform )
 		else if (incompatibleReason == 'VERSION')
-			return qsTr ( "  not compatible with " + vePlatform.version )
+			return qsTr ( "  not compatible with " + osVersion )
 		else if (incompatibleReason == 'CMDLINE' && installedVersion.item.value == "")
 			return qsTr ( "  must install from command line" )
 		else

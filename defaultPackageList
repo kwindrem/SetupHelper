@@ -18,3 +18,4 @@ RpiDisplaySetup     kwindrem    latest
 RpiGpioSetup        kwindrem    latest
 123SmartBMS-Venus	123electric	latest
 FroniusSmartmeter   SirUli      main
+RpiTemperature      TimD1981    latest

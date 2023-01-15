@@ -77,6 +77,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		updateActiveFile "/var/volatile/tmp/PageSettings.qml" "$qmlDir/PageSettings.qml"
 		rm -f "/var/volatile/tmp/PageSettings.qml"
 	fi
+
     updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
@@ -86,6 +87,23 @@ if [ $scriptAction == 'INSTALL' ] ; then
     updateActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
     updateActiveFile "$qmlDir/PageSettingsPmBackup.qml"
     updateActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
+
+	# revert to VisualItemModel if before v3.00~14 (v3,00~14 uses VisibleItemModel)
+	versionStringToNumber "v3.00~14"
+	if (( $venusVersionNumber < $versionNumber )); then
+		logMessage "replacing VisibleItemModel with VisualItemModel"
+		fileList="$qmlDir/PageSettingsPackageManager.qml"
+		fileList+=" $qmlDir/PageSettingsPackageVersions.qml"
+		fileList+=" $qmlDir/PageSettingsPackageEdit.qml"
+		fileList+=" $qmlDir/PageSettingsAddPackageList.qml"
+		fileList+=" $qmlDir/PageSettingsPackageAdd.qml"
+		fileList+=" $qmlDir/PageSettingsPmBackup.qml"
+		fileList+=" $qmlDir/PageSettingsPmInitialize.qml"
+		for file in $fileList ; do
+			sed -i -e 's/VisibleItemModel/VisualItemModel/' "$file"
+		done
+	fi
+
 
     installService PackageManager
 

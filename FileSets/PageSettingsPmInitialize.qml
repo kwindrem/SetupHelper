@@ -38,7 +38,7 @@ MbPage {
 			value: qsTr("Press to Initialize")
 			onClicked: sendInitialize ()
             writeAccessLevel: User.AccessInstaller
-            visible: ! showInProgress
+            show: ! showInProgress
 		}
         MbItemText
         {
@@ -46,7 +46,7 @@ MbPage {
             text: qsTr ("... initializing and restarting")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
-            visible: showInProgress
+            show: showInProgress
         }
     }
 }

@@ -16,8 +16,6 @@ MbPage {
     property string packageName: packageNameBox.item.valid ? packageNameBox.item.value : ""
     property string editAction: editActionItem.valid ? editActionItem.value : ''
 
-    property bool showControls: editActionItem.valid
-
     property VBusItem defaultPackageName: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "PackageName" ) }
     property VBusItem defaultGitHubUser: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubUser" ) }
     property VBusItem defaultGitHubBranch: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubBranch" ) }
@@ -89,7 +87,6 @@ MbPage {
             item.bind: getSettingsBind ("PackageName")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-            visible: showControls
         }
         MbEditBox
         {
@@ -99,7 +96,6 @@ MbPage {
             item.bind: getSettingsBind ("GitHubUser")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			visible: showControls
         }
         MbEditBox
         {
@@ -109,7 +105,6 @@ MbPage {
             item.bind: getSettingsBind ("GitHubBranch")
             overwriteMode: false
             writeAccessLevel: User.AccessInstaller
-			visible: showControls
         }
         MbOK
         {
@@ -119,7 +114,6 @@ MbPage {
             description: ""
             value: editAction == '' ? qsTr("Cancel") : qsTr("OK") 
             onClicked: cancelEdit ()
-            visible: showControls
         }
         MbOK
         {
@@ -129,7 +123,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            visible: showControls && editAction == ''
+            show: editAction == ''
             writeAccessLevel: User.AccessInstaller
         }
         Text

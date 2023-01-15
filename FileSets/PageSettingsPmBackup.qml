@@ -47,7 +47,7 @@ MbPage {
 			description: qsTr("Backup settings, logos, logs")
 			value: qsTr("Press to backup settings")
 			onClicked: backupProgressItem.setValue (1)
-			visible: mediaAvailable.valid && mediaAvailable.value == 1 && backupProgressItem.value == 0
+			show: mediaAvailable.valid && mediaAvailable.value == 1 && backupProgressItem.value == 0
             writeAccessLevel: User.AccessInstaller
 		}
 		MbOK
@@ -55,7 +55,7 @@ MbPage {
 			description: qsTr("Restore settings, logos")
 			value: qsTr("Press to restore settings")
 			onClicked: backupProgressItem.setValue (2)
-			visible: settingsFileExists.valid && settingsFileExists.value == 1 && backupProgressItem.value == 0
+			show: settingsFileExists.valid && settingsFileExists.value == 1 && backupProgressItem.value == 0
             writeAccessLevel: User.AccessInstaller
 		}
     }

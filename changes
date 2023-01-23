@@ -1,7 +1,10 @@
-v4.32:
+v4.33:
 	fixed: menu items not being hidden
 	added all logs to Settings backup
 	added optional Venus OS firmware update to blindUninstall
+
+v4.32:
+	add some packages to the default list
 
 v4.31:
 	fixed: PackageManager edit menus not working

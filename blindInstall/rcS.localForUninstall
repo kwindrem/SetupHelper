@@ -1,50 +1,83 @@
 #!/bin/bash
 
-# this script is part of a "blind UNINSTALL" archive which
-# UNINSTALLS AND REMOVES packages
+# this script is part of a "blind UNINSTALL" archive which UNINSTALLS all packages
+# Packages are not removed but marked so PackageManager does not auto intall later
+#
+# Venus OS will also be reinstalled if a suitable .swu file is found on removable media
 
-packageDir=/data/SetupHelper
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall
-	rm -r $packageDir
+# log activity
+logMessage ()
+{
+	echo "blindUninstall: $*"
+	echo "blindUninstall: $*" | tai64n >> "/data/log/SetupHelper"
+}
 
-packageDir=/data/GuiMods
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall
-	rm -r $packageDir
+logMessage "--- starting"
 
-packageDir=/data/GeneratorConnector
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall deferReboot deferGuiRestart auto 
-	rm -r $packageDir
+# check to see if Venus OS will be reinstalled - actuall reinstall will be done later
+swCheckOutput=$(/opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -check)
+if (( $? == 0 )); then
+	reinstallVenusOs=true
+	swUpdateVersion=$(echo $swCheckOutput | awk '{print $NF}')
+else
+	reinstallVenusOs=false
+	swUpdateVersion="none"
+fi
 
-packageDir=/data/RpiDisplaySetup
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall deferReboot deferGuiRestart auto 
-	rm -r $packageDir
+packages=$(ls -d /data/*)
+for package in $packages; do
+	if [ ! -f "$package/version" ]; then
+		continue
+	fi
+	packageName=$(basename $package)
+	# if not reinstalling Venus OS, uninstall package
+	if ! $reinstallVenusOs ; then
+		if [ -f /etc/venus/installedVersion-$packageName ]; then
+			logMessage "uninstalling $packageName"
+			"$package/setup" uninstall deferReboot deferGuiRestart auto
+		fi
+	fi
+	# make sure PackageManager does not auto install package
+	if [ ! -f "$package/DO_NOT_AUTO_INSTALL" ]; then
+		logMessage "preventing future $packageName auto install"
+		touch "$package/DO_NOT_AUTO_INSTALL"
+	fi
+done
 
-packageDir=/data/RpiGpioSetup
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall deferReboot deferGuiRestart auto 
-	rm -r $packageDir
+# insure no packages are reinstalled after boot
+if [ -f "/data/reinstallScriptsList" ]; then
+	logMessage "removing reinstallScriptsList"
+	rm -f "/data/reinstallScriptsList"
+fi
 
-packageDir=/data/ShutDownMonitor
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall deferReboot deferGuiRestart auto 
-	rm -r $packageDir
+# remove all installed flags
+ls /etc/venus/installed* &> /dev/null
+if (( $? == 0 )); then
+	logMessage "removing installedVersion file for all packages"
+	rm -f /etc/venus/installedVersion*
+fi
 
-packageDir=/data/VeCanSetup
-script="$packageDir/setup"
-if [ -e $script ]; then
-	$script uninstall deferReboot deferGuiRestart auto 
-	rm -r $packageDir
+# reinstall Venus OS - done in background so this script can clean up and exit without disrupting the software update
+if $reinstallVenusOs ; then
+	logMessage "reinstalling Venus OS $swUpdateVersion"
+	nohup sh -c 'sleep 1; /opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -update' > /dev/null &
+# reboot if not reinstalling Venus OS
+else
+	logMessage "rebooting ..."
+	nohup sh -c 'sleep 1; reboot' > /dev/null &
+fi
 
+# rename archive on removable media to prevent blindInstall from running again
+drives=$(ls /run/media/)
+for drive in $drives ; do
+	archive="/run/media/$drive/venus-data.tar.gz"
+	if [ -f "$archive" ]; then
+		logMessage "renaming venus-data.tar.gz so blindUninstall won't run again"
+		mv $archive "/run/media/$drive/venus-data.UninstallPackages.tar.gz"
+	fi
+done
+
+logMessage "--- ending"
+
+# don't run this script again !
 rm -f /data/rcS.local
-
-reboot

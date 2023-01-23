@@ -2931,29 +2931,26 @@ class MediaScanClass (threading.Thread):
 			logging.error ("settings backup - logo write failure")
 
 		# copy log files
-		logCount = 0
+		logsWritten = "no logs"
 		try:
 			# remove any previous log backups
 			logDestDir = backupPath + "/logs"
 			if os.path.isdir (logDestDir):
 				shutil.rmtree (logDestDir)
-			if not os.path.isdir (logDestDir):
-				os.mkdir (logDestDir)
 
-			logFile = "/data/log/SetupHelper"
-			if os.path.exists ( logFile ):
-				shutil.copy ( logFile, logDestDir )
-				logCount += 1
-			logFile = "/data/log/PackageManager"
-			if os.path.exists ( logFile ):
-				shutil.copytree ( logFile, logDestDir + "/PackageManager" )
-				logCount += 1
-			logFile = "/data/log/gui"
-			if os.path.exists ( logFile ):
-				shutil.copytree ( logFile, logDestDir + "/gui" )
-				logCount += 1
+			proc = subprocess.Popen ( [ 'zip', '-rq', backupPath + "/logs.zip", "/data/log" ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			proc.wait()
+			stdout, stderr = proc.communicate ()
+			# convert from binary to string
+			stdout = stdout.decode ().strip ()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
+			logsWritten = "logs"
 		except:
 			logging.error ("settings backup - log write failure")
+			logsWritten = "no logs"
+
 
 
 		# backup setup script options
@@ -2971,7 +2968,7 @@ class MediaScanClass (threading.Thread):
 			logging.error ("settings backup - overlays write failure")
 		
 		logging.warning ("settings backup completed - " + str(settingsCount) + " settings, " + str (overlayCount) + " logos, "
-							+ str (logCount) + " logs")
+							+ logsWritten )
 
 
 	def settingsRestore (self, backupPath):

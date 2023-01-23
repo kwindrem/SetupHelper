@@ -14,7 +14,7 @@ MbPage {
 	VBusItem { id: backupProgressItem; bind: Utils.path(servicePrefix, "/BackupProgress") }
 	property int backupProgress: backupProgressItem.valid ? backupProgressItem.value : 0
 
-	model: VisualItemModel
+	model: VisibleItemModel
     {
         MbItemText
         {

@@ -88,7 +88,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
     updateActiveFile "$qmlDir/PageSettingsPmBackup.qml"
     updateActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
 
-	# revert to VisualItemModel if before v3.00~14 (v3,00~14 uses VisibleItemModel)
+	# revert to VisualItemModel if before v3.00~14 (v3.00~14 uses VisibleItemModel)
 	versionStringToNumber "v3.00~14"
 	if (( $venusVersionNumber < $versionNumber )); then
 		logMessage "replacing VisibleItemModel with VisualItemModel"

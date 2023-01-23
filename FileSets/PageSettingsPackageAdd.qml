@@ -77,7 +77,7 @@ MbPage {
 		editStatus.setValue ( "adding " + packageName)
 		editActionItem.setValue ('add:' + packageName) 
     }
-	model: VisualItemModel
+	model: VisibleItemModel
     {
         MbEditBox
         {

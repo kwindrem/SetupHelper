@@ -1,5 +1,3 @@
-New: SetupHelper includes a GUI based package manager
-
 The SetupHelper package provides:
     a mechanism to automatically reinstall packages following a Venus OS update
     an automatic update mechanism to keep packages up to date
@@ -10,13 +8,16 @@ The SetupHelper package provides:
 
     a "blind" install of SetupHelper from SD/USB media
 
+	a blind uninstall mechanism which optionally includes reinstalling Venus OS
+
 	backup and restore SOME settings from com.victronenergy.settings
 		this includes custom logos and copying logs to removable media
 			SetupHelper
 			PackageManager
 			gui
 
-SetupHelper is also required for my other packages
+SetupHelper is also required for other packages
+	SetupHelper includes utilities used by these packages
 	and must be installed BEFORE running the other package setup scripts
 
 Blind Install:
@@ -79,52 +80,65 @@ CAUTION:
 	will continue to function.
 
 
+ssh access:
+
+Setting up ssh access with ssh keys is highly recommended for any system,
+but especially when installing third party extensions to Venus OS.
+Attaching a serial terminal for direct console access is another option,
+especially if you don't have a network setup.
+
+The following document describes ssh access and also serial terminal connections on Cerbo GX:
+	https://www.victronenergy.com/live/ccgx:root_access
+
+
 System Recovery:
 
 It is highly unlikely, but some users have reported a package install leaving their system unresponsive
-or with a nonfuncitonal GUI (white screen). In this case, your options depend on the platform and the current state of the system.
+or with a nonfuncitonal GUI (white screen). In this case, your options depend on the current state of the system.
 
-First, (as always) reboot
-Second, see if you can access the PackageManager menu. If so, you can remove pacakges one at a time from there.
+First, (as always) reboot. This may clear the problem.
+
+Second, if you have a functioning GUI (eitehr locally or via remote console, see if you can access the PackageManager menu.
+	If so, you can remove pacakges one at a time from there.
 	If you find an offeding package, post an issue to the GitHub repo for that package and include:
 		Platform (Cerbo, CCGX, Raspberry PI, etc)
 		Venus OS firmware version
-		attach logs if you can get to them
+		Run a Settings backup and post the logs.zip file on the removble media.
 	Remove SetupHelper last since once you do, you loose the PackageManager menus!
 
 Third, if you have terminal or ssh access, try running the package setup scripts to uninstall packages one at a time.
 
-Fourth, if you have GUI access again, try booting to the previous Venus OS version (in Stored backup formware)
+Fourth, try booting to the previous Venus OS version (in Stored backup firmware)
 	Then perform a fresh Online firmware update to the latest version or use the .swu update via removable media.
 	These procedures are documented: https://www.victronenergy.com/media/pg/Cerbo_GX/en/gx---how-to-update-firmware.html
 
+	Use the Settings / Firmware / Stored backup formware menu if you have GUI access.
+
+	If you don't have GUI access, you can also switch to the backup version from the command line:
+		/opt/victronenergy/swupdate-scripts/set-version.sh 2
+
 Fifth, perform the Blind uninstall procedure below.
 
-Sixth, perform the Victron "restore factory default" procedure:
-	https://www.victronenergy.com/media/pg/CCGX/en/factory-reset.html
-
-	Note: this will wipe out all settings and you'll need to reconfigure the GX device from scratch.
-
 Finally, if you are running on a Raspberry PI, you can reimage the system SD card.
-
 	Note: this will wipe out all settings and you'll need to reconfigure the GX device from scratch.
+
+The Victron "restore factory default" procedure can be used to will wipe out all settings.
+	You'll need to reconfigure the GX device from scratch.
+	However, it will NOT replace the operating system and Victron application, nor will it uninstall any packages.
+	You will most likely be locked out of ssh access since log-in information and ssh keys
+	are stored in the /data partition which is completey erased by this procedure.
+	For this reason, I do not recommend using this as part of your attempt to recover a system with no GUI.
 
 
 Blind UNINSTALL:
 
-A blind uninstall mechanism is also provided which is similar to blind install described above.
-This can be used in extremely rare ases where a package install leaves the system unaccessible
-via GUI or ssh.
-This mechanism is a LAST RESORT. 
-This will run all package setup scripts to uninstall that package from system files,
-	then remove the package from /data and /data/rcS.local.
+A blind uninstall mechanism is provided to recover a system with an unresponsive GUI (white screen)
+	or no ssh/terminal access.
+This will run all package setup scripts to uninstall that package from system files.
 
-CAUTION: Do NOT run the Victron restore to factory defaults script if you have an unresponsive system
-		after installing one of my packages. Doing so will remove the script that restores the file system
-		to their factory settings.
-		
-		Firmware reinstall requires access to the GUI so if you still don't have a working GUI after
-		the Victron restore to factory defaults, then you are pretty much out of luck.
+In addition to uninstalling all packages, the blind uninstall can optionally reinstall VenusOS.
+To do so, include a .swu file for the platform and desired firmware version on the removable media containing
+the blind uninstall venus-data.tar.gz file.
 
 The archive for this is named venus-data.UninstallPackages.tar.gz.
 
@@ -133,7 +147,18 @@ The archive for this is named venus-data.UninstallPackages.tar.gz.
 	3) Plug the removable media into the GX device
 	4) Reboot, wait 2 minutes and reboot a second time
 	5) when the system automatically reboots after the second manual one, remove the media
+		You should eventually see the GUI on the local display if there is one
+		or be able to connect via remote console.
 
+	Cauton: Removing media or power cycling the GX device during the uninstall,
+		especially if reinstalling firmware could render the system unresponsive!
+		Wait to see the GUI before removing media or power cycling.
+
+	Note that a firmware update can take several minutes to complete but will eventually reboot.
+
+	When the blind uninstall finishes, venus-data-tar.gz file on the removable media
+	is renamed to venus-data.UninstallPackages.tar.gz so that the blind install will run only once.
+	This renaming is necessary to prevent a loop where the system uninstalls and reboots.
 
 Description:
 
@@ -224,6 +249,7 @@ The Package Manager includes a set of menus on the GX device menu system
 					Vrmlogger
 				Any logo files in /data/themes/overlay
 				Setup script options in /data/setupOptions
+				All logs stored in /data/log are written to logs.zip on the removable media
 			The parameters must exist to be saved
 			The parameters will be created and set to the backed up value during a restore
 
@@ -235,7 +261,7 @@ The Package Manager includes a set of menus on the GX device menu system
 				SETTINGS_AUTO_RESTORE is detected in the root of removable media
 
 			CAUTION: LEAVING THIS FLASH DRIVE IN THE SYSTEM WILL TRIGGER A SETTINGS RESTORE WITH EVERY BOOT
-					YOU MUST REMOVE THE FLASH DRIVE AFTER AUTO RESTORR
+					YOU MUST REMOVE THE FLASH DRIVE AFTER AUTO RESTORE
 
 		microSD / USB:
 			is a duplicate of the menu item in VRM online portal

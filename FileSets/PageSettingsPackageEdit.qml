@@ -132,7 +132,7 @@ MbPage {
 		requestedAction = ''
 	}
 
-	model: VisualItemModel
+	model: VisibleItemModel
     {
         MbEditBox
         {
@@ -310,7 +310,7 @@ MbPage {
         {
             id: downloadButton
             width: 110
-            anchors { right: installButton.left; top: statusMessage.bottom; topMargin: 5 }
+            anchors { left: nextButton.right; top: statusMessage.bottom; topMargin: 5 }
             description: ""
             value: qsTr ("Download")
 			onClicked: gitHubDownload ()

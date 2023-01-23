@@ -23,7 +23,7 @@ MbPage {
 			showInProgress = true
     }
 
-	model: VisualItemModel
+	model: VisibleItemModel
     {
         MbItemText
         {

@@ -19,7 +19,7 @@ MbPage {
     property bool showMediaStatus: mediaStatus.valid && mediaStatus.value != ""
     property bool showControls: installStatus.valid
 
-	model: VisualItemModel
+	model: VisibleItemModel
     {
         MbItemText
         {

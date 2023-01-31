@@ -19,6 +19,7 @@ RpiGpioSetup        kwindrem    latest
 123SmartBMS-Venus	123electric	latest
 FroniusSmartmeter   SirUli      main
 dbus-i2c            pulquero    latest
+BatteryAggregator   pulquero    latest
 DCSystemAggregator  pulquero    latest
 gatt-exec-server    pulquero    latest
 RpiTemperature      TimD1981    latest

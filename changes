@@ -1,3 +1,13 @@
+v4.34:
+	disable GitHub version updates if automatic downloads are off
+		eliminates internet traffic needed to retrieve version
+	remove ._ files from blind install archives
+	added BatteryAggregator (pulquero) to default packages
+	updateFileSets now place files at highest possible version
+		makes searches faster and makes removing old file sets easier
+	checkFileSets now searches version list from highest version to lowest
+		to improve file set creation speed
+
 v4.33:
 	fixed: menu items not being hidden
 	added all logs to Settings backup

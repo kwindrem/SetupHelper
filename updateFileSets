@@ -27,35 +27,29 @@
 #
 
 # set allPackages to all packages this script should evalueate if no options are included
-allPackages="SetupHelper GeneratorConnector GuiMods RpiDisplaySetup RpiGpioSetup RpiTemp ShutdownMonitor TankRepeater VeCanSetup"
+allPackages="SetupHelper GuiMods ExtTransferSwitch ShutdownMonitor VeCanSetup RpiDisplaySetup RpiGpioSetup"
+### GeneratorConnector TankRepeater are currently obsolete and file sets should not be updated.
 
 # set these as appropriate to your system
 packageRoot="/Users/Kevin/Documents/GitHub"
 originalFiles="$packageRoot/OriginalVenusOsFiles"
 
-
-versionList=($(ls -d "$originalFiles"/v*))
-
 ((totalErrors=0))
-((packageErrors=0))
 ((totalWarnings=0))
-((packageWarnings=0))
 
 logMessage ()
 {
     echo "$*"
     if [[ "$*" == *"ERROR"* ]]; then
         ((totalErrors++))
-        ((packageErrors++))
     elif [[ "$*" == *"WARNING"* ]]; then
         ((totalWarnings++))
-        ((packageWarnings++))
     fi
 }
 
 function versionStringToNumber ()
 {
-    local local p4="" ; local p5="" ; local p5=""
+    local local p4="" ; local p5="" ; local p6=""
     local major=""; local minor=""
 
 	# first character should be 'v' so first awk parameter will be empty and is not prited into the read command
@@ -66,7 +60,7 @@ function versionStringToNumber ()
 	# if no beta make sure release is greater than any beta (i.e., a beta portion of 999)
 	 
     read major minor p4 p5 p6 <<< $(echo $1 | awk -v FS='[v.~-]' '{print $2, $3, $4, $5, $6}')
-	((versionNumber = major * 1000000000 + minor * 1000000))
+	((versionNumber = major * 1000000 + minor * 1000))
 	if [ -z $p4 ] || [ $p4 = "large" ]; then
         ((versionNumber += 999))
 	else
@@ -88,62 +82,79 @@ else
 fi
 
 # check to make sure the dictory name matches /opt/victronenergy/version
-errors=false
-for ver in ${versionList[@]} ; do
+rm -f /tmp/foo
+rawVersionList=($(ls -d "$originalFiles"/v*))
+for ver in ${rawVersionList[@]} ; do
     version=$(basename $ver)
     versionFile="$originalFiles/$version/opt/victronenergy/version"
     realVersion=$(cat "$versionFile" | head -n 1)
 
     if [ $version != $realVersion ]; then
         directoryName=$(basename $originalFiles)/$version
-        logMessage "ERROR $directoryName name does not mactch Venus $realVersion"
-        errors=true
+        logMessage "ERROR $directoryName name does not mactch Venus $realVersion - can't continue"
+		rm -f /tmp/foo
+        exit
     fi
+	versionStringToNumber $version
+	echo "$version $versionNumber" >> /tmp/foo
 done
 
-if $errors ; then
-    logMessage "ERROR $(basename $originalFiles) must be repaired manually - can't continue"
-    exit
-fi
+# versionList is sorted in reverse version order
+versionList=( $(sort -r -n -k 2 /tmp/foo | awk '{print $1}') )
+rm -f /tmp/foo
 
 for package in $packageList; do
-    if [ ! -d "$packageRoot/$package" ]; then
+    if [ ! -d "$packageRoot/$package" ] || [ ! -f "$packageRoot/$package/version" ]; then
         logMessage "$packageRoot/$package - not a package directory"
         continue
     fi
 	packageFiles="$packageRoot/$package/FileSets"
     if [ ! -d "$packageFiles" ]; then
-        logMessage "$package - no file sets"
+        logMessage "$package: no file sets"
         continue
     fi
     if [ ! -f "$packageFiles/fileList" ]; then
-        logMessage "$package - no version-dependent files"
+        logMessage "$package: no version-dependent files"
         continue
     fi
     fileList=$(cat "$packageFiles/fileList")
     if [ -f "$fileList" ]; then
-        logMessage "ERROR $package empty file list"
+        logMessage "ERROR $package: empty file list"
         continue
     fi
-    for v1 in ${versionList[@]} ; do
-        version1=$(basename $v1)
+	logMessage "$package: checking file sets"
+
+    for index1 in ${!versionList[@]} ; do
+		version1=${versionList[$index1]}
         fileSet1="$packageFiles/$version1"
 
         # check to see if package is compatible with this Venus version
         if [ -f "$packageRoot/$package/obsoleteVersion" ]; then
             versionStringToNumber $(cat "$packageRoot/$package/obsoleteVersion")
             obsoleteVersion=$versionNumber
+		else
+			obsoleteVersion=999999999
+		fi
+        if [ -f "$packageRoot/$package/firstCompatibleVersion" ]; then
+            versionStringToNumber $(cat "$packageRoot/$package/firstCompatibleVersion")
+            firstVersion=$versionNumber
+		else
+			firstVersion=0
+		fi
         
-            versionStringToNumber $version1
-
-            if (( $versionNumber >= $obsoleteVersion )); then
-                if [ -d "$fileSet1" ]; then 
-                    logMessage "WARNING $package not compatible with Venus $version1 - removing file set"
-                    rm -rf "$fileSet1"
-                fi
-                continue
-            fi
-        fi
+		versionStringToNumber $version1
+		version1number=$versionNumber
+		if (( $version1number < $obsoleteVersion )) && (( $version1number >= $firstVersion )); then
+			if [ -d "$fileSet1" ]; then 
+				rm -f "$fileSet1/INCOMPATIBLE_VERSION"
+			fi
+		else
+			if [ -d "$fileSet1" ]; then 
+				logMessage "WARNING $package not compatible with Venus $version1 - file set should be removed"
+				touch "$fileSet1/INCOMPATIBLE_VERSION"
+			fi
+			continue
+		fi
 
         if [ -d "$fileSet1" ]; then
             newFileSet=false
@@ -154,7 +165,13 @@ for package in $packageList; do
 
         for file in $fileList ; do
             baseName=$(basename "$file")
-            origFile1="$originalFiles/$version1$file"
+			replacementFile1="$fileSet1/$baseName"
+			origFile1="$fileSet1/$baseName.orig"
+
+			# skip if this version matches file in prevous file set
+			if [ -f "$origFile1.MATCHES_PREVIOUS" ]; then
+				continue
+			fi
 
 			# cleanup flags from previous run
 			rm -f "$fileSet1/$baseName.NO_ORIG"
@@ -169,18 +186,18 @@ for package in $packageList; do
                 useAltOrig=false
                 altOrigFile=""
             fi
-            # no original file - switch to alt original if one is specified
-            if [ ! -e "$origFile1" ]; then
-                if $useAltOrig ; then
-                    origFile1="$originalFiles/$version1$altOrigFile"
-                fi
+            # select appropirate original file
+            if $useAltOrig ; then
+				stockFile1="$originalFiles/$version1$altOrigFile"
+			else
+				stockFile1="$originalFiles/$version1$file"
             fi
             # no original file - flag that then check for an existing replacemement
-            if [ ! -f "$origFile1" ]; then
+            if [ ! -f "$stockFile1" ]; then
                 logMessage "WARNING $package $version1 $baseName - no original file"
                 # flag the fact that no stock file exists
                 touch "$fileSet1/$baseName.NO_ORIG"
-                rm -f "$fileSet1/$baseName.orig"
+                rm -f "$origFile1"
                 if [ -e $fileSet1/$baseName ]; then
                     rm -f "$fileSet1/$baseName.USE_ORIGINAL"
                 else
@@ -191,93 +208,100 @@ for package in $packageList; do
             fi
             
             # look for a match in another version
-            origMatchFound=false
-            for v2 in ${versionList[@]} ; do
-                version2=$(basename $v2)
+			for version2 in ${versionList[@]:(($index1 + 1))} ; do
                 fileSet2="$packageFiles/$version2"
-                # skip if v1 == v2
-                if [ "$version2" == "$version1" ]; then
-                    continue
-                fi
-                # skip symbolic links and nonexistent originals
-                if [ ! -f "$fileSet2/$baseName.orig" ] || [ -L "$fileSet2/$baseName.orig" ] ; then
-                    continue
-                fi
-                origFile2="$originalFiles/$version2$file"
-                # no original file - switch to alt original if one is specified
-                if [ ! -e "$origFile2" ]; then
-                    if $useAltOrig ; then
-                        origFile2="$originalFiles/$version2$altOrigFile"
-                    fi
-                fi
-                if [ -e "$origFile2" ]; then
-                    cmp -s "$origFile2" "$origFile1" > /dev/null
-                    if [ $? -eq 0 ]; then
-                        origMatchFound=true
-                        break
-                    fi
-                fi
-            done
-
-            # other version matches origFile content - remove orig and related flag files
-            if $origMatchFound ;then
-
-                replacementFile1="$fileSet1/$baseName"
                 replacementFile2="$fileSet2/$baseName"
-                if [ -f "$replacementFile1" ] && [ "$replacementFile2" ]; then
-                    cmp -s "$replacementFile1" "$replacementFile2"
-                    if [ $? -eq 0 ]; then
-                        replacementMatch=true
-                    else
-                        replacementMatch=false
-                    fi
-                else
-                    replacementMatch=false
-                fi
+				origFile2="$fileSet2/$baseName.orig"
 
-                # if replacement files in both file sets exist and match
-                # the matching version can be used - remove the ones in file set 1
-                if $replacementMatch ; then
-                    rm -f "$fileSet1/$baseName"
-                    rm -f "$fileSet1/$baseName.orig"
-                    rm -f "$fileSet1/$baseName.USE_ORIGINAL"
-                # replacement file exists but doesn't match another version
-                # insure there is an original file here too
-                elif [ -f "$replacementFile1" ]; then
-                    if [ ! -f "$fileSet1/$baseName.orig" ]; then
-                        cp "$origFile1" "$fileSet1/$baseName.orig"
-                    fi
-                fi
-
-            # no match to another verison
-            else
-                # only change file set if orig does not exist or it does NOT match the file from OriginalFiles
-                if [ -f "$fileSet1/$baseName.orig" ]; then
-                    cmp -s "$origFile1" "$fileSet1/$baseName.orig"
-                    if [ $? -eq 0 ]; then
-                        newOrig=false
-                    else
-                        newOrig=true
-                    fi
-                else
-                    newOrig=true
-                fi
-                if $newOrig ; then
-                    logMessage "$package $version1 $baseName fetching original file"
-                    cp "$origFile1" "$fileSet1/$baseName.orig"
+				if [ -L "$replacementFile2" ] ; then
+					logMessage "WARNING removing symlink $baseName $version2 - no longer used"
+					rm "$replacementFile2"
 				fi
-				# if replacement already exists, don't touch it but flag a manual check should be made
-				if [ -f "$fileSet1/$baseName" ]; then
-					if $newOrig ; then
-						logMessage "WARNING new original found but existing replacement - CHECK REPLACEMENT"
-						touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
-						rm -f "$fileSet1/$baseName.USE_ORIGINAL"
+				if [ -L "$origFile2" ] ; then
+					logMessage "WARNING removing symlink $baseName.orig $version2 - no longer used"
+					rm "$origFile2"
+				fi
+
+               # select appropriate original file
+				if $useAltOrig ; then
+					stockFile2="$originalFiles/$version2$altOrigFile"
+				else
+					stockFile2="$originalFiles/$version2$file"
+				fi
+                if [ ! -e "$stockFile2" ]; then
+					logMessage "ERROR $baseName $version2 stock file missing - can't continue"
+					exit
+				fi
+                
+				cmp -s "$stockFile2" "$stockFile1" > /dev/null
+				if [ $? -eq 0 ]; then
+					if [ ! -d "$fileSet2" ]; then
+						mkdir "$fileSet2"
 					fi
-				elif [ ! -e "$fileSet1/$baseName.USE_ORIGINAL" ]; then
-					logMessage "ERROR $package $version1 $baseName - no replacement file"
-					touch "$fileSet1/$baseName.NO_REPLACEMENT"
+					touch "$origFile2.MATCHES_PREVIOUS"
+					stockMatch=true
+				else
+					stockMatch=false
 				fi
-            fi
+                
+				if $stockMatch ; then
+					# move lower versioned matching files to higher numbered version
+					if [ -f "$origFile2" ]; then
+						logMessage "moving $baseName $version2 to $version1"
+						rm -f "$origFile1"
+						mv "$origFile2" "$origFile1"
+						if [ -f "$replacementFile2" ]; then
+							rm -f "$replacementFile1"
+							mv "$replacementFile2" "$replacementFile1"
+						fi
+						if [ -f "$fileSet2/$baseName.USE_ORIGINAL" ]; then
+							rm -f "$fileSet2/$baseName.USE_ORIGINAL"
+							touch "$fileSet1/$baseName.USE_ORIGINAL"
+						fi
+					fi
+
+					if [ -f "$replacementFile1" ]; then
+						if [ -f "$replacementFile2" ]; then
+							cmp -s "$replacementFile1" "$replacementFile2"
+							# clean up file set 2 - file set for version 1 has necessary files
+							if [ $? -eq 0 ]; then
+								rm -f "$replacementFile2"
+								rm -f "$origFile2"
+								rm -f "$fileSet2/$baseName.USE_ORIGINAL"
+							else
+								logMessage "ERROR $baseName replacement differs $version2 $version1 but origials are identical"
+							fi
+						fi
+					fi
+                fi
+            done # for version2
+
+			# only change file set if orig does not exist or it does NOT match the file from OriginalFiles
+			if [ -f "$origFile1" ]; then
+				cmp -s "$stockFile1" "$origFile1"
+				if [ $? -eq 0 ]; then
+					newOrig=false
+				else
+					newOrig=true
+				fi
+			else
+				newOrig=true
+			fi
+			if $newOrig ; then
+				logMessage "$package $version1 $baseName fetching original file"
+				cp "$stockFile1" "$origFile1"
+			fi
+			# if replacement already exists, don't touch it but flag a manual check should be made
+			if [ -f "$fileSet1/$baseName" ]; then
+				if $newOrig ; then
+					logMessage "WARNING new original found but existing replacement - CHECK REPLACEMENT"
+					touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
+					rm -f "$fileSet1/$baseName.USE_ORIGINAL"
+				fi
+			elif [ ! -e "$fileSet1/$baseName.USE_ORIGINAL" ]; then
+				logMessage "ERROR $package $version1 $baseName - no replacement file"
+				touch "$fileSet1/$baseName.NO_REPLACEMENT"
+			fi
         done # for file
 
         # remove empty file sets
@@ -300,6 +324,8 @@ for package in $packageList; do
         version=$(basename $v1)
         fileSet="$packageFiles/$version"
         if [ -d "$fileSet" ]; then
+			rm -f "$fileSet/"*MATCHES_PREVIOUS
+
             # check for real files (not sym-links)
             # if none are found, file set can be deleted
             fileSetEmpty=true
@@ -310,8 +336,8 @@ for package in $packageList; do
                     fileSetEmpty=false
                     break;
                 fi
-                origFile=$replacement.orig
-                if [ -f "$origFile" ] && [ ! -L "$origFile" ]; then
+                stockFile=$replacement.orig
+                if [ -f "$stockFile" ] && [ ! -L "$stockFile" ]; then
                     fileSetEmpty=false
                     break;
                 fi
@@ -334,24 +360,10 @@ for package in $packageList; do
                 rm -rf $fileSet
             # not in originalFiles
             elif [ ! -d "$originalFiles/$version" ]; then
-                logMessage "WARNING $package $version not in OriginalFiles - removal possible - check manually"
+                logMessage "WARNING $package $version not in OriginalFiles - manual remove is OK"
             fi
         fi
     done
-
-    if [ "$packageErrors" == 0 ]; then
-        errorText=""
-    else
-        errorText="$packageErrors ERRORS  "
-    fi
-    if [ "$packageWarnings" == 0 ]; then
-        warningText=""
-    else
-        warningText="$packageWarnings WARNINGS  "
-    fi
-    echo "$package check complete $errorText $warningText"
-    ((packageWarnings=0))
-    ((packageErrors=0))
 done
 if [ "$totalErrors" == 0 ]; then
     errorText="no errors  "

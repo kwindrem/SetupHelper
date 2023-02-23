@@ -305,16 +305,33 @@ _checkFileSets ()
     fi
 
     local fileList=$(cat "$pkgFileSets/fileList")
-    local versionList=($(ls -d "$pkgFileSets"/v*))
+    local versionList=()
+    local rawVersionList=()
     local activeFile=""
     local baseName=""
     local file=""
-    
+    local ver=0
+    local version=""
+
+    rm -f /tmp/foo
+	rawVersionList=($(ls -d "$pkgFileSets"/v*))
+	for ver in ${rawVersionList[@]} ; do
+		version=$(basename $ver)
+		versionStringToNumber $version
+		echo "$version $versionNumber" >> /tmp/foo
+	done
+
+	# versionList is sorted in reverse version order to make searches faster
+	# since newer versions will most likely contain the desired files
+	local versionList=( $(sort -r -n -k 2 /tmp/foo | awk '{print $1}') )
+	local versionListLength=${#versionList[@]}
+	rm -f /tmp/foo
+
 	rm -f  "$fileSet/INCOMPLETE"
 
     for file in $fileList ; do
         baseName=$(basename "$file")
-        activeFile=$file        
+        activeFile=$file       
 
         if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
             activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
@@ -326,8 +343,9 @@ _checkFileSets ()
 
         # can't process if no Venus file
         if [ ! -f "$activeFile" ]; then
-            logMessage "WARNING $venusVersion $baseName no active file"
+            logMessage "ERROR $venusVersion $baseName no active file"
             touch "$fileSet/$baseName.NO_ACTIVE_FILE"
+			touch "$fileSet/INCOMPLETE"
             continue
         fi
 
@@ -340,12 +358,9 @@ _checkFileSets ()
 
         # if an active file exists look for a match in another file set
         if [ ! -z "$activeFile" ]; then
-            # search the version list backwards (slightly faster)
             matchFound=false
             local i=${#versionList[@]}
-            while (( i > 0 )); do
-                (( i-- ))
-                otherVersion=$(basename ${versionList[i]})
+            for otherVersion in ${versionList[@]}; do
 
                 # skip this version
                 if [ "$venusVersion" = "$otherVersion" ]; then
@@ -368,9 +383,6 @@ _checkFileSets ()
             done
             
             if $matchFound ;then
-				if [ -e "$fileSet/$baseName.orig" ]; then
-					rm -rf "$fileSet/$baseName.orig"
-				fi
                 rm -f "$fileSet/$baseName.orig"
                 ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 rm -f "$fileSet/$baseName.NO_ORIG"
@@ -766,7 +778,7 @@ fi
 #	can't continue
 if [ $scriptAction == 'INSTALL' ]; then
 	if ! $optionsSet ; then
-		logMessage "required options have not been set - can't install"
+		logMessage "ERROR required options have not been set - can't install"
 		exit $EXIT_OPTIONS_NOT_SET
 	fi
 fi

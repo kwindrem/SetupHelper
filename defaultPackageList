@@ -21,4 +21,5 @@ FroniusSmartmeter   SirUli      main
 dbus-i2c            pulquero    latest
 DCSystemAggregator  pulquero    latest
 gatt-exec-server    pulquero    latest
+BatteryAggregator   pulquero    latest
 RpiTemperature      TimD1981    latest

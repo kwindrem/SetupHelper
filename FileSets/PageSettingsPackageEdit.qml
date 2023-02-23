@@ -58,6 +58,9 @@ MbPage {
 			packageIndex = 0
 		else if (packageIndex >= packageCount.value)
 			packageIndex = packageCount.value - 1
+
+		// notify PackageManager to refresh GitHub version info
+		editAction.setValue ('gitHubScan' + ':' + packageName)
 	}
 	
 	function getSettingsBind(param)
@@ -75,7 +78,7 @@ MbPage {
     {
 		packageIndex += 1
 		if (packageIndex >= packageCount.value)
-						packageIndex = packageCount.value - 1
+			packageIndex = packageCount.value - 1
    }
     function previousIndex ()
     {

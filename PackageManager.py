@@ -77,6 +77,8 @@ ONE_DOWNLOAD = 2
 #			'INITIALIZE' - install PackageManager's persistent storage (dbus Settings)
 #						so that the storage will be rebuilt when PackageManager restarts
 #						PackageManager will exit when this command is received
+#			'gitHubScan' - trigger GitHub version update
+#						sent when entering the package edit menu or when changing packages within that menu
 #
 #		the GUI must wait for PackageManager to signal completion of one operation before initiating another
 #
@@ -492,7 +494,8 @@ def PushAction (command=None, source=None):
 		global InitializePackageManager
 		InitializePackageManager = True
 	elif action == 'gitHubScan':
-		UpdateGitHubVersion.SetPriorityGitHubVersion (packageName)
+		if packageName != "":
+			UpdateGitHubVersion.SetPriorityGitHubVersion (packageName)
 	# ignore blank action - this occurs when PackageManager changes the action on dBus to 0
 	#	which acknowledges a GUI action
 	elif action == '':
@@ -2147,6 +2150,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 				AllVersionsRefreshed = False
 			# command contains a package name for priority update
 			elif command != "":
+				DbusIf.SetGuiEditAction ('')
 				priorityPackageName = command
 				DbusIf.LOCK ()
 				package = PackageClass.LocatePackage (priorityPackageName)
@@ -2157,7 +2161,6 @@ class UpdateGitHubVersionClass (threading.Thread):
 				if package != None:
 					# update the GigHub version here
 					self.updateGitHubVersion (priorityPackageName, user, branch)
-					time.sleep (1.0)
 				else:
 					logging.error ("can't fetch GitHub version - " + priorityPackageName + " not in package list")
 
@@ -3283,7 +3286,6 @@ def mainLoop():
 	if MediaScan.AutoUninstall:
 		mainloop.quit()
 		return False
-
 	SetupHelperUninstall = False
 	statusMessage = ""
 

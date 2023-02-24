@@ -1,3 +1,6 @@
+v4.35:
+	fixed: package edit menu buttons are not active after v4.34 update
+
 v4.34:
 	disable GitHub version updates if automatic downloads are off
 		eliminates internet traffic needed to retrieve version

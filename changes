@@ -1,3 +1,10 @@
+v4.36:
+	fixed: crash if version file contains a zero length string (not counting white space)
+	split add stored packages processing to reduce execution time in main loop
+	enhanced Git Hub version updates:
+		longer background updtate time (10 minutes vs 1 minute)
+		complete refresh when entering Active packages menu
+
 v4.35:
 	fixed: package edit menu buttons are not active after v4.34 update
 

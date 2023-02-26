@@ -219,9 +219,13 @@ The Package Manager includes a set of menus on the GX device menu system
 
 			Tapping on one of the entries leads to the Package editor menu
 
-			Git Hub versions are not refreshed if autodownloads are turned off to eliminate internet bandwidth from periodic checks.
-			The Git Hub version for the package shown in the Package editor menu will be refreshed once if auto downloads are off
-			The version information will expire and revert to "--" if not refreshed in 20 minutes.
+			Git Hub versions are not refreshed if autodownloads are turned off
+				to eliminate internet bandwidth from periodic checks.
+			If auto downloads are off:
+				Git Hub versions are refreshed once when entering the Package Versions menu - one package every 2 seconds
+				The Git Hub version for the package shown in the Package editor menu will be refreshed once
+			If auto downloads are on, one Git Hub version is refreshed every 10 minutes
+				after an initial pass of one package every 2 seconds.
 
 		Inactive packages:
 			displays all INACTIVE packages

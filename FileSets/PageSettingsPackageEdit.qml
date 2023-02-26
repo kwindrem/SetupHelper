@@ -50,6 +50,8 @@ MbPage {
 	Component.onCompleted:
 	{
 		resetPackageIndex ()
+		// request PackageManager to refresh GitHub version info for this package
+		editAction.setValue ('gitHubScan' + ':' + packageName)
 	}
 	
 	function resetPackageIndex ()
@@ -58,9 +60,6 @@ MbPage {
 			packageIndex = 0
 		else if (packageIndex >= packageCount.value)
 			packageIndex = packageCount.value - 1
-
-		// notify PackageManager to refresh GitHub version info
-		editAction.setValue ('gitHubScan' + ':' + packageName)
 	}
 	
 	function getSettingsBind(param)
@@ -76,16 +75,25 @@ MbPage {
     
     function nextIndex ()
     {
+		var lastIndex = packageIndex
 		packageIndex += 1
 		if (packageIndex >= packageCount.value)
 			packageIndex = packageCount.value - 1
-   }
-    function previousIndex ()
+		// if new package, request PackageManager to refresh GitHub version info for this package
+		if (packageIndex != lastIndex)
+			editAction.setValue ('gitHubScan' + ':' + packageName)
+	}
+	function previousIndex ()
     {
+		var lastIndex = packageIndex
 		packageIndex -= 1
 		if (packageIndex < 0)
 			packageIndex = 0
+		// if new package, notify PackageManager to refresh GitHub version info for this package
+		if (packageIndex != lastIndex)
+			editAction.setValue ('gitHubScan' + ':' + packageName)
     }
+
     function cancelEdit ()
     {
 		requestedAction = ''

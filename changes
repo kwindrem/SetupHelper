@@ -1,3 +1,6 @@
+v4.37:
+	add settings backup to local storage (/data/settingsBackup)
+
 v4.36:
 	fixed: crash if version file contains a zero length string (not counting white space)
 	split add stored packages processing to reduce execution time in main loop

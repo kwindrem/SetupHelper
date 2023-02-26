@@ -109,6 +109,7 @@ ONE_DOWNLOAD = 2
 #	the following service parameters control settings backup and restore
 #		/BackupMediaAvailable		True if suitable SD/USB media is detected by PackageManager
 #		/BackupSettingsFileExist	True if PackageManager detected a settings backup file
+#		/BackupSettingsLocalFileExist	True if PackageManager detected a settings backup file in /data
 #		/BackupProgress				used to trigger and provide status of an operation
 #									0 nothing happening - set by PackageManager when operaiton completes
 #									1 set by the GUI to trigger a backup operation
@@ -1015,6 +1016,14 @@ class DbusIfClass:
 		else:
 			dbusValue = 0
 		self.DbusService['/BackupSettingsFileExist'] = dbusValue
+
+	def SetBackupSettingsLocalFileExist (self, value):
+		if value == True:
+			dbusValue = 1
+		else:
+			dbusValue = 0
+		self.DbusService['/BackupSettingsLocalFileExist'] = dbusValue
+
 	def GetBackupSettingsFileExist (self):
 		if self.DbusService['/BackupSettingsFileExist'] == 1:
 			return True
@@ -1201,6 +1210,7 @@ class DbusIfClass:
 
 		self.DbusService.add_path ( '/BackupMediaAvailable', 0, writeable = True )
 		self.DbusService.add_path ( '/BackupSettingsFileExist', 0, writeable = True )
+		self.DbusService.add_path ( '/BackupSettingsLocalFileExist', 0, writeable = True )
 		self.DbusService.add_path ( '/BackupProgress', 0, writeable = True )
 
 
@@ -3170,6 +3180,7 @@ class MediaScanClass (threading.Thread):
 		autoRestoreComplete = False
 		autoEject = False
 		bus = dbus.SystemBus()
+		localSettingsBackupExists = True
 
 		# list of accepted branch/version substrings
 		acceptList = [ "-current", "-latest", "-main", "-test", "-debug", "-beta", "-install", 
@@ -3201,6 +3212,28 @@ class MediaScanClass (threading.Thread):
 			#	manually triggered settings backup
 			#	manually triggered settings restore
 			automaticTransfers = False
+
+			# do local settings backup/restore
+			if os.path.exists ("/data/settingsBackup"):
+				localSettingsBackupExists = True
+				DbusIf.SetBackupSettingsLocalFileExist (True)
+			else:
+				localSettingsBackupExists = False
+				DbusIf.SetBackupSettingsLocalFileExist (False)
+
+			backupProgress = DbusIf.GetBackupProgress ()
+			# GUI triggered backup
+			if backupProgress == 21:
+				DbusIf.SetBackupProgress (23)
+				self.settingsBackup ("/data")
+				DbusIf.SetBackupProgress (0)
+			elif backupProgress == 22:
+				if localSettingsBackupExists:
+					DbusIf.SetBackupProgress (24)
+					self.settingsRestore ("/data")
+				DbusIf.SetBackupProgress (0)
+
+
 
 			try:
 				drives = os.listdir (root)

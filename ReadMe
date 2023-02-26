@@ -239,7 +239,8 @@ The Package Manager includes a set of menus on the GX device menu system
 		
 		Backup & Restore settings:
 			saves settings to the settingsBackup file on removable SD/USB media
-			restores from same
+				or to local media (/data/settingsBackup)
+			restores from same 
 			/data/SetupHelper/settingsList is a complete list of settings saved to settingsBackup
 				GuiMods
 				SetupHelper
@@ -255,9 +256,11 @@ The Package Manager includes a set of menus on the GX device menu system
 					System
 					SystemSetup
 					Vrmlogger
+			Additionally, backup and restore of the following to/from removable media only
 				Any logo files in /data/themes/overlay
 				Setup script options in /data/setupOptions
-				All logs stored in /data/log are written to logs.zip on the removable media
+			All logs stored in /data/log are written to logs.zip on the removable media only
+				as part of the backup
 			The parameters must exist to be saved
 			The parameters will be created and set to the backed up value during a restore
 

@@ -2949,8 +2949,11 @@ class MediaScanClass (threading.Thread):
 	# settingsList contains the list of dbus /Settings parameters to save and restore
 	#
 
-	def settingsBackup (self, backupPath):
+	def settingsBackup (self, backupPath, settingsOnly = False):
 		settingsCount = 0
+		overlayCount = 0
+		logsWritten = "no logs"
+
 		settingsListFile = "/data/SetupHelper/settingsList"
 		backupFile = backupPath + "/settingsBackup"
 		try:
@@ -3000,78 +3003,80 @@ class MediaScanClass (threading.Thread):
 		except:
 			logging.error ("settings backup - settings write failure")
 		
-		# backup logo overlays
-		overlaySourceDir = "/data/themes/overlay"
-		overlayDestDir = backupPath + "/logoBackup"
+		if not settingsOnly:
+			# backup logo overlays
+			overlaySourceDir = "/data/themes/overlay"
+			overlayDestDir = backupPath + "/logoBackup"
 
-		
-		# remove any previous logo backups
-		if os.path.isdir (overlayDestDir):
-			shutil.rmtree (overlayDestDir)
+			
+			# remove any previous logo backups
+			if os.path.isdir (overlayDestDir):
+				shutil.rmtree (overlayDestDir)
 
-		overlayCount = 0
-		try:
-			if os.path.isdir (overlaySourceDir):
-				overlayFiles = os.listdir (overlaySourceDir)
-				if len (overlayFiles) > 0:
-					# create overlay direcory on backkup device, then copy files
-					if not os.path.isdir (overlayDestDir):
-						os.mkdir (overlayDestDir)
-					for overlay in overlayFiles:
-						if overlay[0] == ".":
-							continue
-						shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
-						overlayCount += 1
-		except:
-			logging.error ("settings backup - logo write failure")
+			try:
+				if os.path.isdir (overlaySourceDir):
+					overlayFiles = os.listdir (overlaySourceDir)
+					if len (overlayFiles) > 0:
+						# create overlay direcory on backkup device, then copy files
+						if not os.path.isdir (overlayDestDir):
+							os.mkdir (overlayDestDir)
+						for overlay in overlayFiles:
+							if overlay[0] == ".":
+								continue
+							shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
+							overlayCount += 1
+			except:
+				logging.error ("settings backup - logo write failure")
 
-		# copy log files
-		logsWritten = "no logs"
-		try:
-			# remove any previous log backups
-			logDestDir = backupPath + "/logs"
-			if os.path.isdir (logDestDir):
-				shutil.rmtree (logDestDir)
+			# copy log files
+			try:
+				# remove any previous log backups
+				logDestDir = backupPath + "/logs"
+				if os.path.isdir (logDestDir):
+					shutil.rmtree (logDestDir)
 
-			proc = subprocess.Popen ( [ 'zip', '-rq', backupPath + "/logs.zip", "/data/log" ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			proc.wait()
-			stdout, stderr = proc.communicate ()
-			# convert from binary to string
-			stdout = stdout.decode ().strip ()
-			stderr = stderr.decode ().strip ()
-			returnCode = proc.returncode
-			logsWritten = "logs"
-		except:
-			logging.error ("settings backup - log write failure")
-			logsWritten = "no logs"
-
+				proc = subprocess.Popen ( [ 'zip', '-rq', backupPath + "/logs.zip", "/data/log" ],
+											stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+				proc.wait()
+				stdout, stderr = proc.communicate ()
+				# convert from binary to string
+				stdout = stdout.decode ().strip ()
+				stderr = stderr.decode ().strip ()
+				returnCode = proc.returncode
+				logsWritten = "logs"
+			except:
+				logging.error ("settings backup - log write failure")
+				logsWritten = "no logs"
 
 
-		# backup setup script options
-		optionsSourceDir = "/data/setupOptions"
-		optionsDestDir = backupPath + "/setupOptions"
 
-		try:
-			# remove any previous options backups
-			if os.path.isdir (optionsDestDir):
-				shutil.rmtree (optionsDestDir)
+			# backup setup script options
+			optionsSourceDir = "/data/setupOptions"
+			optionsDestDir = backupPath + "/setupOptions"
 
-			if os.path.isdir (optionsSourceDir):
-				shutil.copytree ( optionsSourceDir, optionsDestDir )
-		except:
-			logging.error ("settings backup - overlays write failure")
+			try:
+				# remove any previous options backups
+				if os.path.isdir (optionsDestDir):
+					shutil.rmtree (optionsDestDir)
+
+				if os.path.isdir (optionsSourceDir):
+					shutil.copytree ( optionsSourceDir, optionsDestDir )
+			except:
+				logging.error ("settings backup - overlays write failure")
 		
 		logging.warning ("settings backup completed - " + str(settingsCount) + " settings, " + str (overlayCount) + " logos, "
 							+ logsWritten )
 
 
-	def settingsRestore (self, backupPath):
+	def settingsRestore (self, backupPath, settingsOnly = False):
 		backupFile = backupPath + "/settingsBackup"
 		if not os.path.exists (backupFile):
 			logging.error (backupFile + " does not exist - can't restore settings")
 		bus = dbus.SystemBus()
 		settingsCount = 0
+		overlayCount = 0
+
+
 		with open (backupFile, 'r') as fd:
 			for line in fd:
 				parameterExists = False
@@ -3130,32 +3135,32 @@ class MediaScanClass (threading.Thread):
 					bus.get_object("com.victronenergy.settings", path).SetValue (value)
 					settingsCount += 1
 
-		# restore logo overlays
-		overlaySourceDir = backupPath + "/logoBackup"
-		overlayDestDir = "/data/themes/overlay"
-		overlayCount = 0
-		if os.path.isdir (overlaySourceDir):
-			overlayFiles = os.listdir (overlaySourceDir)
-			if len (overlayFiles) > 0:
-				# create overlay direcory in /data, then copy files
-				if not os.path.isdir (overlayDestDir):
-					os.mkdir (overlayDestDir)
-				for overlay in overlayFiles:
-					if overlay[0] == ".":
-						continue
-					shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
-					overlayCount += 1
+		if not settingsOnly:
+			# restore logo overlays
+			overlaySourceDir = backupPath + "/logoBackup"
+			overlayDestDir = "/data/themes/overlay"
+			if os.path.isdir (overlaySourceDir):
+				overlayFiles = os.listdir (overlaySourceDir)
+				if len (overlayFiles) > 0:
+					# create overlay direcory in /data, then copy files
+					if not os.path.isdir (overlayDestDir):
+						os.mkdir (overlayDestDir)
+					for overlay in overlayFiles:
+						if overlay[0] == ".":
+							continue
+						shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
+						overlayCount += 1
 
-		# restore setup script options
-		optionsSourceDir = backupPath + "/setupOptions"
-		optionsDestDir = "/data/setupOptions"
+			# restore setup script options
+			optionsSourceDir = backupPath + "/setupOptions"
+			optionsDestDir = "/data/setupOptions"
 
-		# remove any previous options backups
-		if os.path.isdir (optionsDestDir):
-			shutil.rmtree (optionsDestDir)
+			# remove any previous options backups
+			if os.path.isdir (optionsDestDir):
+				shutil.rmtree (optionsDestDir)
 
-		if os.path.isdir (optionsSourceDir):
-			shutil.copytree ( optionsSourceDir, optionsDestDir )
+			if os.path.isdir (optionsSourceDir):
+				shutil.copytree ( optionsSourceDir, optionsDestDir )
 		
 		logging.warning ("settings restore completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
 
@@ -3222,17 +3227,15 @@ class MediaScanClass (threading.Thread):
 				DbusIf.SetBackupSettingsLocalFileExist (False)
 
 			backupProgress = DbusIf.GetBackupProgress ()
-			# GUI triggered backup
 			if backupProgress == 21:
 				DbusIf.SetBackupProgress (23)
-				self.settingsBackup ("/data")
+				self.settingsBackup ("/data", settingsOnly = True)
 				DbusIf.SetBackupProgress (0)
 			elif backupProgress == 22:
 				if localSettingsBackupExists:
 					DbusIf.SetBackupProgress (24)
-					self.settingsRestore ("/data")
+					self.settingsRestore ("/data", settingsOnly = True)
 				DbusIf.SetBackupProgress (0)
-
 
 
 			try:

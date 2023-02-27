@@ -1,4 +1,7 @@
 v4.37:
+	fixed: v4.37 overwrote settingsOptions and added logs.zip to /dataw
+
+v4.37:
 	add settings backup to local storage (/data/settingsBackup)
 
 v4.36:

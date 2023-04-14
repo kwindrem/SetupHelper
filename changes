@@ -1,3 +1,7 @@
+v4.40:
+	fixed bug in updateFileSets that resulted in no replacement file errors
+		an incorrect not a released version warning
+
 v4.39:
 	updateFileSets now allows creating file sets for only released versions
 	installService in ServiceResources now supports multiple services in package

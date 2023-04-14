@@ -256,11 +256,10 @@ for package in $packageList; do
             # look for a match in another version - use all versions, not just the release list
 			for entry2 in ${allVersions[@]} ; do
 				IFS=':' read version2 version2number <<< "$entry2"
-				if (( "$version2number" >= "$version1number" )); then
+				if (( "$version2number" == "$version1number" )); then
 					continue
 				fi
                 fileSet2="$packageFiles/$version2"
-
                 replacementFile2="$fileSet2/$baseName"
 				origFile2="$fileSet2/$baseName.orig"
 
@@ -303,7 +302,6 @@ for package in $packageList; do
 							if [ -f "$replacementFile2.USE_ORIGINAL" ]; then
 								mv -f "$replacementFile2.USE_ORIGINAL" "$replacementFile1.USE_ORIGINAL"
 							fi
-							fileSetInUse=true
 						fi
 
 						if [ -f "$replacementFile1" ] && [ -f "$replacementFile2" ]; then
@@ -362,10 +360,11 @@ for package in $packageList; do
 					touch "$replacementFile1.CHECK_REPLACEMENT"
 					rm -f "$replacementFile1.USE_ORIGINAL"
 				fi
-			elif [ ! -e "$replacementFile1.USE_ORIGINAL" ]; then
+			elif [ -e "$replacementFile1.USE_ORIGINAL" ]; then
+				fileSetInUse=true
+			else
 				logMessage "ERROR $package: $version1 $baseName - no replacement file"
 				touch "$replacementFile1.NO_REPLACEMENT"
-				fileSetInUse=true
 			fi
         done # for file
 

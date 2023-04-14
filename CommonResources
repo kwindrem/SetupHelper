@@ -5,6 +5,12 @@
 
 ######## skip to bottom of file for code executed when script is called
 
+# check to prevent sourcing this file again
+if [[ $commonResourcesSourced == "yes" ]] ; then
+	return
+fi
+commonResourcesSourced="yes"
+
 setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
 source "$setupHelperDir/LogHandler"

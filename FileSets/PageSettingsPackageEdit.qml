@@ -112,15 +112,18 @@ MbPage {
     }
     function install ()
     {
-		requestedAction = 'install'
+		if (navigate && installOk)
+			requestedAction = 'install'
     }
     function uninstall ()
     {
-		requestedAction = 'uninstall'
+		if (navigate && installedValid)
+			requestedAction = 'uninstall'
     }
     function gitHubDownload ()
     {
-		requestedAction = 'download'
+		if (navigate && downloadOk)
+			requestedAction = 'download'
     }
     function remove ()
     {
@@ -325,7 +328,7 @@ MbPage {
             description: ""
             value: qsTr ("Download")
 			onClicked: gitHubDownload ()
-			show: navigate && downloadOk
+            opacity: navigate && downloadOk > 0 ? 1.0 : 0.2
             writeAccessLevel: User.AccessInstaller
         }
         MbOK
@@ -336,7 +339,7 @@ MbPage {
             description: ""
             value: qsTr ("Install")
             onClicked: install ()
-            show: navigate && installOk 
+            opacity: navigate && installOk > 0 ? 1.0 : 0.2
             writeAccessLevel: User.AccessInstaller
         }
         MbOK
@@ -347,7 +350,7 @@ MbPage {
             description: ""
             value: qsTr("Uninstall")
             onClicked: uninstall ()
-            show: navigate && installedValid
+            opacity: navigate && installedValid > 0 ? 1.0 : 0.2
             writeAccessLevel: User.AccessInstaller
         }
 		// at bottom so it's not in the middle of hard button cycle

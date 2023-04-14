@@ -3,6 +3,12 @@
 #
 # sourced from CommonResources, UpdateResources and reinstallMods
 
+# check to prevent sourcing this file again
+if [[ $essentialResourcesSourced == "yes" ]] ; then
+	return
+fi
+essentialResourcesSourced="yes"
+
 # get the full, unambiguous path to this script
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 packageName=$(basename "$scriptDir")

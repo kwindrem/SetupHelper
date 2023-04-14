@@ -7,8 +7,12 @@
 # need to make settings changes
 # These functions check to see if the settings system is operational and defer
 # the set/create/remove activity so the calling script may continue
-#
-# as of v2.90~3 changes to 
+
+# check to prevent sourcing this file again
+if [[ $dbusSettingsResourcesSourced == "yes" ]] ; then
+	return
+fi
+dbusSettingsResourcesSourced="yes"
 
 source "/data/SetupHelper/EssentialResources"
 source "/data/SetupHelper/LogHandler"

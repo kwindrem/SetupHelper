@@ -9,6 +9,12 @@
 # the script helper log and optionally the package log
 # logs are written to both places and additionally the command line if not running from reinstallMods
 
+# check to prevent sourcing this file again
+if [[ $logHandlerSourced == "yes" ]] ; then
+	return
+fi
+logHandlerSourced="yes"
+
 setupLogFile="/var/log/SetupHelper"
 
 # enable logging to console

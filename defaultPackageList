@@ -7,19 +7,20 @@
 # blank lines are ignored
 # incomplete lines are ignored
 
-# Package           GitHubUser  Tag/branch/version 
-SetupHelper         kwindrem    latest
-GuiMods             kwindrem    latest
-GeneratorConnector  kwindrem    latest
-ShutdownMonitor     kwindrem    latest
-TankRepeater        kwindrem    latest
-VeCanSetup	    	kwindrem    latest
-RpiDisplaySetup     kwindrem    latest
-RpiGpioSetup        kwindrem    latest
-123SmartBMS-Venus	123electric	latest
-FroniusSmartmeter   SirUli      main
-dbus-i2c            pulquero    latest
-DCSystemAggregator  pulquero    latest
-gatt-exec-server    pulquero    latest
-BatteryAggregator   pulquero    latest
-RpiTemperature      TimD1981    latest
+# Package             GitHubUser    Tag/branch/version 
+SetupHelper           kwindrem      latest
+GuiMods               kwindrem      latest
+GeneratorConnector    kwindrem      latest
+ShutdownMonitor       kwindrem      latest
+TankRepeater          kwindrem      latest
+VeCanSetup            kwindrem      latest
+RpiDisplaySetup       kwindrem      latest
+RpiGpioSetup          kwindrem      latest
+123SmartBMS-Venus     123electric   latest
+FroniusSmartmeter     SirUli        main
+dbus-i2c              pulquero      latest
+DCSystemAggregator    pulquero      latest
+gatt-exec-server      pulquero      latest
+BatteryAggregator     pulquero      latest
+RpiTemperature        TimD1981      latest
+venus-os_ngrok        mr-manuel     latest

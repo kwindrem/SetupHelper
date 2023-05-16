@@ -11,7 +11,10 @@ MbItem {
 	property string servicePrefix
 	property string settingsPrefix
 
-    VBusItem { id: packageName; bind: getSettingsBind ("PackageName") }
+    property bool isCurrentItem: root.ListView.isCurrentItem
+	property MbStyle style: MbStyle { isCurrentItem: root.ListView.isCurrentItem }
+
+	VBusItem { id: packageName; bind: getSettingsBind ("PackageName") }
     property VBusItem rebootNeededItem: VBusItem { bind: getServiceBind ( "RebootNeeded") }
     property VBusItem guiRestartNeededItem: VBusItem { bind: getServiceBind ( "GuiRestartNeeded") }
     property bool rebootNeeded: rebootNeededItem.valid && rebootNeededItem.value == 1
@@ -59,7 +62,7 @@ MbItem {
 	{
 		var parts=["x", "x", "x", "x", "x"]
 		var versionNumber = 0
-		
+
 		if (item.valid && item.value.substring  (0,1) == "v")
 		{
 			parts = item.value.split (/[v.~]+/ , 4)
@@ -93,6 +96,7 @@ MbItem {
 			Text
 			{
 				text:packageName.valid ? packageName.value : ""
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				font.pixelSize: 14
 				horizontalAlignment: Text.AlignLeft
 			}
@@ -113,6 +117,7 @@ MbItem {
 			Text
 			{
 				text: "GitHub"
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
 			}
 			MbTextBlock
@@ -137,6 +142,7 @@ MbItem {
 			Text
 			{
 				text: qsTr ("Stored")
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
 			}
 			MbTextBlock
@@ -156,6 +162,7 @@ MbItem {
 			Text
 			{
 				text: qsTr ("Installed")
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
 			}
 			MbTextBlock

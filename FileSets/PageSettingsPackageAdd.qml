@@ -7,6 +7,10 @@ import com.victron.velib 1.0
 MbPage {
 	id: root
 	title: editActionItem.valid ? qsTr("Add package") : qsTr ("Package manager not running")
+
+    property bool isCurrentItem: root.ListView.isCurrentItem
+	property MbStyle style: MbStyle { isCurrentItem: root.ListView.isCurrentItem }
+
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     property int defaultIndex:0
@@ -34,10 +38,10 @@ MbPage {
 		if (addPending && editAction == '')
 		{
 			addPending = false
-			pageStack.pop()	
+			pageStack.pop()
 		}
 	}
-	
+
 	function getSettingsBind(param)
 	{
 		return Utils.path(settingsPrefix, "/Edit/", param)
@@ -46,7 +50,7 @@ MbPage {
 	{
 		return Utils.path(servicePrefix, "/Default/", defaultIndex, "/", param)
 	}
-    
+
 	// copy a set of default package values to Edit area when changing indexes
 	function updateEdit ()
 	{
@@ -55,7 +59,7 @@ MbPage {
 		editGitHubUser.setValue ( defaultGitHubUser.valid ? defaultGitHubUser.value : "??" )
 		editGitHubBranch.setValue ( defaultGitHubBranch.valid ? defaultGitHubBranch.value : "??" )
 		editStatus.setValue ("")
-		editActionItem.setValue ("") 
+		editActionItem.setValue ("")
 		addPending = false
 	}
 
@@ -75,7 +79,7 @@ MbPage {
 		addPending = true
 		// provide local confirmation of action - takes PackageManager too long
 		editStatus.setValue ( "adding " + packageName)
-		editActionItem.setValue ('add:' + packageName) 
+		editActionItem.setValue ('add:' + packageName)
     }
 	model: VisibleItemModel
     {
@@ -112,7 +116,7 @@ MbPage {
             width: 90
             anchors { right: parent.right  }
             description: ""
-            value: editAction == '' ? qsTr("Cancel") : qsTr("OK") 
+            value: editAction == '' ? qsTr("Cancel") : qsTr("OK")
             onClicked: cancelEdit ()
         }
         MbOK
@@ -140,6 +144,7 @@ MbPage {
 				else
 					return ("add " + packageName + " ?")
 			}
+            color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
         }
     }
 }

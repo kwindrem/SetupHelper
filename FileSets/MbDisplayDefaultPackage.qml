@@ -10,6 +10,9 @@ MbItem {
 	property int defaultIndex
 	property string servicePrefix
 
+    property bool isCurrentItem: root.ListView.isCurrentItem
+	property MbStyle style: MbStyle { isCurrentItem: root.ListView.isCurrentItem }
+
     VBusItem { id: packageName; bind: getServiceBind ("PackageName") }
 
 
@@ -38,6 +41,7 @@ MbItem {
 			Text
 			{
 				text:packageName.valid ? packageName.value : ""
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				font.pixelSize: 14
 				horizontalAlignment: Text.AlignLeft
 			}
@@ -58,6 +62,7 @@ MbItem {
 			Text
 			{
 				text: "GitHub User"
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
 			}
 			MbTextBlock
@@ -82,6 +87,7 @@ MbItem {
 			Text
 			{
 				text: qsTr ("GitHub Tag")
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
 			}
 			MbTextBlock

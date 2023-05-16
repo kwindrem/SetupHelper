@@ -7,6 +7,10 @@ import com.victron.velib 1.0
 MbPage {
 	id: root
 	title: platform.valid ? qsTr("Package editor") : qsTr ("Package manager not running")
+
+    property bool isCurrentItem: root.ListView.isCurrentItem
+	property MbStyle style: MbStyle { isCurrentItem: root.ListView.isCurrentItem }
+
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
     property int packageIndex: 0
@@ -53,7 +57,7 @@ MbPage {
 		// request PackageManager to refresh GitHub version info for this package
 		editAction.setValue ('gitHubScan' + ':' + packageName)
 	}
-	
+
 	function resetPackageIndex ()
 	{
 		if (packageIndex < 0)
@@ -61,7 +65,7 @@ MbPage {
 		else if (packageIndex >= packageCount.value)
 			packageIndex = packageCount.value - 1
 	}
-	
+
 	function getSettingsBind(param)
 	{
 		resetPackageIndex ()
@@ -72,7 +76,7 @@ MbPage {
 		resetPackageIndex ()
 		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
-    
+
     function nextIndex ()
     {
 		var lastIndex = packageIndex
@@ -165,6 +169,7 @@ MbPage {
             Text
             {
                 text: "GitHub:"
+                color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
             }
             MbTextBlock
@@ -176,6 +181,7 @@ MbPage {
             Text
             {
                 text: qsTr ("stored:")
+                color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
                 font.pixelSize: 10
             }
             MbTextBlock
@@ -206,6 +212,7 @@ MbPage {
 					else
 						return qsTr ("installed:")
 				}
+                color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				horizontalAlignment: Text.AlignRight
 				width: incompatible ? 50 + 80 + 3 : 50
                 font.pixelSize: 10
@@ -361,7 +368,7 @@ MbPage {
             wrapMode: Text.WordWrap
             anchors { left: parent.left; leftMargin: 10; top: gitHubBranch.bottom; topMargin: 22 }
             font.pixelSize: 12
-            color: actionPending && isSetupHelper ? "red" : "black"
+            color: actionPending && isSetupHelper ? "red" : root.style.textColor
             text:
             {
 				if (actionPending)

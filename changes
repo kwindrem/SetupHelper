@@ -1,3 +1,6 @@
+v4.41:
+	added support for dark mode (thanks mr-manual)
+
 v4.40:
 	fixed bug in updateFileSets that resulted in no replacement file errors
 		an incorrect not a released version warning

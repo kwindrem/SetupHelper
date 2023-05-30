@@ -313,25 +313,23 @@ _checkFileSets ()
     local fileList=$(cat "$pkgFileSets/fileList")
     local versionList=()
     local rawVersionList=()
+    local tempList=()
     local activeFile=""
     local baseName=""
     local file=""
     local ver=0
     local version=""
 
-    rm -f /tmp/foo
 	rawVersionList=($(ls -d "$pkgFileSets"/v*))
 	for ver in ${rawVersionList[@]} ; do
 		version=$(basename $ver)
 		versionStringToNumber $version
-		echo "$version $versionNumber" >> /tmp/foo
+		tempList+=("$version:$versionNumber")
 	done
 
 	# versionList is sorted in reverse version order to make searches faster
 	# since newer versions will most likely contain the desired files
-	local versionList=( $(sort -r -n -k 2 /tmp/foo | awk '{print $1}') )
-	local versionListLength=${#versionList[@]}
-	rm -f /tmp/foo
+	local versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
 
 	rm -f  "$fileSet/INCOMPLETE"
 
@@ -365,8 +363,8 @@ _checkFileSets ()
         # if an active file exists look for a match in another file set
         if [ ! -z "$activeFile" ]; then
             matchFound=false
-            local i=${#versionList[@]}
-            for otherVersion in ${versionList[@]}; do
+            for entry in ${versionList[@]}; do
+				otherVersion=$(echo $entry | awk -F ':' '{print $1}')
 
                 # skip this version
                 if [ "$venusVersion" = "$otherVersion" ]; then

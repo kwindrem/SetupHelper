@@ -239,7 +239,7 @@ for package in $packageList; do
             fi
             # no original file - flag that then check for an existing replacemement
             if [ ! -f "$stockFile1" ]; then
-                logMessage "ERROR $package: $version1 $baseName - no original file"
+                logMessage "ERROR $package: $version1 $baseName - no stock file"
                 # flag the fact that no stock file exists
                 touch "$fileSet1/$baseName.NO_ORIG"
                 fileSetInUse=true
@@ -247,7 +247,7 @@ for package in $packageList; do
                 if [ -e $fileSet1/$baseName ]; then
                     rm -f "$fileSet1/$baseName.USE_ORIGINAL"
                 else
-                    logMessage "ERROR $package: $version1 $baseName - no original so no replacement file"
+                    logMessage "ERROR $package: $version1 $baseName - no stock file so no replacement file"
                     touch "$fileSet1/$baseName.NO_REPLACEMENT"
                 fi
                 continue
@@ -356,7 +356,7 @@ for package in $packageList; do
 			if [ -f "$replacementFile1" ]; then
 				fileSetInUse=true
 				if $newOrig ; then
-					logMessage "WARNING $package: $baseName new original found but existing replacement - CHECK REPLACEMENT"
+					logMessage "WARNING $package: $version1 $baseName new original found but existing replacement - CHECK REPLACEMENT"
 					touch "$replacementFile1.CHECK_REPLACEMENT"
 					rm -f "$replacementFile1.USE_ORIGINAL"
 				fi

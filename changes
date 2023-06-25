@@ -1,3 +1,7 @@
+v4.42:
+	fixed: updated services are not always restarted
+	add ExtTransferSwitch to default package list
+
 v4.41:
 	added support for dark mode (thanks mr-manual)
 

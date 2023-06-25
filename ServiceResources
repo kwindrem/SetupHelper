@@ -197,31 +197,34 @@ installService ()
 
     # service already installed - only copy changed files, then restart service if it is running
     else
-        logMessage "restarting $serviceName service"
         if [ -f "$servicePath/run" ]; then
             cmp -s "$servicePath/run" "$serviceDir/$serviceName/run" > /dev/null
             if (( $? != 0 )); then
+				logMessage "updating $serviceName run file"
                 cp "$servicePath/run" "$serviceDir/$serviceName/run"
 				if $serviceMountedTmpfs ; then
 					cp "$servicePath/run" "/service/$serviceName/run"
 				fi
-				if serviceIsUp $serviceName ; then
-					svc -t "/service/$serviceName"
-				fi
             fi
+			if serviceIsUp $serviceName ; then
+				logMessage "restarting $serviceName service"
+				svc -t "/service/$serviceName"
+			fi
         fi
 		# log needs to be handled separtely including a restart
         if [ -f "$servicePath/log/run" ]; then
             cmp -s "$servicePath/log/run" "$serviceDir/$serviceName/log/run" > /dev/null
             if (( $? != 0 )); then
+				logMessage "updating $serviceName log/run file"
                 cp "$servicePath/log/run" "$serviceDir/$serviceName/log/run"
 				if $serviceMountedTmpfs ; then
 					cp "$servicePath/log/run" "/service/$serviceName/log/run"
 				fi
-				if serviceIsUp "$serviceName/log" ; then
-					svc -t "/service/$serviceName/log"
-				fi
            fi
+			if serviceIsUp "$serviceName/log" ; then
+				logMessage "restarting $serviceName logger"
+				svc -t "/service/$serviceName/log"
+			fi
         fi
     fi
 }

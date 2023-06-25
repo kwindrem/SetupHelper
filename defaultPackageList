@@ -8,19 +8,20 @@
 # incomplete lines are ignored
 
 # Package             GitHubUser    Tag/branch/version
+SetupHelper           kwindrem      latest
+GuiMods               kwindrem      latest
+ExtTransferSwitch     kwindrem      latest
+ShutdownMonitor       kwindrem      latest
+VeCanSetup            kwindrem      latest
+RpiDisplaySetup       kwindrem      latest
+RpiGpioSetup          kwindrem      latest
+# obsolete TankRepeater          kwindrem      latest
+
 123SmartBMS-Venus     123electric   latest
+RpiTemperature        TimD1981      latest
 BatteryAggregator     pulquero      latest
 dbus-i2c              pulquero      latest
 DCSystemAggregator    pulquero      latest
-FroniusSmartmeter     SirUli        main
 gatt-exec-server      pulquero      latest
-GeneratorConnector    kwindrem      latest
-GuiMods               kwindrem      latest
-RpiDisplaySetup       kwindrem      latest
-RpiGpioSetup          kwindrem      latest
-RpiTemperature        TimD1981      latest
-SetupHelper           kwindrem      latest
-ShutdownMonitor       kwindrem      latest
-TankRepeater          kwindrem      latest
-VeCanSetup            kwindrem      latest
+FroniusSmartmeter     SirUli        main
 venus-os_ngrok        mr-manuel     latest

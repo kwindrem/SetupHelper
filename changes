@@ -1,3 +1,7 @@
+v4.43:
+	fixed: PackageManager crashes when reinitializing database
+	fixed stuck Package Manager status messages
+
 v4.42:
 	fixed: updated services are not always restarted
 	add ExtTransferSwitch to default package list

@@ -10,14 +10,12 @@ MbPage {
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
 	property string bindVrmloggerPrefix: "com.victronenergy.logger"
-    VBusItem { id: downloadStatus; bind: Utils.path(servicePrefix, "/GitHubUpdateStatus") }
-    VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
+    VBusItem { id: pmStatus; bind: Utils.path(servicePrefix, "/PmStatus") }
     VBusItem { id: mediaStatus; bind: Utils.path(servicePrefix, "/MediaUpdateStatus") }
     VBusItem { id: actionNeeded; bind: Utils.path(servicePrefix, "/ActionNeeded") }
     VBusItem { id: editAction; bind: Utils.path(servicePrefix, "/GuiEditAction") }
-    property bool showInstallStatus: installStatus.valid && installStatus.value != ""
     property bool showMediaStatus: mediaStatus.valid && mediaStatus.value != ""
-    property bool showControls: installStatus.valid
+    property bool showControls: pmStatus.valid
 
 	model: VisibleItemModel
     {
@@ -27,15 +25,11 @@ MbPage {
             text:
             {
 				if (! showControls)
-					return"Package manager not running"
-				else if (installStatus.valid && installStatus.value != "")
-					return installStatus.value
+					return "Package manager not running"
 				else if (mediaStatus.valid && mediaStatus.value != "")
 					return mediaStatus.value
-				else if (downloadStatus.valid && downloadStatus.value != "")
-					return downloadStatus.value
 				else
-					return "idle"
+					return pmStatus.value
 			}
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter

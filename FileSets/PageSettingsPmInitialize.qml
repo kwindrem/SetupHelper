@@ -10,8 +10,6 @@ MbPage {
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
 	property bool pmRunning: installStatus.valid
 
-    property VBusItem editAction: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
-    VBusItem { id: installStatus; bind: Utils.path(servicePrefix, "/InstallStatus") }
 	property bool showInProgress: false
 
 	onPmRunningChanged: { showInProgress = false }

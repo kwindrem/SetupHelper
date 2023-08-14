@@ -133,9 +133,7 @@ ERROR_NO_SETUP_FILE = 		999
 #
 #		/GuiEditStatus 				a text message to report edit status to the GUI
 #
-#		/GitHubUpdateStatus			as above for automatic GitHub update
-#
-#		/InstallStatus				as above for automatic install/uninstall
+#		/PmStatus					as above for main Package Manager status
 #
 #		/MediaUpdateStatus			as above for SD/USB media transfers
 #
@@ -450,7 +448,7 @@ global InitializePackageManager
 
 def PushAction (command=None, source=None):
 	parts = command.split (":")
-	queue = None
+	theQueue = None
 	if len (parts) >= 1:
 		action = parts[0]
 	else:
@@ -465,7 +463,7 @@ def PushAction (command=None, source=None):
 		if package != None:
 			package.DownloadPending = True
 		DbusIf.UNLOCK ()
-		queue = DownloadGitHub.DownloadQueue
+		theQueue = DownloadGitHub.DownloadQueue
 		queueText = "Download"
 	elif action == 'install' or action == 'uninstall':
 		DbusIf.LOCK ()
@@ -473,10 +471,10 @@ def PushAction (command=None, source=None):
 		if package != None:
 			package.InstallPending = True
 		DbusIf.UNLOCK ()
-		queue = InstallPackages.InstallQueue
+		theQueue = InstallPackages.InstallQueue
 		queueText = "Install"
 	elif action == 'add' or action == 'remove':
-		queue = AddRemove.AddRemoveQueue
+		theQueue = AddRemove.AddRemoveQueue
 		queueText = "AddRemove"
 	elif action == 'reboot':
 		logging.warning ( "received Reboot request from " + source)
@@ -503,13 +501,13 @@ def PushAction (command=None, source=None):
 		logging.error ("PushAction received unrecognized command: " + command)
 		return
 
-	if queue != None:
+	if theQueue != None:
 		try:
-			queue.put ( (command, source), block=False )
+			theQueue.put ( (command, source), block=False )
 		except queue.Full:
-			logging.error ("command " + command + " from " + source + " lost - " + ququeText + " - queue full")
+			logging.error ("command " + command + " from " + source + " lost - " + queueText + " - queue full")
 		except:
-			logging.error ("command " + command + " from " + source + " lost - " + ququeText + " - other queue error")
+			logging.error ("command " + command + " from " + source + " lost - " + queueText + " - other queue error")
 # end PushAction
 
 
@@ -651,7 +649,7 @@ class AddRemoveClass (threading.Thread):
 
 	def __init__(self):
 		threading.Thread.__init__(self)
-		self.AddRemoveQueue = queue.Queue (maxsize = 10)
+		self.AddRemoveQueue = queue.Queue (maxsize = 50)
 		self.threadRunning = True
 		
 
@@ -924,8 +922,7 @@ class DbusIfClass:
 	# updates the status when the operation completes
 	# the GUI provides three different areas to show status
 	# where specifies which of these are updated
-	#	'Download'
-	#	'Install'
+	#	'PmStatus'
 	#	'Editor'
 	#	'Media'
 	#	which determines where status is sent
@@ -947,10 +944,8 @@ class DbusIfClass:
 
 		if where == 'Editor':
 			DbusIf.SetEditStatus ( message )
-		elif where == 'Install':
-			DbusIf.SetInstallStatus ( message )
-		elif where == 'Download':
-			DbusIf.SetGitHubUpdateStatus (message)
+		elif where == 'PmStatus':
+			DbusIf.SetPmStatus ( message )
 		elif where == 'Media':
 			DbusIf.SetMediaStatus (message)
 
@@ -986,10 +981,8 @@ class DbusIfClass:
 		return self.DbusSettings['autoInstall']
 	def SetAutoInstall (self, value):
 		self.DbusSettings['autoInstall'] = value
-	def SetGitHubUpdateStatus (self, value):
-		self.DbusService['/GitHubUpdateStatus'] = value
-	def SetInstallStatus (self, value):
-		self.DbusService['/InstallStatus'] = value
+	def SetPmStatus (self, value):
+		self.DbusService['/PmStatus'] = value
 	def SetMediaStatus (self, value):
 		self.DbusService['/MediaUpdateStatus'] = value
 
@@ -1174,8 +1167,7 @@ class DbusIfClass:
 							processname = 'PackageManager', processversion = 1.0, connection = 'none',
 							deviceinstance = 0, productid = 1, productname = 'Package Manager',
 							firmwareversion = 1, hardwareversion = 0, connected = 1)
-		self.DbusService.add_path ( '/GitHubUpdateStatus', "", writeable = True )
-		self.DbusService.add_path ( '/InstallStatus', "", writeable = True )
+		self.DbusService.add_path ( '/PmStatus', "", writeable = True )
 		self.DbusService.add_path ( '/MediaUpdateStatus', "", writeable = True )
 		self.DbusService.add_path ( '/GuiEditStatus', "", writeable = True )
 
@@ -2325,7 +2317,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		if source == 'GUI':
 			where = 'Editor'
 		elif source == 'AUTO':
-			where = 'Download'
+			where = 'PmStatus'
 		else:
 			where = None
 
@@ -2565,7 +2557,7 @@ class InstallPackagesClass (threading.Thread):
 
 	def __init__(self):
 		threading.Thread.__init__(self)
-		DbusIf.SetInstallStatus ("")
+		DbusIf.SetPmStatus ("")
 		self.threadRunning = True
 		self.InstallQueue = queue.Queue (maxsize = 10)
 
@@ -2596,7 +2588,7 @@ class InstallPackagesClass (threading.Thread):
 				package.UpdateDoNotInstall (True)
 				logging.warning (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
-			sendStatusTo = 'Install'
+			sendStatusTo = 'PmStatus'
 
 		packageDir = "/data/" + packageName
 		if not os.path.isdir (packageDir):
@@ -3573,11 +3565,11 @@ def mainLoop():
 			DbusIf.SetActionNeeded ('')
 
 	if statusMessage != "":
-		DbusIf.UpdateStatus ( statusMessage, where='Download' )
+		DbusIf.UpdateStatus ( statusMessage, where='PmStatus' )
 	elif actionMessage != "":
-		DbusIf.UpdateStatus ( actionMessage, where='Download' )
+		DbusIf.UpdateStatus ( actionMessage, where='PmStatus' )
 	else:
-		DbusIf.UpdateStatus ( idleMessage, where='Download' )
+		DbusIf.UpdateStatus ( idleMessage, where='PmStatus' )
 
 	elapsedTime = time.time() - startTime
 	# enable the following line to report execution time of main loop
@@ -3803,7 +3795,7 @@ def main():
 
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
 	if MediaScan.AutoUninstall:
-		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Download')
+		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='PmStatus')
 		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
 		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
 
@@ -3813,7 +3805,7 @@ def main():
 		SetupHelperUninstall = removeAllPackages ()
 
 	elif SystemReboot:
-		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Download')
+		DbusIf.UpdateStatus ( message="REBOOTING ...", where='PmStatus')
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Editor' )
 		logging.warning (">>>> REBOOTING: to complete package installation")
 

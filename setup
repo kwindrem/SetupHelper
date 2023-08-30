@@ -63,7 +63,7 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		origFile="$qmlDir/PageSettings.qml"
 	fi
 	if (( $(grep -c "PackageManager" $origFile) > 0)); then
-		logMessage "ERROR: PageSettings.qml already modified for PackageManager -- skipping that modification"
+		logMessage "WARNING: PageSettings.qml already modified for PackageManager -- skipping that modification"
 	else
 		rm -f "/var/volatile/tmp/PageSettings.qml"
 		echo "//////// modified to insert PackageManager menu" > "/var/volatile/tmp/PageSettings.qml"

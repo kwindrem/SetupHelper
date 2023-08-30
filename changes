@@ -1,3 +1,12 @@
+v5.0:
+	_checkFileSets in CommonResources:
+		if file set exists and contains the COMPLETE flag file, skip all checks
+		otherwise, proceed with file set validation
+		or attempt to create one for the current Venus OS version
+	updateFileSets now fills in all file sets with symlinks
+		so that the install does not have to search for a matching original
+		the search for a match has reportedly failed in a few cases for unknown reasons
+
 v4.43:
 	fixed: PackageManager crashes when reinitializing database
 	fixed stuck Package Manager status messages

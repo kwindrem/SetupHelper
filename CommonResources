@@ -268,13 +268,19 @@ restoreActiveFile ()
 }
 
 
-# checkFileSets validates the file sets used install package modifications
+# checkFileSets validates the file sets used to install package modifications
 #
-# It attempts to create a file set for a new Venus version
+# If a file set for the current Venus OS version exists, the replacement files in that file set
+#	are usable as is and no further checks are needed.
+# The COMPLETE flag file indicates that the file set was validated on the computer creating
+#	the file sets and all replacement files (or symlinks to other file sets) exist.
+#	No checks are needed for a COMPLETE file set.
+# If not, an attempt is made to create a file set for the current Venus OS version
 #   If the new active files for the new version all match another version
-#       the new file set is populated automatically and may be used with no further action
-#   If not, new version is marked for manual editing (NO_REPLACEMENT)
-#       and scriptAction is set to EXIT so incompatible files are not installed
+#       the new file set is populated automatically with replacement files from the other version
+#		and may be used with no further action
+#   If not, new file set is marked INCOMPLETE and scriptAction is set to EXIT
+#	The package can not be installed on this Venus OS version
 #
 # Replacement files that have no original specify an "alternate original" that is used
 # for version comparisons that locate an appropriate replacement
@@ -299,6 +305,11 @@ _checkFileSets ()
         return
     fi
 
+	# no checks needed if all replacement files exist in the current file set
+	if [ -f "$fileSet/COMPLETE" ]; then
+		return
+	fi
+
 	# if incomplete file set exists - remove it and try again
 	if [ -f "$fileSet/INCOMPLETE" ]; then
 		rm -rf $fileSet
@@ -306,7 +317,7 @@ _checkFileSets ()
 
     # attempt to create file set if it doesn't exist
     if [ ! -d "$fileSet" ]; then
-        logMessage "creating file set for $venusVersion"
+        logMessage "attempting to create a file set for $venusVersion"
         mkdir "$fileSet"
     fi
 
@@ -335,7 +346,15 @@ _checkFileSets ()
 
     for file in $fileList ; do
         baseName=$(basename "$file")
-        activeFile=$file       
+
+        # skip checks if replacement file already exists
+        # or if there is no replacement file needed
+        if [ -f "$fileSet/$baseName" ] || [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
+            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
+            continue
+        fi
+
+        activeFile=$file
 
         if [ -f "$pkgFileSets/$baseName.ALT_ORIG" ]; then
             activeFile=$(cat "$pkgFileSets/$baseName.ALT_ORIG")
@@ -345,18 +364,11 @@ _checkFileSets ()
             activeFile="$activeFile.orig"
         fi
 
-        # can't process if no Venus file
+        # can't process if no original (aka active) file exists in the file set
         if [ ! -f "$activeFile" ]; then
             logMessage "ERROR $venusVersion $baseName no active file"
             touch "$fileSet/$baseName.NO_ACTIVE_FILE"
 			touch "$fileSet/INCOMPLETE"
-            continue
-        fi
-
-        # skip checks if replacement file already exists in file set
-        # or if there is no replacement file for this version
-        if [ -f "$fileSet/$baseName" ] || [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
-            rm -f "$fileSet/$baseName.NO_REPLACEMENT"
             continue
         fi
 
@@ -388,7 +400,6 @@ _checkFileSets ()
             
             if $matchFound ;then
                 rm -f "$fileSet/$baseName.orig"
-                ln -s "../$otherVersion/$baseName.orig" "$fileSet/$baseName.orig"
                 rm -f "$fileSet/$baseName.NO_ORIG"
                 # if other file set contains a replacement file, link to it
                 if [ -f "$otherFile" ]; then

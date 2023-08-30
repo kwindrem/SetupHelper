@@ -101,12 +101,6 @@ function versionStringToNumber ()
 # setting includeBetas=flase will retain only the newest beta
 includeBetas=true
 
-# TODO: the origFile link not needed once SetupHelper mods are in the field
-# rigth now links for original files are needed to accommodate
-#	older versions of _checkFileSets in CommonResources
-
-includeOrigLinks=true
-
 packageList=""
 doAllPackages=false
 for param in $* ; do
@@ -235,6 +229,11 @@ for package in $packageList; do
 			replacementFile1="$fileSet1/$baseName"
 			origFile1="$fileSet1/$baseName.orig"
 
+			# remove any existing symlinks for original files - they aren't needed
+			if [ -L "$origFile1" ]; then
+				rm -f "$origFile1"
+			fi
+
 			# skip if this file matched one in a prevous scan
 			if [ -f "$origFile1.MATCHES_PREVIOUS" ]; then
 				continue
@@ -344,12 +343,6 @@ for package in $packageList; do
 					else
 						touch "$replacementFile2.NO_REPLACEMENT_LINK"
 						touch "$fileSet2/INCOMPLETE"
-					fi
-					# origFile is also linked for compatibility with older versions of SetupHelper
-					#	since _checkFileSets in CommonResoruces checks for orig files
-					#	BEFORE checking for the replacement file!!!
-					if $includeOrigLinks && [ -f "$origFile1" ]; then
-						ln -sf "../$version1/$baseName.orig" "$origFile2"
 					fi
 				fi
             done # for version2

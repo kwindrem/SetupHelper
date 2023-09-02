@@ -58,14 +58,26 @@ stockFiles="$packageRoot/StockVenusOsFiles"
 ((totalErrors=0))
 ((totalWarnings=0))
 
+outputtingDots=false
+
 logMessage ()
 {
+	if $outputtingDots ; then
+		echo
+		outputtingDots=false
+	fi
     echo "$*"
     if [[ "$*" == *"ERROR"* ]]; then
         ((totalErrors++))
     elif [[ "$*" == *"WARNING"* ]]; then
         ((totalWarnings++))
     fi
+}
+
+outputProgress ()
+{
+	echo -n "$1"
+	outputtingDots=true
 }
 
 function versionStringToNumber ()
@@ -96,10 +108,6 @@ function versionStringToNumber ()
 }
 
 #### script code begins here
-
-# by default include all versions
-# setting includeBetas=flase will retain only the newest beta
-includeBetas=true
 
 packageList=""
 doAllPackages=false
@@ -137,16 +145,6 @@ for entry in ${versionList[@]} ; do
 done
 versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
 
-firstEntry=true
-fileSetList=""
-for entry in ${versionList[@]} ; do
-	version=$(echo $entry | awk -F ':' '{print $1}')
-	if $firstEntry || $includeBetas || [[ $version != *~* ]]; then
-		fileSetList+=($entry)
-	fi
-	firstEntry=false
-done
-
 for package in $packageList; do
     if [ ! -d "$packageRoot/$package" ] || [ ! -f "$packageRoot/$package/version" ]; then
         logMessage "$packageRoot/$package - not a package directory"
@@ -170,7 +168,7 @@ for package in $packageList; do
 
 	# add a package's existing file sets to stock versions
 	existingFileSets=($(ls -d "$packageFiles"/v* 2> /dev/null))
-	tempList=(${fileSetList[@]})
+	tempList=(${versionList[@]})
 	for entry in ${existingFileSets[@]} ; do
 		version=$(basename $entry)
 		versionStringToNumber $version
@@ -191,9 +189,8 @@ for package in $packageList; do
 		rm -f "$fileSet/"*.CHECK_REPLACEMENT
 	done
 
-
 	# process versions in stock files
-    for entry1 in ${fileSetList[@]} ; do
+    for entry1 in ${versionList[@]} ; do
 		IFS=':' read version1 version1number <<< "$entry1"
         fileSet1="$packageFiles/$version1"
 
@@ -268,8 +265,9 @@ for package in $packageList; do
                 fi
                 continue
             fi
-            
-            # look for a match in another version - use all versions, not just the release list
+
+            # look for a match in another version - use all versions,
+            #	including file sets just in package directory
 			for entry2 in ${allVersions[@]} ; do
 				IFS=':' read version2 version2number <<< "$entry2"
 				if (( "$version2number" == "$version1number" )); then
@@ -334,13 +332,17 @@ for package in $packageList; do
 				fi
 				# created links for fs 2
 				if $stockFilesMatch ; then
-					if [ -f "$replacementFile1" ]; then
+					if [ -f "$replacementFile1" ] && [ ! -L "$replacementFile1" ]; then
 						ln -sf "../$version1/$baseName" "$replacementFile2"
 						rm -f "$replacementFile2.USE_ORIGINAL"
 					elif [ -f "$replacementFile1.USE_ORIGINAL" ]; then
 						touch "$replacementFile2.USE_ORIGINAL"
 					# no replacement in fs 1
 					else
+						# remove any inappropriate sym link
+						if [ -L "$replacementFile2" ]; then
+							rm -f "$replacementFile2"
+						fi
 						touch "$replacementFile2.NO_REPLACEMENT_LINK"
 						touch "$fileSet2/INCOMPLETE"
 					fi
@@ -362,97 +364,97 @@ for package in $packageList; do
 				cp "$stockFile1" "$origFile1"
 			fi
 			# if replacement already exists, don't touch it but flag a manual check should be made
-			if [ -e "$replacementFile1" ]; then
+			if [ -f "$replacementFile1" ] && [ ! -L "$replacementFile1" ]; then
 				if $newOrig ; then
 					logMessage "WARNING $package: $version1 $baseName new original found but existing replacement - CHECK REPLACEMENT"
 					touch "$replacementFile1.CHECK_REPLACEMENT"
 					rm -f "$replacementFile1.USE_ORIGINAL"
 				fi
 			# no replacement - flag the error
-			elif [ ! -e "$replacementFile1.USE_ORIGINAL" ]; then
+			elif [ ! -f "$replacementFile1.USE_ORIGINAL" ] || [ -L "$replacementFile1.USE_ORIGINAL" ]; then
 				logMessage "ERROR $package: $version1 $baseName - no replacement file"
 				touch "$replacementFile1.NO_REPLACEMENT"
 				touch "$fileSet1/INCOMPLETE"
+				if [ -L "$replacementFile1" ]; then
+					rm "$replacementFile1"
+				fi
 			fi
         done # for file
 
 	# if all replacement files are in place, mark the file set COMPLETE
 	#	so _checkFileSets can skip all checks
-	# COMPLETE tells _checkFileSets to skip all checks and accelt the file set as is
+	# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
 	if [ -f "$fileSet1/INCOMPLETE" ]; then
 		rm -f "$fileSet1/COMPLETE"
+		outputProgress "X"
 	else
 		touch "$fileSet1/COMPLETE"
+		outputProgress "."
 	fi
 
     done  # for v1
 
     # check for file sets that no longer exist in stock files
-    packageList=($(ls -d "$packageFiles"/v* 2> /dev/null))
-    for v1 in ${packageList[@]} ; do
+    versionList1=($(ls -d "$packageFiles"/v* 2> /dev/null))
+    for v1 in ${versionList1[@]} ; do
         version=$(basename $v1)
         fileSet="$packageFiles/$version"
-        if [ -d "$fileSet" ]; then
-            # check for existing files
-            # if none are found, file set can be deleted
-            fileSetEmpty=true
-            for file in $fileList ; do
-                baseName=$(basename "$file")
-                replacementFile="$fileSet/$baseName"
-                if [ -f "$replacementFile" ]; then
-                    fileSetEmpty=false
-                    break;
-                fi
-                stockFile=$replacement.orig
-                if [ -f "$stockFile" ]; then
-                    fileSetEmpty=false
-                    break;
-                fi
-                if [ -f "$replacementFile.NO_REPLACEMENT" ]; then
-                     fileSetEmpty=false
-                    break;
-                fi
-                if [ -f "$replacementFile.NO_REPLACEMENT_LINK" ]; then
-                     fileSetEmpty=false
-                    break;
-                fi
-                if [ -f "$replacementFile.CHECK_REPLACEMENT" ]; then
-                     fileSetEmpty=false
-                    break;
-                fi
-                if [ -f "$replacementFile.USE_ORIGINAL" ]; then
-                     fileSetEmpty=false
-                    break;
-                fi
-               
-            done
-            if $fileSetEmpty ; then
+        if [ ! -d "$fileSet" ]; then
+			continue
+		fi
+		# check for existing files
+		# if none are found, file set can be deleted
+		fileSetEmpty=true
+
+		# keep file set if this version is in stock files
+		if [ -d "$stockFiles/$version" ]; then
+			fileSetEmpty=false
+		else
+			logMessage "$package $version not in stock files"
+			for file in $fileList ; do
+				baseName=$(basename "$file")
+				replacementFile="$fileSet/$baseName"
+				if [ -f "$replacementFile" ] && [ ! -L "$replacementFile" ]; then
+					fileSetEmpty=false
+					break;
+				fi
+				if [ -f "$replacement.orig" ]; then
+					fileSetEmpty=false
+					break;
+				fi
+				if [ -f "$replacementFile.NO_REPLACEMENT" ]; then
+					 fileSetEmpty=false
+					break;
+				fi
+				if [ -f "$replacementFile.NO_REPLACEMENT_LINK" ]; then
+					 fileSetEmpty=false
+					break;
+				fi
+				if [ -f "$replacementFile.CHECK_REPLACEMENT" ]; then
+					 fileSetEmpty=false
+					break;
+				fi
+				if [ -f "$replacementFile.USE_ORIGINAL" ]; then
+					 fileSetEmpty=false
+					break;
+				fi
+			done
+			if $fileSetEmpty ; then
 				# log removal of a previous file set
 				if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
 					logMessage "$package: removing empty file set $version"
 				fi
-                rm -rf $fileSet
-			fi
-			releasedFileSet=false
-			for entry in ${fileSetList[@]} ; do
-				IFS=':' read version1 version1number <<< "$entry"
-				version=$(basename $v1)
-				if [ $version == $version1 ]; then
-					releasedFileSet=true
-					break
-				fi
-			done
-
-			if ! $releasedFileSet ; then
-                logMessage "WARNING $package: $version is not a released version - manual remove is OK"
+				rm -rf $fileSet
+			else
+				logMessage "WARNING $package: $version no longer used but not empty - manual remove is OK"
 				touch "$fileSet/UNUSED_FILE_SET"
 			fi
+		fi
 
-			# remove temporary flag files
-			rm -f "$fileSet/"*MATCHES_PREVIOUS
-			rm -f "$fileSet/NEW_FILE_SET"
-        fi
-    done
+		# remove temporary flag files
+		rm -f "$fileSet/"*MATCHES_PREVIOUS
+		rm -f "$fileSet/NEW_FILE_SET"
+    done # for v1
 done # for package
 
 if [ "$totalErrors" == 0 ]; then
@@ -465,4 +467,4 @@ if [ "$totalWarnings" == 0 ]; then
 else
     warningText="$totalWarnings WARNINGS  "
 fi
-echo "script complete $errorText $warningText"
+logMessage "script complete $errorText $warningText"

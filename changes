@@ -1,3 +1,7 @@
+v5.3:
+	updateFileSets: stale symlinks not removed
+	updateFileSets: remove file sets that only contain sym links
+
 v5.1/5.2:
 	removed original file symbolic links
 		they are not needed (even for older verisons of SetupHelper)

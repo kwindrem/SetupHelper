@@ -427,6 +427,9 @@ _checkFileSets ()
     if [ -f "$fileSet/INCOMPLETE" ]; then
         logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
         exit $EXIT_FILE_SET_ERROR
+	# if we get this far and fs is not marked INCOMPLETE, then the file set does not need to be checked again next pass
+	else
+		touch" $fileSet/COMPLETE"
     fi
 }
 

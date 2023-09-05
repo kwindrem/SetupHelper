@@ -1,4 +1,4 @@
-v5.3:
+v5.3 / v5.4:
 	updateFileSets: fixed: stale symlinks not removed
 	updateFileSets: remove existing file sets that only contain sym links
 		and are not in the stock version list

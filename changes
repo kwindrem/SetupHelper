@@ -1,6 +1,11 @@
 v5.3:
-	updateFileSets: stale symlinks not removed
-	updateFileSets: remove file sets that only contain sym links
+	updateFileSets: fixed: stale symlinks not removed
+	updateFileSets: remove existing file sets that only contain sym links
+		and are not in the stock version list
+	updateFileSets: flag file sets that only contain sym links
+		this aids managing file sets
+	updateFileSets: add progress indication to differentiate from a hung app
+		checks can now take significant amount of time
 
 v5.1/5.2:
 	removed original file symbolic links

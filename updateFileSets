@@ -152,6 +152,7 @@ done
 versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
 
 for package in $packageList; do
+	packageErrors=0
     if [ ! -d "$packageRoot/$package" ] || [ ! -f "$packageRoot/$package/version" ]; then
         logMessage "$packageRoot/$package - not a package directory"
         continue
@@ -198,7 +199,6 @@ for package in $packageList; do
 
 	# process versions in stock files
     for entry1 in ${versionList[@]} ; do
-		packageErrors=0
 		IFS=':' read version1 version1number <<< "$entry1"
         fileSet1="$packageFiles/$version1"
 
@@ -470,9 +470,29 @@ for package in $packageList; do
 		logMessage "$package: $packageErrors ERRORS"
 	else
 		logMessage "$package: no errors"
-		echo "foo" >/dev/null
 	fi
 done # for package
+
+# review all file sets and report any that only contain sym links across all packages
+# it would be possile to remove those verions from stock files without loosing any data
+# this check is only done if updating all file sets and there are no errors
+if $doAllPackages && [ "$totalErrors" == 0 ]; then
+	logMessage "checking for versions that contain no actual replacement files"
+    for entry in ${versionList[@]} ; do
+		IFS=':' read version versionNumber <<< "$entry"
+		linksOnly=true
+		for package in $packageList; do
+			fileSet="$packageRoot/$package/FileSets/$version"
+			if [ ! -e "$fileSet/LINKS_ONLY" ]; then
+				linksOnly=false
+				break
+			fi
+		done
+		if $linksOnly ; then
+			logMessage "$version: only links in all packages"
+		fi
+	done
+fi
 
 if [ "$totalErrors" == 0 ]; then
     errorText="no errors  "

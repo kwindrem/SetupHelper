@@ -103,6 +103,7 @@ MbItem {
 			Text
 			{
 				text: statusText ()
+				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				font.pixelSize: 10
 				horizontalAlignment: Text.AlignLeft
 			}

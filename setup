@@ -11,9 +11,9 @@ source "/data/SetupHelper/CommonResources"
 
 #### end of lines to include SetupHelper
 
-# remove settings no longer used
+# remove settings that are no longer used
 
-cleanup ()
+function cleanup ()
 {
     # cleanup from older versions
     restoreActiveFile "$qmlDir/PageSettingsPackageControl.qml"

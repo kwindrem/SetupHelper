@@ -1,3 +1,7 @@
+v5.5:
+	fixed: status text in Active packages menu is black - should be white
+	updateFileSets: fixed: reported no package errors when there were some
+
 v5.3 / v5.4:
 	updateFileSets: fixed: stale symlinks not removed
 	updateFileSets: remove existing file sets that only contain sym links

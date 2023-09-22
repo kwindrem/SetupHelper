@@ -202,6 +202,8 @@ MbPage {
 							return ( qsTr ("not compatible with\n") + osVersion )
 						else if (incompatibleReason == 'CMDLINE')
 							return qsTr ("must install\nfrom command line" )
+						else if (incompatibleReason == 'NO_FILE_SET')
+							return qsTr ( "no file set for\n" + osVersion )
 						else
 							return qsTr ("incompatible ???" ) // compatible for unknown reason
 					}

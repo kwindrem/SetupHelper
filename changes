@@ -1,3 +1,8 @@
+v5.6:
+	fixed: version number segments starting with 0 interperted as octal
+	updateFileSets: added package backup / restore
+	changed status messages to: no file set for vxx.yy~zz
+
 v5.5:
 	fixed: status text in Active packages menu is black - should be white
 	updateFileSets: fixed: reported no package errors when there were some

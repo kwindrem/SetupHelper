@@ -66,7 +66,7 @@ function logMessage ()
 		clearProgress
 	fi
     echo "$*"
-    if [[ "$*" == *"ERROR"* ]]; then
+    if [[ "$*" == *"ERROR "* ]]; then
         ((totalErrors++))
         ((packageErrors++))
     elif [[ "$*" == *"WARNING"* ]]; then
@@ -153,11 +153,13 @@ versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uni
 
 for package in $packageList; do
 	packageErrors=0
-    if [ ! -d "$packageRoot/$package" ] || [ ! -f "$packageRoot/$package/version" ]; then
-        logMessage "$packageRoot/$package - not a package directory"
+	packageDirectory="$packageRoot/$package"
+	backupDirectory="$packageRoot/$package.backup"
+    if [ ! -d "$packageDirectory" ] || [ ! -f "$packageDirectory/version" ]; then
+        logMessage "$packageDirectory - not a package directory"
         continue
     fi
-	packageFiles="$packageRoot/$package/FileSets"
+	packageFiles="$packageDirectory/FileSets"
     if [ ! -d "$packageFiles" ]; then
         logMessage "$package: no file sets"
         continue
@@ -171,7 +173,11 @@ for package in $packageList; do
         logMessage "ERROR $package: empty file list"
         continue
     fi
-	##################logMessage "$package: updating file sets"
+
+	# backup package directory in case we choose to abandon changes later
+	logMessage "backing up $package"
+	rm -rf "$backupDirectory"
+	cp -pR "$packageDirectory" "$backupDirectory"
 
 	# add a package's existing file sets to stock versions
 	existingFileSets=($(ls -d "$packageFiles"/v* 2> /dev/null))
@@ -184,6 +190,7 @@ for package in $packageList; do
 	allVersions=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
 	
 	# clean up flag files from a previous run
+	# process versions in stock files
 	for fileSet in ${existingFileSets[@]} ; do
 		rm -f "$fileSet/INCOMPATIBLE_VERSION"
 		rm -f "$fileSet/UNUSED_FILE_SET"
@@ -196,21 +203,20 @@ for package in $packageList; do
 		rm -f "$fileSet/"*.NO_REPLACEMENT_LINK
 		rm -f "$fileSet/"*.CHECK_REPLACEMENT
 	done
-
 	# process versions in stock files
     for entry1 in ${versionList[@]} ; do
 		IFS=':' read version1 version1number <<< "$entry1"
         fileSet1="$packageFiles/$version1"
 
         # check to see if package is compatible with this Venus version
-        if [ -f "$packageRoot/$package/obsoleteVersion" ]; then
-            versionStringToNumber $(cat "$packageRoot/$package/obsoleteVersion")
+        if [ -f "$packageDirectory/obsoleteVersion" ]; then
+            versionStringToNumber $(cat "$packageDirectory/obsoleteVersion")
             obsoleteVersion=$versionNumber
 		else
 			obsoleteVersion=999999999
 		fi
-        if [ -f "$packageRoot/$package/firstCompatibleVersion" ]; then
-            versionStringToNumber $(cat "$packageRoot/$package/firstCompatibleVersion")
+        if [ -f "$packageDirectory/firstCompatibleVersion" ]; then
+            versionStringToNumber $(cat "$packageDirectory/firstCompatibleVersion")
             firstVersion=$versionNumber
 		else
 			firstVersion=0
@@ -392,17 +398,6 @@ for package in $packageList; do
 				fi
 			fi
         done # for file
-
-	# if all replacement files are in place, mark the file set COMPLETE
-	#	so _checkFileSets can skip all checks
-	# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
-	if [ -f "$fileSet1/INCOMPLETE" ]; then
-		rm -f "$fileSet1/COMPLETE"
-		packageHasErrors=true
-	else
-		touch "$fileSet1/COMPLETE"
-	fi
-
     done  # for entry1
 
     # cleanup file sets
@@ -415,6 +410,17 @@ for package in $packageList; do
         if [ ! -d "$fileSet" ]; then
 			continue
 		fi
+
+		# if all replacement files are in place, mark the file set COMPLETE
+		#	so _checkFileSets can skip all checks
+		# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
+		if [ -f "$fileSet/INCOMPLETE" ]; then
+			rm -f "$fileSet/COMPLETE"
+		else
+			touch "$fileSet/COMPLETE"
+		fi
+
+
 		# check for existing files
 		# if none are found, file set can be deleted
 		replacementFilesExist=false
@@ -447,7 +453,6 @@ for package in $packageList; do
 			fi
 		# not in stock files list
 		else
-			logMessage "$package $version not in stock files"
 			if $replacementFilesExist ; then
 				logMessage "WARNING $package: $version no longer used but not empty - manual remove is OK"
 				touch "$fileSet/UNUSED_FILE_SET"
@@ -471,6 +476,25 @@ for package in $packageList; do
 	else
 		logMessage "$package: no errors"
 	fi
+
+	response=''
+	while true; do
+		/bin/echo -n "keep the changes (y / n)?: "
+		read response
+		case $response in
+			[yY]*)
+				rm -rf "$backupDirectory"
+				break
+				;;
+			[nN]*)
+				logMessage "restoring $package"
+				rm -rf "$packageDirectory"
+				mv "$backupDirectory" "$packageDirectory"
+				break
+				;;
+			*)
+		esac
+	done
 done # for package
 
 # review all file sets and report any that only contain sym links across all packages
@@ -505,3 +529,5 @@ else
     warningText="$totalWarnings WARNINGS  "
 fi
 logMessage "script complete $errorText $warningText"
+
+# ask if changes sho

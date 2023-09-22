@@ -595,6 +595,7 @@ fi
 packageVersionFile="$scriptDir/version"
 if [ -f "$packageVersionFile" ]; then
 	packageVersion=$(cat "$packageVersionFile")
+
 	versionStringToNumber $packageVersion
 	packageVersionNumber=$versionNumber
 else
@@ -759,6 +760,7 @@ if [ -f "$scriptDir/firstCompatibleVersion" ]; then
 else
 	firstCompatibleVersion='v2.40'
 fi
+
 versionStringToNumber $firstCompatibleVersion
 firstCompatibleVersionNumber=$versionNumber
 if (( $venusVersionNumber < $firstCompatibleVersionNumber )); then

@@ -43,6 +43,8 @@ MbItem {
 			return qsTr ( "  not compatible with " + platform )
 		else if (incompatibleReason == 'VERSION')
 			return qsTr ( "  not compatible with " + osVersion )
+		else if (incompatibleReason == 'NO_FILE_SET')
+			return qsTr ( "  no file set for " + osVersion )
 		else if (incompatibleReason == 'CMDLINE' && installedVersion.item.value == "")
 			return qsTr ( "  must install from command line" )
 		else

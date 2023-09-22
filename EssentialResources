@@ -106,15 +106,16 @@ function versionStringToNumber ()
 	type=$(echo $version | sed 's/[^abd~]//g')
 
 	# assemble core version number from major, minor and preRelease parts
+	# "10# forces base 10 intrepretation (numbers starting with 0 are assumed to be octal!!!)"
 	(( number = 0 ))
 	if [ ! -z $major ]; then
-		(( number += major * 1000000 ))
+		(( number += 10#$major * 1000000 ))
 	fi
 	if [ ! -z $minor ]; then
-		(( number += minor * 1000 ))
+		(( number += 10#$minor * 1000 ))
 	fi
 	if [ ! -z $preRelease ]; then
-		(( number += preRelease ))
+		(( number += 10#$preRelease ))
 	fi
 
 	# adjust number for release 

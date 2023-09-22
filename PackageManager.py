@@ -46,6 +46,7 @@ ONE_DOWNLOAD = 2
 #													'' if compatible
 #													'VERSION' if the system version is outside the package's acceptable range
 #													'PLATFORM' package can not run on this platform
+#													'NO_FILE_SET' missing or incomplete file set for Venus OS version
 #													'CMDLINE' setup must be run from command line
 #														currently only for Raspberry PI packages only
 #
@@ -1997,7 +1998,7 @@ class PackageClass:
 			try:
 				fd = open (packageDir + "/firstCompatibleVersion", 'r')
 			except:
-				firstVersion = "v2.40" # TODO: change to v2.66 ??????????????????????????
+				firstVersion = "v2.71"
 			else:
 				firstVersion = fd.readline().strip()
 				fd.close ()
@@ -2690,24 +2691,25 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
 			package.SetIncompatible ('VERSION')
-			DbusIf.UpdateStatus ( message=packageName + " not compatible with Venus " + VenusVersion,
+			DbusIf.UpdateStatus ( message=packageName + " not compatible with " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFOM:
 			global Platform
 			package.SetIncompatible ('PLATFORM')
-			DbusIf.UpdateStatus ( message=packageName + " " + direction + " not compatible with " + Platform,
+			DbusIf.UpdateStatus ( message=packageName + " not compatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_OPTIONS_NOT_SET:
-			DbusIf.UpdateStatus ( message=packageName + " " + direction + " setup must be run from the command line",
+			DbusIf.UpdateStatus ( message=packageName + " setup must be run from the command line",
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_FILE_SET_ERROR:
-			DbusIf.UpdateStatus ( message=packageName + " file set incomplete",
+			package.SetIncompatible ('NO_FILE_SET')
+			DbusIf.UpdateStatus ( message=packageName + " no file set for " + VenusVersion,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )

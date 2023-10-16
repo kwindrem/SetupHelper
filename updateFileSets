@@ -124,6 +124,7 @@ for param in $* ; do
 		packageList+=" "$1
 	fi
 	shift
+
 done
 if $doAllPackages ; then
     packageList=$allPackages
@@ -153,31 +154,43 @@ versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uni
 
 for package in $packageList; do
 	packageErrors=0
-	packageDirectory="$packageRoot/$package"
-	backupDirectory="$packageRoot/$package.backup"
-    if [ ! -d "$packageDirectory" ] || [ ! -f "$packageDirectory/version" ]; then
-        logMessage "$packageDirectory - not a package directory"
+	origDirectory="$packageRoot/$package"
+	packageDirectory="$packageRoot/$package.backup"
+    if [ ! -d "$origDirectory" ] || [ ! -f "$origDirectory/version" ]; then
+        logMessage "$origDirectory - not a package directory"
         continue
     fi
-	packageFiles="$packageDirectory/FileSets"
-    if [ ! -d "$packageFiles" ]; then
+	origPackageFiles="$origDirectory/FileSets"
+    if [ ! -d "$origPackageFiles" ]; then
         logMessage "$package: no file sets"
         continue
     fi
-    if [ ! -f "$packageFiles/fileList" ]; then
+    if [ ! -f "$origPackageFiles/fileList" ]; then
         logMessage "$package: no version-dependent files"
         continue
     fi
-    fileList=$(cat "$packageFiles/fileList")
-    if [ -f "$fileList" ]; then
+    origFileList=$(cat "$origPackageFiles/fileList")
+    if [ -f "$origFileList" ]; then
         logMessage "ERROR $package: empty file list"
         continue
     fi
 
-	# backup package directory in case we choose to abandon changes later
+	# make a working copy of package so the original isn't touched
 	logMessage "backing up $package"
-	rm -rf "$backupDirectory"
-	cp -pR "$packageDirectory" "$backupDirectory"
+	rm -rf "$packageDirectory" &> /dev/null
+	# removing the backup package directory sometimes results in permission denied the first time
+	#	so try again
+	if [ -d "$packageDirectory" ] ; then
+		rm -rf "$packageDirectory" &> /dev/null
+	fi
+	if [ -d "$packageDirectory" ] ; then
+		rm -rf "$packageDirectory"
+	fi
+	mkdir "$packageDirectory"
+	cp -pR "$origDirectory/FileSets" "$packageDirectory/FileSets"
+
+	packageFiles="$packageDirectory/FileSets"
+    fileList=$(cat "$packageFiles/fileList")
 
 	# add a package's existing file sets to stock versions
 	existingFileSets=($(ls -d "$packageFiles"/v* 2> /dev/null))
@@ -188,13 +201,11 @@ for package in $packageList; do
 			tempList+=($version:$versionNumber)
 	done
 	allVersions=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
-	
+
 	# clean up flag files from a previous run
-	# process versions in stock files
 	for fileSet in ${existingFileSets[@]} ; do
 		rm -f "$fileSet/INCOMPATIBLE_VERSION"
 		rm -f "$fileSet/UNUSED_FILE_SET"
-		rm -f "$fileSet/NEW_FILE_SET"
 		rm -f "$fileSet/INCOMPLETE"
 		rm -f "$fileSet/COMPLETE"
 		rm -f "$fileSet/LINKS_ONLY"
@@ -202,7 +213,10 @@ for package in $packageList; do
 		rm -f "$fileSet/"*.NO_REPLACEMENT
 		rm -f "$fileSet/"*.NO_REPLACEMENT_LINK
 		rm -f "$fileSet/"*.CHECK_REPLACEMENT
+		rm -f "$fileSet/NEW_FILE_SET"
+		rm -f "$fileSet/"*.MATCHES_PREVIOUS
 	done
+
 	# process versions in stock files
     for entry1 in ${versionList[@]} ; do
 		IFS=':' read version1 version1number <<< "$entry1"
@@ -229,13 +243,13 @@ for package in $packageList; do
 			fi
 			continue
 		fi
+
 		clearProgress
 		outputProgress "$package $version1 "
-
-        if [ ! -d "$fileSet1" ]; then
-            mkdir "$fileSet1"
-            touch "$fileSet1/NEW_FILE_SET"
-        fi
+		if [ ! -d "$fileSet1" ]; then
+			mkdir "$fileSet1"
+			touch "$fileSet1/NEW_FILE_SET"
+		fi
 
         for file in $fileList ; do
             baseName=$(basename "$file")
@@ -250,8 +264,9 @@ for package in $packageList; do
 			# skip if this file matched one in a prevous scan
 			if [ -f "$origFile1.MATCHES_PREVIOUS" ]; then
 				continue
+			else
+				outputProgress "."
 			fi
-			outputProgress "."
 
             # use alternate original if present
             if [ -f "$packageFiles/$baseName.ALT_ORIG" ]; then
@@ -270,16 +285,16 @@ for package in $packageList; do
             # no original file - flag that then check for an existing replacemement
             if [ ! -f "$stockFile1" ]; then
                 logMessage "ERROR $package: $version1 $baseName - no stock file"
-                # flag the fact that no stock file exists
-                touch "$fileSet1/$baseName.NO_ORIG"
-                rm -f "$origFile1"
-                if [ -e $fileSet1/$baseName ]; then
-                    rm -f "$fileSet1/$baseName.USE_ORIGINAL"
-                else
-                    logMessage "ERROR $package: $version1 $baseName - no stock file so no replacement file"
-                    touch "$fileSet1/$baseName.NO_REPLACEMENT"
-                    touch "$fileSet1/INCOMPLETE"
-                fi
+				# flag the fact that no stock file exists
+				touch "$fileSet1/$baseName.NO_ORIG"
+				rm -f "$origFile1"
+				if [ -e $fileSet1/$baseName ]; then
+					rm -f "$fileSet1/$baseName.USE_ORIGINAL"
+				else
+					logMessage "ERROR $package: $version1 $baseName - no stock file so no replacement file"
+					touch "$fileSet1/$baseName.NO_REPLACEMENT"
+					touch "$fileSet1/INCOMPLETE"
+				fi
                 continue
             fi
 
@@ -290,8 +305,8 @@ for package in $packageList; do
 				if (( "$version2number" == "$version1number" )); then
 					continue
 				fi
-                fileSet2="$packageFiles/$version2"
-                replacementFile2="$fileSet2/$baseName"
+				fileSet2="$packageFiles/$version2"
+				replacementFile2="$fileSet2/$baseName"
 				origFile2="$fileSet2/$baseName.orig"
 
 				stockFilesMatch=false
@@ -317,7 +332,7 @@ for package in $packageList; do
 						fi
 						touch "$origFile2.MATCHES_PREVIOUS"
 						if [ -f "$origFile2" ] && [ ! -L "$origFile2" ]; then
-							logMessage "$package: moving $baseName $version2 to $version1 (stock)"
+							logMessage "$package: moving $baseName $version2 to $version1"
 							mv -f "$origFile2" "$origFile1"
 							if [ -f "$replacementFile2" ] && [ ! -L "$replacementFile2" ]; then
 								mv -f "$replacementFile2" "$replacementFile1"
@@ -333,7 +348,7 @@ for package in $packageList; do
 						cmp -s "$origFile2" "$stockFile1"
 						if [ $? -eq 0 ] ;then
 							stockFilesMatch=true
-							logMessage "$package: moving $baseName $version2 to $version1 (existing FS)"
+							logMessage "$package: moving $baseName existing file set $version2 to $version1"
 							mv -f "$origFile2" "$origFile1"
 							if [ -f "$replacementFile2" ] && [ ! -L "$replacementFile2" ]; then
 								mv -f "$replacementFile2" "$replacementFile1"
@@ -365,7 +380,7 @@ for package in $packageList; do
 						touch "$fileSet2/INCOMPLETE"
 					fi
 				fi
-            done # for version2
+			done # for version2
 
 			# only change file set if orig does not exist or it does NOT match the file from StockFiles
 			if [ -f "$origFile1" ]; then
@@ -400,26 +415,52 @@ for package in $packageList; do
         done # for file
     done  # for entry1
 
-    # cleanup file sets
     versionList1=($(ls -d "$packageFiles"/v* 2> /dev/null))
+
+	# check to see if a non-versioned file is appropriate
+	for file in $fileList ; do
+		realFileCount=0
+		baseName=$(basename "$file")
+		# file must be a stock file
+		if [ ! -f "$packageFiles/$baseName.ALT_ORIG" ]; then
+			continue
+		fi
+		for fileSet in ${versionList1[@]} ; do
+			version=$(basename $fileSet)
+			replacementFile="$fileSet/$baseName"
+			if [ -f "$replacementFile" ] && [ ! -L "$replacementFile" ]; then
+				(( realFileCount += 1 ))
+			fi
+		done
+		if (( realFileCount == 1 )); then
+			clearProgress
+			logMessage "$package: $baseName only has one version for all file sets - making version-independent"
+			rm "$packageFiles/$baseName.ALT_ORIG"
+			grep -v "$file" "$packageFiles/fileList" > "$packageFiles/fileList.tmp"
+			mv -f "$packageFiles/fileList.tmp" "$packageFiles/fileList"
+			for fileSet in ${versionList1[@]} ; do
+				version=$(basename $fileSet)
+				replacementFile="$fileSet/$baseName"
+				if [ -L "$replacementFile" ]; then
+					rm -f "$replacementFile"
+				elif [ -f "$replacementFile" ]; then
+					mv "$replacementFile" "$packageFiles"
+					rm -f "$replacementFile.orig"
+				fi
+			done
+		fi
+	done
+
+
+    # cleanup file sets
+	linksOnlyVersions=()
     for fileSet in ${versionList1[@]} ; do
         version=$(basename $fileSet)
 		clearProgress
 		outputProgress "$package $version cleanup"
-        fileSet="$packageFiles/$version"
         if [ ! -d "$fileSet" ]; then
 			continue
 		fi
-
-		# if all replacement files are in place, mark the file set COMPLETE
-		#	so _checkFileSets can skip all checks
-		# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
-		if [ -f "$fileSet/INCOMPLETE" ]; then
-			rm -f "$fileSet/COMPLETE"
-		else
-			touch "$fileSet/COMPLETE"
-		fi
-
 
 		# check for existing files
 		# if none are found, file set can be deleted
@@ -446,10 +487,20 @@ for package in $packageList; do
 			fi
 		done
 
+		# if all replacement files are in place, mark the file set COMPLETE
+		#	so _checkFileSets can skip all checks
+		# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
+		if [ -f "$fileSet/INCOMPLETE" ]; then
+			rm -f "$fileSet/COMPLETE"
+		else
+			touch "$fileSet/COMPLETE"
+		fi
+
 		# file set is in stock files
 		if [ -d "$stockFiles/$version" ]; then
 			if ! $replacementFilesExist && $replacmentSymLinksExist ; then
 				touch "$fileSet/LINKS_ONLY"
+				linksOnlyVersions+=" $version"
 			fi
 		# not in stock files list
 		else
@@ -471,6 +522,11 @@ for package in $packageList; do
 		rm -f "$fileSet/"*MATCHES_PREVIOUS
 		rm -f "$fileSet/NEW_FILE_SET"
     done # for fileSet (cleanup)
+
+	if [ ! -z "$linksOnlyVersions" ]; then
+		logMessage "$package: file sets containing only links:$linksOnlyVersions"
+	fi
+
 	if (( $packageErrors > 0 )) ; then
 		logMessage "$package: $packageErrors ERRORS"
 	else
@@ -483,13 +539,22 @@ for package in $packageList; do
 		read response
 		case $response in
 			[yY]*)
-				rm -rf "$backupDirectory"
+				logMessage "updating $package"
+				rm -rf "$origDirectory/FileSets"
+				mv "$packageDirectory/FileSets" "$origDirectory/FileSets"
 				break
 				;;
 			[nN]*)
-				logMessage "restoring $package"
-				rm -rf "$packageDirectory"
-				mv "$backupDirectory" "$packageDirectory"
+				logMessage "$package unchanged"
+				rm -rf "$packageDirectory" &> /dev/null
+				# removing the backup package directory sometimes results in permission denied the first time
+				#	so try again
+				if [ -d "$packageDirectory" ] ; then
+					rm -rf "$packageDirectory" &> /dev/null
+				fi
+				if [ -d "$packageDirectory" ] ; then
+					rm -rf "$packageDirectory"
+				fi
 				break
 				;;
 			*)
@@ -528,6 +593,4 @@ if [ "$totalWarnings" == 0 ]; then
 else
     warningText="$totalWarnings WARNINGS  "
 fi
-logMessage "script complete $errorText $warningText"
-
-# ask if changes sho
+logMessage "updateFileSets complete $errorText $warningText"

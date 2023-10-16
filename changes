@@ -1,3 +1,12 @@
+v5.7:
+	updateFileSets: make changes to the backup of the package
+		instead of to the main package directory
+		so package is not updated until changes are accepted
+	updateFileSets: check for version-independent files in file sets
+		and move them from the file sets to FileSets/
+		version-independent files are those that do not havea stock file
+		and have only one real file in all file sets (other file sets have links)
+
 v5.6:
 	fixed: version number segments starting with 0 interperted as octal
 	updateFileSets: added package backup / restore

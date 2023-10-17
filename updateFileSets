@@ -15,32 +15,37 @@
 # this can occur if you remove versions from StockFiles.
 # For example, you may wish to remove beta versions after a beta test cycle.
 
-# stockFiles contains "master" file sets for all Venus files
-# excerpts from Venus OS file systems must be stored on the host
+# stockFiles contains excerpts from Venus OS file systems
+# and must be stored on the host
 # within a directory with name of the exact Venus OS version
 # and within the stockFiles directory defined below.
 #
 # 1) missing file set directories are created
 # 2) if any files in fileList don't exist (eg, a new file was added to file list),
-#   the original file in /opt and /etc is copied to the version directory
+#   the original file in stockFiles is copied to the version directory
 # 3) if the original file does not exist, the file is so marked with .NO_ORIG
-# 4) version-dependent files without an original can use an "alternate original"
-#   specified in FileSets. This permits version checks for these files too
-# 5) file sets that contain no files are removed, minimizing the number of file sets
-#   to check for a matching original
+#	this situation must be corrected:
+# 		version-dependent files without an original MUST use an "alternate original"
+#   		specified in FileSets. This permits version checks for these files too
+# 		replacement files that do not replace a stock file should be placed in version-indpendent file storage
+#	 		(FileSets/).
+#		If these replacement files vary with Venus OS versions, they MUST include an "alternate original". 
+#		This permits version checks for these files too
 #
 # when a stock file set does not exist, this script will check files from existing file sets
-#	to create other versions
+#	for a matching original file.
+# 	If a match is found, the replacement file is automatically placed in the new file set
+#	If no match is found, the missing replacement is flagged and a suitable replacement must be created manually.
 #
-# existing file sets not in the releasedVersionList should be empty after the script runs
-#	and will be deleted automatically
+# existing file sets not in the stockFiles are checked. If empty, they are removed.
+#	If not empty they are marked UNUSED_FILE_SET and flagged for manual removal.
 #
 # file sets will include all files listed in fileList.
+#	this allows the setup script to always have a replacement for known versions
+#	without searching other file sets for a matching original file
+#	(there have been cases where installation fails because the search for a matching original could not be found)
 # if the stock file matches a previous version, a symbolic link for the replacement is created
-# rather than duplicating the file
-# this allows the setup script to always have a replacement for known versions
-# without searching other file sets for a matching original file
-# there have been cases where installation fails because the search for a matching original could not be found.
+#	rather than duplicating the file
 # this also makes maintanence easier since matching replacement can be identified
 #
 # original files in the file set are not normally used when installing the package
@@ -113,6 +118,20 @@ function versionStringToNumber ()
 	fi
 }
 
+# removing a nested set of directories sometimes results in permission denied the first time
+	#	so try several times to be sure
+
+function deleteNestedDirectories ()
+{
+	rm -rf "$1" &> /dev/null
+	if [ -d "$1" ] ; then
+		rm -rf "$1" &> /dev/null
+		if [ -d "$1" ] ; then
+			rm -rf "$1"
+		fi
+	fi
+}
+
 #### script code begins here
 
 packageList=""
@@ -155,7 +174,10 @@ versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uni
 for package in $packageList; do
 	packageErrors=0
 	origDirectory="$packageRoot/$package"
-	packageDirectory="$packageRoot/$package.backup"
+	packageDirectory="$packageRoot/$package.copy"
+	packageFiles="$packageDirectory/FileSets"
+	fileListFile="$packageFiles/fileList"
+
     if [ ! -d "$origDirectory" ] || [ ! -f "$origDirectory/version" ]; then
         logMessage "$origDirectory - not a package directory"
         continue
@@ -176,21 +198,12 @@ for package in $packageList; do
     fi
 
 	# make a working copy of package so the original isn't touched
-	logMessage "backing up $package"
-	rm -rf "$packageDirectory" &> /dev/null
-	# removing the backup package directory sometimes results in permission denied the first time
-	#	so try again
-	if [ -d "$packageDirectory" ] ; then
-		rm -rf "$packageDirectory" &> /dev/null
-	fi
-	if [ -d "$packageDirectory" ] ; then
-		rm -rf "$packageDirectory"
-	fi
+	logMessage "making copy of $package file sets"
+	deleteNestedDirectories "$packageDirectory"
 	mkdir "$packageDirectory"
-	cp -pR "$origDirectory/FileSets" "$packageDirectory/FileSets"
+	cp -pR "$origPackageFiles" "$packageFiles"
 
-	packageFiles="$packageDirectory/FileSets"
-    fileList=$(cat "$packageFiles/fileList")
+    fileList=$(cat "$fileListFile")
 
 	# add a package's existing file sets to stock versions
 	existingFileSets=($(ls -d "$packageFiles"/v* 2> /dev/null))
@@ -436,8 +449,8 @@ for package in $packageList; do
 			clearProgress
 			logMessage "$package: $baseName only has one version for all file sets - making version-independent"
 			rm "$packageFiles/$baseName.ALT_ORIG"
-			grep -v "$file" "$packageFiles/fileList" > "$packageFiles/fileList.tmp"
-			mv -f "$packageFiles/fileList.tmp" "$packageFiles/fileList"
+			grep -v "$file" "$fileListFile" > "$fileListFile.tmp"
+			mv -f "$fileListFile.tmp" "$fileListFile"
 			for fileSet in ${versionList1[@]} ; do
 				version=$(basename $fileSet)
 				replacementFile="$fileSet/$baseName"
@@ -539,22 +552,15 @@ for package in $packageList; do
 		read response
 		case $response in
 			[yY]*)
-				logMessage "updating $package"
-				rm -rf "$origDirectory/FileSets"
-				mv "$packageDirectory/FileSets" "$origDirectory/FileSets"
+				logMessage "$package: updating file sets"
+				deleteNestedDirectories "$origPackageFiles"
+				mv "$packageFiles" "$origPackageFiles"
+				deleteNestedDirectories $packageDirectory
 				break
 				;;
 			[nN]*)
 				logMessage "$package unchanged"
-				rm -rf "$packageDirectory" &> /dev/null
-				# removing the backup package directory sometimes results in permission denied the first time
-				#	so try again
-				if [ -d "$packageDirectory" ] ; then
-					rm -rf "$packageDirectory" &> /dev/null
-				fi
-				if [ -d "$packageDirectory" ] ; then
-					rm -rf "$packageDirectory"
-				fi
+				deleteNestedDirectories "$packageDirectory"
 				break
 				;;
 			*)

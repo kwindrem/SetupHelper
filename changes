@@ -1,3 +1,6 @@
+v5.8:
+	fixed bugs in updateFileSets introduced in v5.7
+
 v5.7:
 	updateFileSets: make changes to the backup of the package
 		instead of to the main package directory

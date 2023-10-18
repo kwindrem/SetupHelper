@@ -1,3 +1,6 @@
+v5.9:
+	updateFileSets fixed: creating symlinks in new version sometimes fails
+
 v5.8:
 	fixed bugs in updateFileSets introduced in v5.7
 

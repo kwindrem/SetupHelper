@@ -258,7 +258,7 @@ for package in $packageList; do
 		fi
 
 		clearProgress
-		outputProgress "$package $version1 "
+		outputProgress "$package: $version1 "
 		if [ ! -d "$fileSet1" ]; then
 			mkdir "$fileSet1"
 			touch "$fileSet1/NEW_FILE_SET"
@@ -269,6 +269,8 @@ for package in $packageList; do
 			replacementFile1="$fileSet1/$baseName"
 			origFile1="$fileSet1/$baseName.orig"
 
+			outputProgress "."
+
 			# remove any existing symlinks for original files - they aren't needed
 			if [ -L "$origFile1" ]; then
 				rm -f "$origFile1"
@@ -277,8 +279,6 @@ for package in $packageList; do
 			# skip if this file matched one in a prevous scan
 			if [ -f "$origFile1.MATCHES_PREVIOUS" ]; then
 				continue
-			else
-				outputProgress "."
 			fi
 
             # use alternate original if present
@@ -323,7 +323,7 @@ for package in $packageList; do
 				origFile2="$fileSet2/$baseName.orig"
 
 				stockFilesMatch=false
-				# stock files exist
+
 				if [ -d "$stockFiles/$version2" ]; then
 				   # select appropriate original file
 					if $useAltOrig ; then
@@ -375,13 +375,33 @@ for package in $packageList; do
 						fi
 					fi
 				fi
-				# created links for fs 2
-				if $stockFilesMatch ; then
+			done # for entry2
+
+			# make another fs 2 pass to fill in sym links
+			# this needs to be done AFTER files are moved to their new location
+			for entry2 in ${allVersions[@]} ; do
+				IFS=':' read version2 version2number <<< "$entry2"
+				if (( "$version2number" == "$version1number" )); then
+					continue
+				fi
+				fileSet2="$packageFiles/$version2"
+				replacementFile2="$fileSet2/$baseName"
+				origFile2="$fileSet2/$baseName.orig"
+			   # select appropriate original file
+				if $useAltOrig ; then
+					stockFile2="$stockFiles/$version2$altOrigFile"
+				else
+					stockFile2="$stockFiles/$version2$file"
+				fi
+				cmp -s "$stockFile2" "$stockFile1" > /dev/null
+				# stock files match - create sym links for fs 2
+				if [ $? -eq 0 ]; then
 					if [ -f "$replacementFile1" ] && [ ! -L "$replacementFile1" ]; then
 						ln -sf "../$version1/$baseName" "$replacementFile2"
 						rm -f "$replacementFile2.USE_ORIGINAL"
 					elif [ -f "$replacementFile1.USE_ORIGINAL" ]; then
 						touch "$replacementFile2.USE_ORIGINAL"
+						rm -f "$replacementFile2"
 					# no replacement in fs 1
 					else
 						# remove any inappropriate sym link
@@ -393,7 +413,7 @@ for package in $packageList; do
 						touch "$fileSet2/INCOMPLETE"
 					fi
 				fi
-			done # for version2
+			done # for entry2 -- again
 
 			# only change file set if orig does not exist or it does NOT match the file from StockFiles
 			if [ -f "$origFile1" ]; then
@@ -431,7 +451,10 @@ for package in $packageList; do
     versionList1=($(ls -d "$packageFiles"/v* 2> /dev/null))
 
 	# check to see if a non-versioned file is appropriate
+	clearProgress
+	outputProgress "$package: check for version-independent files "
 	for file in $fileList ; do
+		outputProgress "."
 		realFileCount=0
 		baseName=$(basename "$file")
 		# file must be a stock file
@@ -464,13 +487,12 @@ for package in $packageList; do
 		fi
 	done
 
-
     # cleanup file sets
 	linksOnlyVersions=()
     for fileSet in ${versionList1[@]} ; do
         version=$(basename $fileSet)
 		clearProgress
-		outputProgress "$package $version cleanup"
+		outputProgress "$package: $version cleanup"
         if [ ! -d "$fileSet" ]; then
 			continue
 		fi

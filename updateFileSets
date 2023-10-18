@@ -60,8 +60,10 @@ allPackages="SetupHelper GuiMods ExtTransferSwitch ShutdownMonitor VeCanSetup Rp
 packageRoot="/Users/Kevin/GitHub"
 stockFiles="$packageRoot/StockVenusOsFiles"
 
-((totalErrors=0))
-((totalWarnings=0))
+totalErrors=0
+totalWarnings=0
+packageErrors=0
+packageWarnings=0
 
 outputtingProgress=false
 
@@ -76,6 +78,7 @@ function logMessage ()
         ((packageErrors++))
     elif [[ "$*" == *"WARNING"* ]]; then
         ((totalWarnings++))
+        ((packageWarnings++))
     fi
 }
 
@@ -173,40 +176,37 @@ versionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uni
 
 for package in $packageList; do
 	packageErrors=0
+	packageWarnings=0
 	origDirectory="$packageRoot/$package"
-	packageDirectory="$packageRoot/$package.copy"
-	packageFiles="$packageDirectory/FileSets"
-	fileListFile="$packageFiles/fileList"
+	origFiles="$origDirectory/FileSets"
+	workingDirectory="$packageRoot/$package.copy"
+	workingFiles="$workingDirectory/FileSets"
 
     if [ ! -d "$origDirectory" ] || [ ! -f "$origDirectory/version" ]; then
         logMessage "$origDirectory - not a package directory"
         continue
     fi
-	origPackageFiles="$origDirectory/FileSets"
-    if [ ! -d "$origPackageFiles" ]; then
+    if [ ! -d "$origFiles" ]; then
         logMessage "$package: no file sets"
         continue
     fi
-    if [ ! -f "$origPackageFiles/fileList" ]; then
+    if [ ! -f "$origFiles/fileList" ]; then
         logMessage "$package: no version-dependent files"
         continue
     fi
-    origFileList=$(cat "$origPackageFiles/fileList")
+    fileList=$(cat "$origFiles/fileList")
     if [ -f "$origFileList" ]; then
-        logMessage "ERROR $package: empty file list"
+        logMessage "WARNING $package: empty file list"
         continue
     fi
 
-	# make a working copy of package so the original isn't touched
-	logMessage "making copy of $package file sets"
-	deleteNestedDirectories "$packageDirectory"
-	mkdir "$packageDirectory"
-	cp -pR "$origPackageFiles" "$packageFiles"
-
-    fileList=$(cat "$fileListFile")
+	logMessage "creating working copy of $package file sets"
+	deleteNestedDirectories "$workingDirectory"
+	mkdir -p "$workingDirectory"
+	cp -pR "$origFiles" "$workingFiles"
 
 	# add a package's existing file sets to stock versions
-	existingFileSets=($(ls -d "$packageFiles"/v* 2> /dev/null))
+	existingFileSets=($(ls -d "$workingFiles"/v* 2> /dev/null))
 	tempList=(${versionList[@]})
 	for entry in ${existingFileSets[@]} ; do
 		version=$(basename $entry)
@@ -233,17 +233,17 @@ for package in $packageList; do
 	# process versions in stock files
     for entry1 in ${versionList[@]} ; do
 		IFS=':' read version1 version1number <<< "$entry1"
-        fileSet1="$packageFiles/$version1"
+        fileSet1="$workingFiles/$version1"
 
         # check to see if package is compatible with this Venus version
-        if [ -f "$packageDirectory/obsoleteVersion" ]; then
-            versionStringToNumber $(cat "$packageDirectory/obsoleteVersion")
+        if [ -f "$workingDirectory/obsoleteVersion" ]; then
+            versionStringToNumber $(cat "$workingDirectory/obsoleteVersion")
             obsoleteVersion=$versionNumber
 		else
 			obsoleteVersion=999999999
 		fi
-        if [ -f "$packageDirectory/firstCompatibleVersion" ]; then
-            versionStringToNumber $(cat "$packageDirectory/firstCompatibleVersion")
+        if [ -f "$workingDirectory/firstCompatibleVersion" ]; then
+            versionStringToNumber $(cat "$workingDirectory/firstCompatibleVersion")
             firstVersion=$versionNumber
 		else
 			firstVersion=0
@@ -282,9 +282,9 @@ for package in $packageList; do
 			fi
 
             # use alternate original if present
-            if [ -f "$packageFiles/$baseName.ALT_ORIG" ]; then
+            if [ -f "$workingFiles/$baseName.ALT_ORIG" ]; then
                 useAltOrig=true
-                altOrigFile=$(cat "$packageFiles/$baseName.ALT_ORIG")
+                altOrigFile=$(cat "$workingFiles/$baseName.ALT_ORIG")
             else
                 useAltOrig=false
                 altOrigFile=""
@@ -318,7 +318,7 @@ for package in $packageList; do
 				if (( "$version2number" == "$version1number" )); then
 					continue
 				fi
-				fileSet2="$packageFiles/$version2"
+				fileSet2="$workingFiles/$version2"
 				replacementFile2="$fileSet2/$baseName"
 				origFile2="$fileSet2/$baseName.orig"
 
@@ -384,7 +384,7 @@ for package in $packageList; do
 				if (( "$version2number" == "$version1number" )); then
 					continue
 				fi
-				fileSet2="$packageFiles/$version2"
+				fileSet2="$workingFiles/$version2"
 				replacementFile2="$fileSet2/$baseName"
 				origFile2="$fileSet2/$baseName.orig"
 			   # select appropriate original file
@@ -448,47 +448,68 @@ for package in $packageList; do
         done # for file
     done  # for entry1
 
-    versionList1=($(ls -d "$packageFiles"/v* 2> /dev/null))
+    versionList1=($(ls -d "$workingFiles"/v* 2> /dev/null))
 
-	# check to see if a non-versioned file is appropriate
-	clearProgress
-	outputProgress "$package: check for version-independent files "
-	for file in $fileList ; do
-		outputProgress "."
-		realFileCount=0
-		baseName=$(basename "$file")
-		# file must be a stock file
-		if [ ! -f "$packageFiles/$baseName.ALT_ORIG" ]; then
-			continue
-		fi
-		for fileSet in ${versionList1[@]} ; do
-			version=$(basename $fileSet)
-			replacementFile="$fileSet/$baseName"
-			if [ -f "$replacementFile" ] && [ ! -L "$replacementFile" ]; then
-				(( realFileCount += 1 ))
+	# check to see if a non-versioned file is appropriate -- but only if no errors were found
+	if (( $packageErrors == 0 )) ; then
+		clearProgress
+		outputProgress "$package: check for version-independent files "
+		for file in $fileList ; do
+			outputProgress "."
+			realFileCount=0
+			baseName=$(basename "$file")
+
+			# file must be be using an alternate stock file
+			if [ ! -f "$workingFiles/$baseName.ALT_ORIG" ]; then
+				continue
 			fi
-		done
-		if (( realFileCount == 1 )); then
-			clearProgress
-			logMessage "$package: $baseName only has one version for all file sets - making version-independent"
-			rm "$packageFiles/$baseName.ALT_ORIG"
-			grep -v "$file" "$fileListFile" > "$fileListFile.tmp"
-			mv -f "$fileListFile.tmp" "$fileListFile"
-			for fileSet in ${versionList1[@]} ; do
-				version=$(basename $fileSet)
-				replacementFile="$fileSet/$baseName"
-				if [ -L "$replacementFile" ]; then
-					rm -f "$replacementFile"
-				elif [ -f "$replacementFile" ]; then
-					mv "$replacementFile" "$packageFiles"
-					rm -f "$replacementFile.orig"
+
+			for fileSet1 in ${versionList1[@]} ; do
+				version1=$(basename $fileSet1)
+				replacementFile1="$fileSet1/$baseName"
+				if [ -f "$replacementFile1" ] && [ ! -L "$replacementFile1" ]; then
+					(( realFileCount += 1 ))
 				fi
 			done
-		fi
-	done
+
+			if (( realFileCount == 1 )); then
+				while true; do
+					/bin/echo -n "$package: $baseName - making version-independent (y / n)?: "
+					read response
+					case $response in
+						[yY]*)
+							logMessage "$baseName.ALT_ORIG.UNUSED and $(basename $fileListFile.old) can be removed"
+							mv -f "$workingFiles/$baseName.ALT_ORIG" "$workingFiles/$baseName.ALT_ORIG.UNUSED"
+							fileListFile="$workingFiles/fileList"
+							grep -v "$file" "$fileListFile" > "$fileListFile.tmp"
+							mv -f "$fileListFile" "$fileListFile.old"
+							mv -f "$fileListFile.tmp" "$fileListFile"
+							for fileSet in ${versionList1[@]} ; do
+								version=$(basename $fileSet)
+								replacementFile="$fileSet/$baseName"
+								if [ -L "$replacementFile" ]; then
+									rm -f "$replacementFile"
+								elif [ -f "$replacementFile" ]; then
+									mv "$replacementFile" "$workingFiles"
+									rm -f "$replacementFile.orig"
+								fi
+							done
+							break
+							;;
+						[nN]*)
+							logMessage "$baseName remains in version-dependent file sets"
+							break
+							;;
+						*)
+					esac
+				done
+			fi
+		done
+	fi
 
     # cleanup file sets
 	linksOnlyVersions=()
+	realFileVersions=()
     for fileSet in ${versionList1[@]} ; do
         version=$(basename $fileSet)
 		clearProgress
@@ -537,6 +558,9 @@ for package in $packageList; do
 				touch "$fileSet/LINKS_ONLY"
 				linksOnlyVersions+=" $version"
 			fi
+			if $replacementFilesExist ; then
+				realFileVersions+=" $version"
+			fi
 		# not in stock files list
 		else
 			if $replacementFilesExist ; then
@@ -553,20 +577,33 @@ for package in $packageList; do
 			fi
 		fi
 
-		# remove temporary flag files
+		# remove temporary files
 		rm -f "$fileSet/"*MATCHES_PREVIOUS
+		rm -f "$fileSet/"*tmp
 		rm -f "$fileSet/NEW_FILE_SET"
     done # for fileSet (cleanup)
 
+	if [ ! -z "$realFileVersions" ]; then
+		logMessage "$package: file sets containing real files:$realFileVersions"
+	fi
 	if [ ! -z "$linksOnlyVersions" ]; then
 		logMessage "$package: file sets containing only links:$linksOnlyVersions"
 	fi
 
-	if (( $packageErrors > 0 )) ; then
-		logMessage "$package: $packageErrors ERRORS"
+	if [ "$packageErrors" == 0 ]; then
+		errorText="no errors "
 	else
-		logMessage "$package: no errors"
+		errorText="$totalErrors ERRORS "
 	fi
+	if [ "$packageWarnings" == 0 ]; then
+		warningText="no warnings"
+	else
+		warningText="$totalWarnings WARNINGS"
+	fi
+
+	logMessage "$package complete  $errorText $warningText"
+
+
 
 	response=''
 	while true; do
@@ -575,14 +612,14 @@ for package in $packageList; do
 		case $response in
 			[yY]*)
 				logMessage "$package: updating file sets"
-				deleteNestedDirectories "$origPackageFiles"
-				mv "$packageFiles" "$origPackageFiles"
-				deleteNestedDirectories $packageDirectory
+				deleteNestedDirectories "$origFiles"
+				mv "$workingFiles" "$origFiles"
+				deleteNestedDirectories $workingDirectory
 				break
 				;;
 			[nN]*)
 				logMessage "$package unchanged"
-				deleteNestedDirectories "$packageDirectory"
+				deleteNestedDirectories "$workingDirectory"
 				break
 				;;
 			*)
@@ -594,7 +631,6 @@ done # for package
 # it would be possile to remove those verions from stock files without loosing any data
 # this check is only done if updating all file sets and there are no errors
 if $doAllPackages && [ "$totalErrors" == 0 ]; then
-	logMessage "checking for versions that contain no actual replacement files"
     for entry in ${versionList[@]} ; do
 		IFS=':' read version versionNumber <<< "$entry"
 		linksOnly=true
@@ -606,19 +642,20 @@ if $doAllPackages && [ "$totalErrors" == 0 ]; then
 			fi
 		done
 		if $linksOnly ; then
-			logMessage "$version: only links in all packages"
+			logMessage "$version: only links in all packages - stock version could be removed"
 		fi
 	done
 fi
 
 if [ "$totalErrors" == 0 ]; then
-    errorText="no errors  "
+    errorText="no errors "
 else
-    errorText="$totalErrors ERRORS  "
+    errorText="$totalErrors ERRORS "
 fi
 if [ "$totalWarnings" == 0 ]; then
-    warningText="no warnings  "
+    warningText="no warnings"
 else
-    warningText="$totalWarnings WARNINGS  "
+    warningText="$totalWarnings WARNINGS"
 fi
-logMessage "updateFileSets complete $errorText $warningText"
+
+logMessage "updateFileSets complete  $errorText $warningText"

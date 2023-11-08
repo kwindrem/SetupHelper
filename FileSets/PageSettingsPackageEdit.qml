@@ -204,6 +204,10 @@ MbPage {
 							return qsTr ("must install\nfrom command line" )
 						else if (incompatibleReason == 'NO_FILE_SET')
 							return qsTr ( "no file set for\n" + osVersion )
+							else if (incompatibleReason == 'ROOT_FULL')
+								return qsTr ( "no room on root partition" )
+						else if (incompatibleReason == 'DATA_FULL')
+							return qsTr ( "no room on data partition" )
 						else
 							return qsTr ("incompatible ???" ) // compatible for unknown reason
 					}

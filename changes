@@ -1,3 +1,13 @@
+v5.11:
+	check for room on file systems before allowing install
+	resize root partition before installing a package
+		the above issues are critical to avoid bricking systems !!!!!!
+	updateFileSets:
+		better error checking and more status while running long loops
+		a replacement file and USE_ORIGINAL flag was incorrectly allowed
+			the replacement file has priority during package install so
+			this was not a severe issue, but USE_ORIGINAL is now removed in this case
+
 v5.10:
 	updateFileSets: check for errors before moving version-independent files
 
@@ -8,7 +18,7 @@ v5.8:
 	fixed bugs in updateFileSets introduced in v5.7
 
 v5.7:
-	updateFileSets: make changes to the backup of the package
+	updateFileSets: make changes to the copy of the package
 		instead of to the main package directory
 		so package is not updated until changes are accepted
 	updateFileSets: check for version-independent files in file sets

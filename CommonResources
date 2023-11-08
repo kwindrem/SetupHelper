@@ -174,17 +174,18 @@ backupActiveFile ()
 #
 # updateActiveFile sourceFile activeFile
 #   a separate source (replacement) file is specified
-#     either as a full path to the actual file
-#     or as the basename of a file to be found in the version directory or FileSets
+#
+# both sourceFile and activeFile must be a full path to the file
 #
 # if the update fails, scriptAction is changed to UNINSTALL
 
 updateActiveFile ()
 {
-    sourceFound=false
     thisFileUpdated=false
-    
-    sourceFile="$1"
+    local sourceFound=false
+	local baseName
+    local sourceFile="$1"
+    local destinationFile
 
     # separate replacement file specified
     if [ $# == 2 ]; then
@@ -199,13 +200,13 @@ updateActiveFile ()
     
     # look for source in FileSets
     if ! $sourceFound ; then
-        sourceFile="$(basename "$sourceFile")"
+		baseName="$(basename "$sourceFile")"
         # found in version directory
-        if [ -f "$fileSet/$sourceFile" ]; then
-            sourceFile="$fileSet/$sourceFile"
+        if [ -f "$fileSet/$baseName" ]; then
+            sourceFile="$fileSet/$baseName"
             sourceFound=true
-        elif [ -f "$pkgFileSets/$sourceFile" ]; then
-            sourceFile="$pkgFileSets/$sourceFile"
+        elif [ -f "$pkgFileSets/$baseName" ]; then
+            sourceFile="$pkgFileSets/$baseName"
             sourceFound=true
         fi
     fi
@@ -217,10 +218,8 @@ updateActiveFile ()
             return
         # if not flagged, this is a fatal error
         else
-            logMessage "ERROR: no replacement file for $sourceFile"
-            thisFileUpdated=false
+            logMessage "ERROR: no soure file for replacement - can't continue with install'"
             scriptAction='UNINSTALL'
-			touch "$fileSet/INCOMPLETE"
             installFailed=true
         fi
         return
@@ -640,9 +639,17 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# make sure rootfs is mounted R/W
-if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
-    /opt/victronenergy/swupdate-scripts/remount-rw.sh
+# make sure rootfs is mounted R/W & and resized to allow space for replacement files
+if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+    /opt/victronenergy/swupdate-scripts/resize2fs.sh
+fi
+
+# make sure the root partition has space for the package
+#	arbitrary minimum size of 10 MB for now
+availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+if (( $availableSpace < 10 )); then
+	logMessage "no room for modified files on /root ($availableSpace MB remaining) - can't continue"
+	exit $EXIT_ROOT_FULL
 fi
 
 # move old installedFlag ("...inInstalled...")

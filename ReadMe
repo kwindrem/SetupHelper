@@ -79,6 +79,10 @@ CAUTION:
 	Note that removal does not actually remove the package so other setup scripts
 	will continue to function.
 
+Note: You can install other packages using wget as described above.
+	Or you can download the .tgz file and put that on a USB stick and plug that into the GX device.
+		PackageManager will detect the file and install the package.
+		
 
 ssh access:
 
@@ -110,16 +114,26 @@ Third, if you have terminal or ssh access, try running the package setup scripts
 
 Fourth, try booting to the previous Venus OS version (in Stored backup firmware)
 	Then perform a fresh Online firmware update to the latest version or use the .swu update via removable media.
-	These procedures are documented: https://www.victronenergy.com/media/pg/Cerbo_GX/en/gx---how-to-update-firmware.html
 
 	Use the Settings / Firmware / Stored backup formware menu if you have GUI access.
 
 	If you don't have GUI access, you can also switch to the backup version from the command line:
 		/opt/victronenergy/swupdate-scripts/set-version.sh 2
 
+	You can also force a firmware upate from the command line if you have ssh or terminal access:
+		For on-line updates:
+			/opt/victronenergy/swupdate-scripts/check-swupdate.sh -force -update
+		For updates from removable media:
+			/opt/victronenergy/swupdate-scripts/check-swupdate.sh -force -update -offline
+
 Fifth, perform the Blind uninstall procedure below.
 
-Finally, if you are running on a Raspberry PI, you can reimage the system SD card.
+Finally:
+	If you are running on a Raspberry PI, you can reimage the system SD card.
+	
+	If you have a Cerbo, you can reimage it using this procedure:
+		https://community.victronenergy.com/questions/204255/cerbo-gx-bricked-how-to-recover.html
+
 	Note: this will wipe out all settings and you'll need to reconfigure the GX device from scratch.
 
 The Victron "restore factory default" procedure can be used to will wipe out all settings.

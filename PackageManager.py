@@ -47,6 +47,8 @@ ONE_DOWNLOAD = 2
 #													'VERSION' if the system version is outside the package's acceptable range
 #													'PLATFORM' package can not run on this platform
 #													'NO_FILE_SET' missing or incomplete file set for Venus OS version
+#													'ROOT_FULL' no room on root partition to install package modificaitons
+#													'DATA_FULL' no room on /data partition to install package modificaitons
 #													'CMDLINE' setup must be run from command line
 #														currently only for Raspberry PI packages only
 #
@@ -127,6 +129,9 @@ EXIT_INCOMPATIBLE_PLATFOM =	253
 EXIT_FILE_SET_ERROR	=		252
 EXIT_OPTIONS_NOT_SET =		251
 EXIT_RUN_AGAIN = 			250
+EXIT_ROOT_FULL =			249
+EXIT_DATA_FULL =			248
+
 EXIT_ERROR =				255 # generic error
 # install states only
 ERROR_NO_SETUP_FILE = 		999
@@ -2402,12 +2407,12 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 		# attempt to locate a directory that contains a version file
 		# the first directory in the tree starting with tempDicrectory
-		# is returnd
+		# is returned
 		unpackedPath = LocatePackagePath (tempDirectory)
 		if unpackedPath == None:
 			PackageClass.UpdateDownloadPending (packageName, False)
 			shutil.rmtree (tempDirectory)
-			logging.error ( "GitHubDownload: no archive path for " + packageName)
+			logging.error ( "GitHubDownload: no archive path for " + packageName )
 			return False
 
 		# move unpacked archive to package location
@@ -2418,7 +2423,10 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		DbusIf.LOCK ()
 		if os.path.exists (packagePath):
 			os.rename (packagePath, tempPackagePath)
-		shutil.move (unpackedPath, packagePath)
+		try:
+			shutil.move (unpackedPath, packagePath)
+		except:
+			logging.error ( "GitHubDownload: couldn't relocate " + packageName )
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		DbusIf.UNLOCK ()
@@ -2713,6 +2721,18 @@ class InstallPackagesClass (threading.Thread):
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
+		elif returnCode == EXIT_ROOT_FULL:
+			package.SetIncompatible ('ROOT_FULL')
+			DbusIf.UpdateStatus ( message=packageName + " no room on root partition ",
+											where=sendStatusTo, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.SetGuiEditAction ( 'ERROR' )
+		elif returnCode == EXIT_DATA_FULL:
+			package.SetIncompatible ('DATA_FULL')
+			DbusIf.UpdateStatus ( message=packageName + " no room on data partition ",
+											where=sendStatusTo, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
@@ -2907,7 +2927,10 @@ class MediaScanClass (threading.Thread):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		if os.path.exists (packagePath):
 			os.rename (packagePath, tempPackagePath)
-		shutil.move (unpackedPath, packagePath)
+		try:
+			shutil.move (unpackedPath, packagePath)
+		except:
+			logging.error ( "transferPackages: couldn't relocate " + packageName )
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		# set package one-time install flag so this package is installed regardless of other flags
@@ -3142,7 +3165,10 @@ class MediaScanClass (threading.Thread):
 					for overlay in overlayFiles:
 						if overlay[0] == ".":
 							continue
-						shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
+						try:
+							shutil.copy ( overlaySourceDir + "/" + overlay, overlayDestDir )
+						except:
+							logging.error ("settingsRestore: overlay create failed for " + overlay)
 						overlayCount += 1
 
 			# restore setup script options
@@ -3154,7 +3180,10 @@ class MediaScanClass (threading.Thread):
 				shutil.rmtree (optionsDestDir)
 
 			if os.path.isdir (optionsSourceDir):
-				shutil.copytree ( optionsSourceDir, optionsDestDir )
+				try:
+					shutil.copytree ( optionsSourceDir, optionsDestDir )
+				except:
+					logging.error ("settingsRestore: options restore failed")
 		
 		logging.warning ("settings restore completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
 

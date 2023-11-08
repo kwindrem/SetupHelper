@@ -57,12 +57,22 @@ fi
 
 if [ $scriptAction == 'INSTALL' ] ; then
 	# modify PageSettings here so SetupHelper is independent of Venus OS verison
+	origFile=""
 	if [ -f "$qmlDir/PageSettings.qml.orig" ]; then
-		origFile="$qmlDir/PageSettings.qml.orig"
-	else
-		origFile="$qmlDir/PageSettings.qml"
+		lineCount=$(wc "$qmlDir/PageSettings.qml.orig" | awk '{print $1}')
+		if (( $lineCount > 50 )); then
+			origFile="$qmlDir/PageSettings.qml.orig"
+		fi
+	elif [ -z "$origFile" ]; then
+		lineCount=$(wc "$qmlDir/PageSettings.qml" | awk '{print $1}')
+		if (( $lineCount > 50 )); then
+			origFile="$qmlDir/PageSettings.qml"
+		fi
 	fi
-	if (( $(grep -c "PackageManager" $origFile) > 0)); then
+	if [ -z "$origFile" ]; then
+		logMessage "ERROR: PageSettings.qml not found - can't continue"
+		exit $EXIT_ERROR
+	elif (( $(grep -c "PackageManager" $origFile) > 0)); then
 		logMessage "WARNING: PageSettings.qml already modified for PackageManager -- skipping that modification"
 	else
 		rm -f "/var/volatile/tmp/PageSettings.qml"
@@ -70,6 +80,10 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		# find line with second to last }
 		insertBefore=$(awk '{print NR  " " $s}' "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
 		((insertBefore -= 1))
+		if (( $insertBefore < 10 )); then
+			logMessage "ERROR: PageSettings.qml could not be modified - can't continue"
+			exit $EXIT_ERROR
+		fi
 		# include all lines before that one
 		head -n $insertBefore $origFile >> "/var/volatile/tmp/PageSettings.qml"
 		# file with PackageManager menu code includes the last two }

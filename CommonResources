@@ -432,6 +432,23 @@ _checkFileSets ()
     fi
 }
 
+# restart the GUI service
+# begining at about v3.20~18, changes were made to accommodate the gui-v2
+# and these changes require different handling of a GUI service restart
+ 
+restartGuiService ()
+{
+
+	# start-gui is the new service which supports gui-v2
+	#	that service will start gui-v2 if selected in Settings or run the older gui if not
+	if [ -e "/service/start-gui" ]; then
+		svc -t "/service/start-gui"
+	# gui is the older service that runs GUI v1
+	else
+		svc -t "/service/gui"
+	fi
+}
+
 
 # determine how startup script should exit based on $scriptAction and other flags
 # may EXIT or REBOOT within the function - DOES NOT RETURN TO CALLER
@@ -530,7 +547,7 @@ endScript ()
 			yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): "
 			if $yesResponse ; then
 				echo "restarting GUI ..."
-				svc -t /service/gui
+				restartGuiService
 				exit $EXIT_SUCCESS
 			else
 				echo "GUI must be restarted to activate components"
@@ -543,7 +560,7 @@ endScript ()
 			# GUI restart NOT deferred - do it now
 			else
 				logMessage "completed - restarting GUI"
-				svc -t /service/gui
+				restartGuiService
 				exit $EXIT_SUCCESS
 			fi
 		fi

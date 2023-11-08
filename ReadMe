@@ -20,6 +20,10 @@ SetupHelper is also required for other packages
 	SetupHelper includes utilities used by these packages
 	and must be installed BEFORE running the other package setup scripts
 
+
+More information here:
+https://www.dropbox.com/scl/fo/bx5aftvgrqq0vp060mwip/h?rlkey=k28c2i49fjfpcyjfsuldwp159&dl=0
+
 Blind Install:
 
 By far, the easiest way to install SetupHelper is the "blind install"
@@ -414,4 +418,4 @@ System automatic configuration and package installation:
 	REMOVE THE FLASH DRIVE after you have verified that all packages have been installed (check Active packages in PackageManager).
 
 
-If you are interested in the inner workings of Setup Manager and Package Manager or wish to create a package that can be managed by PackageManager, the document "Package development guidelines"  contains assitional information. Feel free to contact me through the issues part of SetupHelper on GitHub.
+If you are interested in the inner workings of Setup Manager and Package Manager or wish to create a package that can be managed by PackageManager, the document "Package development guidelines" in the DropBox link above contains assitional information. Feel free to contact me through the issues part of SetupHelper on GitHub.

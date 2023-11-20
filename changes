@@ -1,3 +1,6 @@
+v5.14:
+	v5.13 did not include blind install
+
 v5.13:
 	fixed: GUI not restarted in v3.20~26
 	fixed: COMPLETE flag not set when creating file new file set

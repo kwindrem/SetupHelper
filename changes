@@ -1,3 +1,10 @@
+v5.13:
+	fixed: GUI not restarted in v3.20~26
+	fixed: COMPLETE flag not set when creating file new file set
+		this isn't critical, just slows down installs because file set must be rechecked
+	updateFileSets: fixed: USE_ORIGINAL not updated proerly
+	fixed: typo in package manager backup/restore menu
+
 v5.12:
 	add support for gui-v2
 	documents and screen shots moved to a public DropBox:

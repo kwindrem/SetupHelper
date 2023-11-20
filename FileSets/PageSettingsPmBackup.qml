@@ -74,7 +74,7 @@ MbPage {
 		MbOK
 		{
 			description: qsTr("Restore settings to from storage")
-			value: qsTr("Press to backup")
+			value: qsTr("Press to restore")
 			onClicked: backupProgressItem.setValue (22)
 			show: settingsLocalFileExists.valid && settingsLocalFileExists.value == 1 && backupProgressItem.value == 0
             writeAccessLevel: User.AccessInstaller

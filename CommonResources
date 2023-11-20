@@ -191,7 +191,12 @@ updateActiveFile ()
     if [ $# == 2 ]; then
         if [ -f "$sourceFile" ]; then
             sourceFound=true
+        else
+            logMessage "ERROR: specified soure file $sourceFile does not exist - can't continue with install"
+            scriptAction='UNINSTALL'
+            installFailed=true
         fi
+        return
         destinationFile="$2"
     # use active file for both source and destination
     else
@@ -218,7 +223,7 @@ updateActiveFile ()
             return
         # if not flagged, this is a fatal error
         else
-            logMessage "ERROR: no soure file for replacement - can't continue with install'"
+            logMessage "ERROR: no soure file for replacement $destinationFile - can't continue with install"
             scriptAction='UNINSTALL'
             installFailed=true
         fi
@@ -428,7 +433,7 @@ _checkFileSets ()
         exit $EXIT_FILE_SET_ERROR
 	# if we get this far and fs is not marked INCOMPLETE, then the file set does not need to be checked again next pass
 	else
-		touch" $fileSet/COMPLETE"
+		touch "$fileSet/COMPLETE"
     fi
 }
 

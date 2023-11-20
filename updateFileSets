@@ -411,10 +411,12 @@ for package in $packageList; do
 			fi
 
 			replacement1="$fileSet1/$baseName"
+			replacement1exists=false
+			useOrigFlag1=false
 			if [ -f "$replacement1" ] && [ ! -L "$replacement1" ]; then
 				replacement1exists=true
-			else
-				replacement1exists=false
+			elif [ -f "$replacement1.USE_ORIGINAL" ]; then
+				useOrigFlag1=true
 			fi
 			orig1="$fileSet1/$baseName.orig"
             # select appropirate stock file
@@ -496,7 +498,7 @@ for package in $packageList; do
 							stockMatch=true
 						fi
 					# no stock files but existing file set
-					elif $replacement2isRealFile && [ -f "$orig2" ] ; then
+					elif ( $replacement2isRealFile || $useOrigFlag2 ) && [ -f "$orig2" ] ; then
 						# existing orig matches stock
 						cmp -s "$orig2" "$stockFile1"
 						if [ $? -eq 0 ] ;then
@@ -524,9 +526,16 @@ for package in $packageList; do
 							previousLink="../$version2/$baseName"
 							checkLinks=true
 						fi
-					elif $useOrigFlag2 ; then
-						touch "$replacement1.USE_ORIGINAL"
-						touch "$replacement2.USE_ORIGINAL"
+					elif $useOrigFlag2 ; then #################### is not working
+						if $replacement1exists ; then
+							logMessage "ERROR $package $basename file in $version1 conflicts with USE_ORIGINAL in $version2"
+							touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
+							touch "$fileSet2/$baseName.CHECK_REPLACEMENT"
+						else
+							touch "$replacement1.USE_ORIGINAL"
+							rm -f "$replacement1"
+							checkLinks=true
+						fi
 					fi
 
 					if [ -f "$orig2" ]; then
@@ -534,10 +543,24 @@ for package in $packageList; do
 					fi
 				fi
 
-			# relink replacement to new location
-			if $checkLinks && $replacement2isLink ; then
-				if [ "$(readlink "$replacement2")" == "$previousLink" ]; then
+
+			# relink replacement to new location -- needs to be done while the original link is still known
+			if $checkLinks ; then
+				if $replacement2isLink && [ "$(readlink "$replacement2")" == "$previousLink" ]; then
 					ln -sf "../$version1/$baseName" "$replacement2"
+				elif $useOrigFlag1 ; then
+					if $replacement2isRealFile ; then
+						logMessage "ERROR $package $basename file in $version2 conflicts with USE_ORIGINAL in $version1"
+						touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
+						touch "$fileSet2/$baseName.CHECK_REPLACEMENT"
+					elif ! $useOrigFlag2 ; then
+						touch "$replacement2.USE_ORIGINAL"
+						rm -f "$replacement2"
+logMessage "#### $baseName setting USE_ORIGINAL v2 $version2"
+					fi
+					if $replacement2isRealFile ; then
+						logMessage "ERROR $package $baseName $verson1 has file but matches $version1 with USE_ORIGINAL set"
+					fi
 				fi
 			fi
 			done # for i2
@@ -548,8 +571,15 @@ for package in $packageList; do
 			IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"
 			fileSet1="$workingFiles/$version1"
 			replacement1="$fileSet1/$baseName"
+			replacement1isRealFile=false
+			useOrigFlag1=false
+			if [ -f "$replacement1" ] && [ -L "$replacement1" ]; then
+				replacement1isRealFile=true
+			elif [ -f "$replacement1.USE_ORIGINAL" ]; then
+				useOrigFlag1=true
+			fi
 			# must be a real replacement (not link)
-			if [ ! -f "$replacement1" ] || [ -L "$replacement1" ]; then
+			if ! $replacement1isRealFile && ! $useOrigFlag1 ; then
 				continue
 			fi
 
@@ -564,7 +594,7 @@ for package in $packageList; do
 				fileSet2="$workingFiles/$version2"
 				replacement2="$fileSet2/$baseName"
 				# skip if replacement already exists
-				if [ -e "$replacement2" ] ; then
+				if [ -e "$replacement2" ] || [ -e "$replacement2.USE_ORIGINAL" ]; then
 					continue
 				fi
 
@@ -579,7 +609,12 @@ for package in $packageList; do
 				# stock files match - create link
 				cmp -s "$stockFile2" "$stockFile1" > /dev/null
 				if [ $? -eq 0 ]; then
-					ln -sf "../$version1/$baseName" "$replacement2"
+					if $replacement1isRealFile ; then
+						ln -sf "../$version1/$baseName" "$replacement2"
+					elif $useOrigFlag1 ; then
+						touch "$replacement2.USE_ORIGINAL"
+						rm -f "$replacement2"
+					fi
 				fi
 			done # for i2
 		done # for i1 (missing sym links)

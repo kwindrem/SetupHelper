@@ -195,8 +195,8 @@ updateActiveFile ()
             logMessage "ERROR: specified soure file $sourceFile does not exist - can't continue with install"
             scriptAction='UNINSTALL'
             installFailed=true
+			return
         fi
-        return
         destinationFile="$2"
     # use active file for both source and destination
     else

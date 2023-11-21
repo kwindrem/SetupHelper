@@ -521,9 +521,7 @@ for package in $packageList; do
 						if $moveReplacement ; then
 							mv -f "$replacement2" "$replacement1"
 							rm -f "$fileSet1/$baseName.USE_ORIGINAL"
-							ln -sf "../$version1/$baseName" "$replacement2"
 							cp -f "$stockFile1" "$orig1"
-							previousLink="../$version2/$baseName"
 							checkLinks=true
 						fi
 					elif $useOrigFlag2 ; then
@@ -532,9 +530,8 @@ for package in $packageList; do
 							touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
 							touch "$fileSet2/$baseName.CHECK_REPLACEMENT"
 						else
-							touch "$replacement1.USE_ORIGINAL"
+							mv "$replacement2.USE_ORIGINAL" "$replacement1.USE_ORIGINAL"
 							rm -f "$replacement1"
-							touch "$replacement2.USE_ORIGINAL"
 							checkLinks=true
 						fi
 					fi
@@ -543,81 +540,8 @@ for package in $packageList; do
 						mv -f "$orig2" "$orig1"
 					fi
 				fi
-
-
-			# relink replacement to new location -- needs to be done while the original link is still known
-			if $checkLinks ; then
-				if $replacement2isLink && [ "$(readlink "$replacement2")" == "$previousLink" ]; then
-					ln -sf "../$version1/$baseName" "$replacement2"
-				elif $useOrigFlag1 ; then
-					if $replacement2isRealFile ; then
-						logMessage "ERROR $package $basename file in $version2 conflicts with USE_ORIGINAL in $version1"
-						touch "$fileSet1/$baseName.CHECK_REPLACEMENT"
-						touch "$fileSet2/$baseName.CHECK_REPLACEMENT"
-					elif ! $useOrigFlag2 ; then
-						touch "$replacement2.USE_ORIGINAL"
-						rm -f "$replacement2"
-					fi
-					if $replacement2isRealFile ; then
-						logMessage "ERROR $package $baseName $verson1 has file but matches $version1 with USE_ORIGINAL set"
-					fi
-				fi
-			fi
 			done # for i2
         done # for i1 (update)
-
-		# make another pass and fill in links that were missed in the first past
-		for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
-			IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"
-			fileSet1="$workingFiles/$version1"
-			replacement1="$fileSet1/$baseName"
-			replacement1isRealFile=false
-			useOrigFlag1=false
-			if [ -f "$replacement1" ] && [ ! -L "$replacement1" ]; then
-				replacement1isRealFile=true
-			elif [ -f "$replacement1.USE_ORIGINAL" ]; then
-				useOrigFlag1=true
-			fi
-			# must be a real replacement (not link)
-			if ! $replacement1isRealFile && ! $useOrigFlag1 ; then
-				continue
-			fi
-
-			stockFileSet1="$stockFiles/$version1"
-			if [ ! -d "$stockFileSet1" ]; then
-				continue
-			fi
-
-            # if no replacement, search for one that we can link to
-			for (( i2 = $i1 + 1; i2 < $allFileSetsLength; i2++ )); do
-				IFS=':' read version2 version2number <<< "${allFileSets[$i2]}"
-				fileSet2="$workingFiles/$version2"
-				replacement2="$fileSet2/$baseName"
-				# skip if replacement already exists
-				if [ -e "$replacement2" ] || [ -e "$replacement2.USE_ORIGINAL" ]; then
-					continue
-				fi
-
-				# select appropirate stock files
-				if $useAltOrig ; then
-					stockFile1="$stockFileSet1$altOrigFile"
-					stockFile2="$stockFiles/$version2$altOrigFile"
-				else
-					stockFile1="$stockFileSet1$file"
-					stockFile2="$stockFiles/$version2$file"
-				fi
-				# stock files match - create link
-				cmp -s "$stockFile2" "$stockFile1" > /dev/null
-				if [ $? -eq 0 ]; then
-					if $replacement1isRealFile ; then
-						ln -sf "../$version1/$baseName" "$replacement2"
-					elif $useOrigFlag1 ; then
-						touch "$replacement2.USE_ORIGINAL"
-						rm -f "$replacement2"
-					fi
-				fi
-			done # for i2
-		done # for i1 (missing sym links)
     done  # for file
 
 	# check to see if a non-versioned file is appropriate -- but only if no errors were found
@@ -681,10 +605,6 @@ for package in $packageList; do
 		fi
 	fi
 
-	linksOnlyVersions=()
-	realFileVersions=()
-	linksOnlyVersionCount=0
-	realFilesVersionCount=0
 	beginProgress "$package: final checks"
 	for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 		IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"
@@ -694,8 +614,8 @@ for package in $packageList; do
 		fi
 		outputProgressTick "."
 
-		replacementFilesExist=false
-		replacmentSymLinksExist=false
+		emptyFileSet=true
+		completeFileSet=true
 		for file in $fileList ; do
 			baseName=$(basename "$file")
 
@@ -710,130 +630,90 @@ for package in $packageList; do
 			replacement1="$fileSet1/$baseName"
 			orig1="$fileSet1/$baseName.orig"
 
-			# do final checks for -- must be file, link or USE_ORIG but not more than one
+			# remove a symlink if it exists - no longer used
 			if [ -L "$replacement1" ]; then
-				symLinkReplacement=true
-				realReplacement=false
-				anyReplacement=true
-			elif [ -f "$replacement1" ]; then
+				rm "$replacement1"
+			fi
+			if [ -f "$replacement1" ]; then
 				realReplacement=true
-				symLinkReplacement=false
-				anyReplacement=true
 			else
 				realReplacement=false
-				symLinkReplacement=false
-				anyReplacement=false
 			fi
 			if [ -f "$orig1" ]; then
 				origExists=true
 			else
 				origExists=false
 			fi
+			useOrigFlag=false
 			if [ -f "$replacement1.USE_ORIGINAL" ]; then
-				useOrigFlag=true
-			else
-				useOrigFlag=false
+				if ! $realReplacement ; then
+					useOrigFlag=true
+				else
+					logMessage "WARNING $package $version1 $baseName replacement exists - removing USE_ORIGINAL flag"
+					rm "$replacement1.USE_ORIGINAL"
+				fi
 			fi
 
-			if ! $anyReplacement && ! $useOrigFlag; then
-				logMessage "ERROR $package: $baseName $version1 no replacement"
-				touch "$replacement1.NO_REPLACEMENT"
-				stockFileSet1="$stockFiles/$version1"
-				if $useAltOrig ; then
-					stockFile1="$stockFileSet1$altOrigFile"
-				else
-					stockFile1="$stockFileSet1$file"
+			if $realReplacement || $useOrigFlag ; then
+				emptyFileSet=false
+				# if original is missing, fill it in from stock if it exists
+				if [ ! -f "$orig1" ] ; then
+					stockFileSet1="$stockFiles/$version1"
+					if $useAltOrig ; then
+						stockFile1="$stockFileSet1$altOrigFile"
+					else
+						stockFile1="$stockFileSet1$file"
+					fi
+					if [ -f "$stockFile1" ]; then
+						cp "$stockFile1" "$orig1"
+					else
+						logMessage "ERROR $package: $baseName $version1 no original available"
+						touch "$replacement1.NO_ORIG"
+						completeFileSet=false
+					fi
 				fi
-				# fill in missing original file if it exists
-				if [ ! -f "$orig1" ]  && [ -f "$stockFile1" ]; then
-					cp "$stockFile1" "$orig1"
-				fi
-			elif $anyReplacement && $useOrigFlag; then
-				logMessage "WARNING $package $version1 $baseName replacement exists - removing USE_ORIGINAL flag"
-				rm "$replacement1.USE_ORIGINAL"
-			fi
-			if $symLinkReplacement && $origExists ; then
-				logMessage "WARNING $package: $baseName $version1 should NOT contain link AND orig file"
-			elif $realReplacement && ! $origExists ; then
-				logMessage "ERROR $package: $baseName $version1 must contain real file AND orig file"
-				touch "$replacement1.NO_ORIG"
+			else
+				completeFileSet=false
 			fi
 
 			if [ -f "$replacement1.NO_REPLACEMENT" ] \
 					|| [ -f "$replacement1.CHECK_REPLACEMENT" ] \
 					|| [ -f "$replacement1.NO_ORIG" ] ; then
 				touch "$fileSet1/INCOMPLETE"
-			fi
-
-			# identify real file & symlink in file set for later
-			if $symLinkReplacement ; then
-				replacmentSymLinksExist=true
-			fi
-			if $realReplacement || ( $useOrigFlag && $origExists ) ; then
-				replacementFilesExist=true
+				completeFileSet=false
 			fi
 		done # for file
 
 		# if all replacement files are in place, mark the file set COMPLETE
-		#	so _checkFileSets can skip all checks
 		# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
-		if [ -f "$fileSet1/INCOMPLETE" ]; then
-			rm -f "$fileSet1/COMPLETE"
-		else
+		if $completeFileSet ; then
 			touch "$fileSet1/COMPLETE"
+		else
+			rm -f "$fileSet1/COMPLETE"
 		fi
 
-		if ! $replacementFilesExist && $replacmentSymLinksExist ; then
-			touch "$fileSet1/LINKS_ONLY"
-			linksOnlyVersions+=" $version1"
-			((linksOnlyVersionCount++))
-		elif $replacementFilesExist ; then
-			realFileVersions+=" $version1"
-			((realFilesVersionCount++))
-		fi
+		if $emptyFileSet ; then
+			if [ ! -f "$fileSet1/NEW_FILE_SET" ]; then
+				logMessage "WARNING $package: $version1 - removing empty file set"
+			fi
+			rm -Rf "$fileSet1"
 
 		# remove file sets for incompatible Venus OS versions
-		if [ -e "$fileSet1/INCOMPATIBLE_VERSION" ]; then
-			if $replacementFilesExist ; then
-				logMessage "WARNING $package: not compatible with Venus $version1 but not empty - consider manual removal"
-			else
-				if [ ! -f "$fileSet1/NEW_FILE_SET" ]; then
-					logMessage "WARNING $package: not compatible with Venus $version1 - file set will not be included in update"
-				fi
-				rm -Rf "$fileSet1"
-			
-			fi
+		elif [ -e "$fileSet1/INCOMPATIBLE_VERSION" ]; then
+			logMessage "WARNING $package: not compatible with Venus $version1 but not empty - consider manual removal"
 		# not in stock files list
 		elif [ ! -d "$stockFiles/$version1" ]; then
-			if $replacementFilesExist ; then
-				logMessage "WARNING $package: $version1 no longer used but not empty - manual remove is OK"
-				touch "$fileSet1/UNUSED_FILE_SET"
-			# no files (empty file set)
-			else
-				# log removal of a previous file set if not created with this run
-				# if it was created with this run, delete it silently
-				if [ ! -f "$fileSet1/NEW_FILE_SET" ]; then
-					logMessage "WARNING $package: $version1 no longer used and contains only links - removing file set"
-				fi
-				rm -rf "$fileSet1"
-			fi
+			logMessage "WARNING $package: $version1 no longer used but not empty - manual remove is OK"
+			touch "$fileSet1/UNUSED_FILE_SET"
 		fi
 
 		if [ -f "$fileSet1/NEW_FILE_SET" ]; then
 			logMessage "$package: new file set $version1"
+			rm -f "$fileSet1/NEW_FILE_SET"
 		fi
-
-		# remove temporary files
     done # for i1 (final checks)
+	# remove temporary files
 	rm -f "$workingFiles/v"*/*tmp
-	rm -f "$workingFiles/v"*/NEW_FILE_SET
-
-	if [ ! -z "$realFileVersions" ]; then
-		logMessage "$package: $realFilesVersionCount file sets containing real files:$realFileVersions"
-	fi
-	if [ ! -z "$linksOnlyVersions" ]; then
-		logMessage "$package: $linksOnlyVersionCount file sets containing only links:$linksOnlyVersions"
-	fi
 
 	if [ "$packageErrors" == 0 ]; then
 		errorText="no errors "

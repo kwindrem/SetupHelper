@@ -1,3 +1,7 @@
+v5.15:
+	fixed: PackageManager isn't in menus after v5.14 install
+	updateFileSets: fixed: NO_REPLACEMENT in existing file sets that should link to other sets
+
 v5.14:
 	v5.13 did not include blind install
 

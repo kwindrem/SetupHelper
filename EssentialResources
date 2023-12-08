@@ -47,6 +47,7 @@ EXIT_OPTIONS_NOT_SET=251
 EXIT_RUN_AGAIN=250
 EXIT_ROOT_FULL=249
 EXIT_DATA_FULL=248
+EXIT_NO_GUI_V1=247
 # old variables - keep for compatibility
 exitReboot=$EXIT_REBOOT
 exitSuccess=$EXIT_SUCCESS
@@ -137,5 +138,26 @@ function versionStringToNumber ()
 	fi
 	versionNumber=$number
 }
+
+# restart the GUI service
+# begining at about v3.20~18, changes were made to accommodate the gui-v2
+# and these changes require different handling of a GUI service restart
+#
+# this is in EssentialResorces because it is used in reinstallMods and ServiceResources is overkill there
+ 
+restartGuiService ()
+{
+	# start-gui is the new service which supports gui-v2
+	#	that service will start gui-v2 if selected in Settings or run the older gui if not
+	if [ -e "/service/start-gui" ]; then
+		svc -t "/service/start-gui"
+	# gui is the older service that runs GUI v1
+	elif [ -e "/service/gui" ]; then
+		svc -t "/service/gui"
+	fi
+}
+
+
+
 
 

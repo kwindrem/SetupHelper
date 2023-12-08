@@ -685,6 +685,7 @@ for package in $packageList; do
 	realFileVersions=()
 	linksOnlyVersionCount=0
 	realFilesVersionCount=0
+	guiV1FilesExist=false #########################
 	beginProgress "$package: final checks"
 	for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 		IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"

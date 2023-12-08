@@ -5,7 +5,6 @@
 # some setup scripts access dbus Settings which are not up early in the boot process
 # therefore, this script is run as a background task and waits for dbus Settings
 #
-# Refer to the ReadMe for more details
 
 setupHelperDir="/data/SetupHelper"
 source "$setupHelperDir/EssentialResources"
@@ -25,7 +24,7 @@ logMessage "reinstallMods starting"
 # and call each script
 rebootNeeded=false
 guiRestartNeeded=false
-settingsAlive=false
+okToInstall=false
 
 while read -u 9 line ; do
     # ignore blank and comment lines
@@ -34,6 +33,11 @@ while read -u 9 line ; do
         command=$(awk '{print var $1}' <<< $line)
 		scriptDir=$(dirname $command)
 		packageName=$(basename $scriptDir)
+		if [ ! -f $command ] ; then
+			logMessage "Error: $packageName setup script not found - skipping reinstall"
+			continue
+		fi
+
 		packageVersionFile="$scriptDir/version"
 		installedVersionFile="$installedVersionPrefix$packageName"
 		doReinstall=false
@@ -54,40 +58,40 @@ while read -u 9 line ; do
 		fi
 
         if $doReinstall ; then
-			if [ -f $command ] ; then
-				fullCommand=$(echo "$command reinstall auto deferReboot deferGuiRestart")
-				# wait until dbus settings are active before calling setup script
-				while ! $settingsAlive ; do
-					if [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; then
-						logMessage "waiting for dBus settings"
-					else
-						settingsAlive=true
-					fi
+			# wait until dbus settings and GUI are active before calling setup script
+			#	this is done before first reinstall so PackageManager isn't held off if there are no reinstalls
+			while ! $okToInstall ; do
+				if [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; then
+					logMessage "waiting for dBus settings"
 					sleep 2
-				done
-
-				$fullCommand
-				returnCode=$?
-				if (( $returnCode == $EXIT_REBOOT )) ; then
-					logMessage "$packageName reinstall requested reboot"
-					rebootNeeded=true
-				elif (( $returnCode == $EXIT_RESTART_GUI )) ; then
-					logMessage "$packageName reinstall requested GUI restart"
-					guiRestartNeeded=true
+				else
+					okToInstall=true
 				fi
-			else
-				logMessage "Error: $packageName setup script not found"
+			done
+
+			# run setup script
+			fullCommand=$(echo "$command reinstall auto deferReboot deferGuiRestart")
+			$fullCommand
+			returnCode=$?
+			if (( $returnCode == $EXIT_REBOOT )) ; then
+				logMessage "$packageName reinstall requested reboot"
+				rebootNeeded=true
+			elif (( $returnCode == $EXIT_RESTART_GUI )) ; then
+				logMessage "$packageName reinstall requested GUI restart"
+				guiRestartNeeded=true
 			fi
 		fi
     fi
 done 9< "$reinstallScriptsList"
 
-# reboot now if any script reboots were indicated
+logMessage "reinstallMods complete"
+
+# reboot or restart GUI now if any script reboots were indicated
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
 elif $guiRestartNeeded ; then
     logMessage "restarting GUI"
-    svc -t /service/gui
+    restartGuiService
 fi
-logMessage "reinstallMods complete"
+

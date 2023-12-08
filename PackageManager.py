@@ -131,6 +131,7 @@ EXIT_OPTIONS_NOT_SET =		251
 EXIT_RUN_AGAIN = 			250
 EXIT_ROOT_FULL =			249
 EXIT_DATA_FULL =			248
+EXIT_NO_GUI_V1 =			247
 
 EXIT_ERROR =				255 # generic error
 # install states only
@@ -153,6 +154,7 @@ ERROR_NO_SETUP_FILE = 		999
 #									nanopi			Multi/Easy Solar GX
 #									raspberrypi2	Raspberry Pi 2/3
 #									raspberrypi4	Raspberry Pi 4
+#									ekrano			Ekrano GX
 #
 #		/ActionNeeded				informs GUI if further action is needed following a manual operation
 #									the operator has the option to defer reboots and GUI restarts (by choosing "Later)
@@ -1166,7 +1168,7 @@ class DbusIfClass:
 						'autoInstall': [ '/Settings/PackageManager/AutoInstall', 0, 0, 0 ],
 						}
 		self.DbusSettings = SettingsDevice(bus=dbus.SystemBus(), supportedSettings=settingsList,
-								timeout = 10, eventCallback=None )
+								timeout = 30, eventCallback=None )
 
 		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
 		self.DbusService.add_mandatory_paths (
@@ -2174,7 +2176,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 			command = ""
 			# do initial refreshes quickly
 			if fastRefresh:
-				delay = 2.0
+				delay = 0.5
 			# otherwise scan one version every 10 minutes
 			else:
 				delay = 600.0
@@ -2730,6 +2732,12 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_DATA_FULL:
 			package.SetIncompatible ('DATA_FULL')
 			DbusIf.UpdateStatus ( message=packageName + " no room on data partition ",
+											where=sendStatusTo, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.SetGuiEditAction ( 'ERROR' )
+		elif returnCode == EXIT_NO_GUI_V1:
+			package.SetIncompatible ('GUI_V1_MISSING')
+			DbusIf.UpdateStatus ( message=packageName + " GUI v1 not installed",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
@@ -3426,26 +3434,44 @@ def mainLoop():
 	currentDownloadMode = DbusIf.GetAutoDownloadMode ()
 	autoInstall = DbusIf.GetAutoInstall ()
 
-	# UpdateGitHubVersion is responsible for fetching GitHub versions
-	#	so we can update the download mode
-	# skip all package processing until the update is complete
+	# check to see if reinstallMods is running
+	#	to prevent conflicts with it's installs and those done here
+	proc = subprocess.Popen ( "pgrep reinstallMods", shell=True,
+			stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+	proc.wait()
+	stdout, stderr = proc.communicate ()
+	# convert from binary to string
+	stdout = stdout.decode ().strip ()
+	if stdout == "":
+		waitForReinstall = False
+	else:
+		waitForReinstall = True
 
 	# setup status messages
-	if currentDownloadMode == AUTO_DOWNLOADS_OFF:
-		if autoInstall:
-			idleMessage = "checking for installs"
-		else:
-			idleMessage = ""
-	elif WaitForGitHubVersions:
-		idleMessage = "refreshing GitHub version information"
-		PackageScanComplete = False
-		PackageIndex = 0	# make sure new scan starts at beginning
-	else:
-		idleMessage = "checking for downloads"
-		if autoInstall:
-			idleMessage += " and installs"
+	idleMessage = ""
 	actionMessage = ""
 	statusMessage = ""
+	# no updates has highest prioroity
+	if currentDownloadMode == AUTO_DOWNLOADS_OFF and not autoInstall:
+		idleMessage = ""
+	# hold-off of processing has next highest priority
+	elif WaitForGitHubVersions:
+		idleMessage = "refreshing GitHub version information"
+	elif waitForReinstall:
+		idleMessage = "waiting for boot reinstall to complete"
+	# finally, set idleMessage based on download and install states
+	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and autoInstall:
+		idleMessage = "checking for downloads and installs"
+	elif currentDownloadMode == AUTO_DOWNLOADS_OFF and autoInstall:
+		idleMessage = "checking for installs"
+	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and not autoInstall:
+		idleMessage = "checking for downloads"
+
+	# hold off all package processing until the GitHub versions have been updated
+	#	and reinstallMods has finished reinstalling packages after Venus OS update
+	if waitForReinstall or WaitForGitHubVersions:
+		PackageScanComplete = False
+		PackageIndex = 0	# make sure new scan starts at beginning
 
 	# after a complete scan, change modes if appropirate
 	if PackageScanComplete:
@@ -3462,7 +3488,7 @@ def mainLoop():
 			PackageIndex = 0
 			PackageScanComplete = False
 			UpdateGitHubVersion.GitHubVersionQueue.put ('REFRESH')
-			downloadDelay = 10.0
+			downloadDelay = 2.0
 
 	PackageClass.AddStoredPackages ()
 
@@ -3479,11 +3505,12 @@ def mainLoop():
 		PackageIndex = 0
 		PackageScanComplete = False
 
-	# hold off other processing until Git Hub version refresh is complete
+	# hold off other processing until boot package reinstall and Git Hub version refresh is complete
 	# this insures download checks are based on up to date Git Hub versions
 	# installs are also held off to prevent install of older version,
 	#	then another install of the more recent version
-	if not WaitForGitHubVersions:
+	# waiting for reinstallMods to finish prevents conflicts between these two processes
+	if not waitForReinstall and not WaitForGitHubVersions:
 		package = PackageClass.PackageList [PackageIndex]
 		packageName = package.PackageName
 		PackageIndex += 1
@@ -3582,7 +3609,13 @@ def mainLoop():
 			logging.warning ("restarting GUI")
 			statusMessage = "restarting GUI ..."
 			try:
-				proc = subprocess.Popen ( [ 'svc', '-t', '/service/gui' ] )
+				# with gui-v2 present, GUI v1 runs from start-gui service not gui service
+				if os.path.exists ('/service/start-gui'):
+					proc = subprocess.Popen ( [ 'svc', '-t', '/service/start-gui' ] )
+				elif  os.path.exists ('/service/gui'):
+					proc = subprocess.Popen ( [ 'svc', '-t', '/service/gui' ] )
+				else:
+					logging.critical ("GUI restart failed")
 			except:
 				logging.critical ("GUI restart failed")
 			GuiRestart = False
@@ -3687,7 +3720,7 @@ def main():
 	PackageIndex = 0
 	noActionCount = 0
 	LastAutoDownloadTime = 0.0
-	WaitForGitHubVersions = False
+	WaitForGitHubVersions = True	# hold off package processing until first GitHub version refresh pass
 	downloadDelay = 600.0
 
 	# set logging level to include info level entries
@@ -3755,6 +3788,8 @@ def main():
 			Platform = "Raspberry Pi 2/3"
 		elif machine == "raspberrypi4":
 			Platform = "Raspberry Pi 4"
+		elif machine == "ekrano":
+			Platform = "Ekrano GX"
 		else:
 			Platform = machine
 		file.close()

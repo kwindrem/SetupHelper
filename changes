@@ -1,3 +1,8 @@
+v5.16:
+	fixed: white/black screen on first boot after firmware update
+	incorporate changes for GUI v1 and gui-v2 selection,
+		mainly to prevent package install if GUI v1 is needed and missing
+
 v5.15:
 	fixed: PackageManager isn't in menus after v5.14 install
 	updateFileSets: fixed: NO_REPLACEMENT in existing file sets that should link to other sets

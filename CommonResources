@@ -35,12 +35,15 @@ source "$setupHelperDir/DbusSettingsResources"
 
 scriptAction='NONE'
 installFailed=false
+installExitReason=$EXIT_SUCCESS
 
-# flags to control setup script exit behavior
+# flags to control setup script behavior
 rebootNeeded=false
 runAgain=false
 filesUpdated=false
 restartGui=false
+guiV1present=true
+guiV1required=true
 
 # yesNoPrompt provides user prompting requesting a yes/no response
 #
@@ -142,6 +145,29 @@ standardActionPrompt ()
     done
 }
 
+
+# setInstallFailed sets flags to prevent further install steps
+#	and insure the package is uninstalled completely
+#
+#	$1 indicates the reason for the failure and will evenutally be uused
+#	report the failure reason when exiting the script
+#
+#	any remaining paremeters are passed to logMessage
+
+setInstallFailed ()
+{
+	installFailed=true
+	scriptAction='UNINSTALL'
+	if [ ! -z "$1" ]; then
+		installExitReason=$1
+	fi
+	message="${@:2}"
+	if [ ! -z "$message" ]; then
+		logMessage "$message"
+	fi
+}
+
+
 # backupActiveFile makes a copy of the active file in file.orig
 # if the original file does not exist, no backup is made
 # BUT sets a flag file that will cause restoreFile to delete the active copy
@@ -150,6 +176,11 @@ standardActionPrompt ()
 
 backupActiveFile ()
 {
+	# don't do any work if install has already failed
+	if $installFailed ; then
+		return
+	fi
+
     backupExisted=false
     baseName=$(basename $1)
     if [ -e "$1.orig" ] || [ -e "$1.NO_ORIG" ]; then
@@ -181,35 +212,60 @@ backupActiveFile ()
 
 updateActiveFile ()
 {
+	# don't do any work if install has already failed
+	if $installFailed ; then
+		return
+	fi
+
     thisFileUpdated=false
     local sourceFound=false
-	local baseName
     local sourceFile="$1"
-    local destinationFile
+    local activeFile
 
-    # separate replacement file specified
+    # separate source and replacement files specified
     if [ $# == 2 ]; then
         if [ -f "$sourceFile" ]; then
             sourceFound=true
         else
-            logMessage "ERROR: specified soure file $sourceFile does not exist - can't continue with install"
-            scriptAction='UNINSTALL'
-            installFailed=true
+            setInstallFailed $EXIT_FILE_SET_ERROR "ERROR: specified soure file $sourceFile does not exist - can't continue with install"
 			return
         fi
-        destinationFile="$2"
+        activeFile="$2"
     # use active file for both source and destination
     else
-        destinationFile="$1"
+        activeFile="$1"
     fi
-    
-    # look for source in FileSets
+
+	local baseName=$(basename "$activeFile")
+
+	# replacement files are not be needed for some versions
+	# if so marked, leave original untouched
+	if [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
+		return
+	fi
+
+	local pathToFile=$(dirname "$activeFile")
+	if [ ! -e "$pathToFile" ]; then
+		# fatal if GUI v1 not present and needed for install
+		if [[ "$pathToFile" == "/opt/victronenergy/gui/"* ]]; then
+			if $guiV1required ; then
+				setInstallFailed $EXIT_NO_GUI_V1 "ERROR $packageName requires GUI v1 which is not on the system - can't continue"
+				return
+			# GUI v1 not needed - proceed
+			fi
+		# active file is not in GUI v1 part of file system
+		 else
+			setInstallFailed $EXIT_FILE_SET_ERROR "ERROR: path to $activeFile does not exist - can't continue with install"
+			return
+		fi
+	fi
+
     if ! $sourceFound ; then
-		baseName="$(basename "$sourceFile")"
-        # found in version directory
+		# look for source in FileSet
         if [ -f "$fileSet/$baseName" ]; then
             sourceFile="$fileSet/$baseName"
             sourceFound=true
+		# look for version-independent source
         elif [ -f "$pkgFileSets/$baseName" ]; then
             sourceFile="$pkgFileSets/$baseName"
             sourceFound=true
@@ -217,31 +273,23 @@ updateActiveFile ()
     fi
 
     if ! $sourceFound; then
-        # replacement files are not be needed for some versions
-        # if so marked, leave original untouched
-        if [ -f "$fileSet/$(basename $sourceFile).USE_ORIGINAL" ]; then
-            return
-        # if not flagged, this is a fatal error
-        else
-            logMessage "ERROR: no soure file for replacement $destinationFile - can't continue with install"
-            scriptAction='UNINSTALL'
-            installFailed=true
-        fi
+		setInstallFailed $EXIT_FILE_SET_ERROR "ERROR: no soure file for $baseName - can't continue with install"
         return
     fi
+
     mayHaveBeenUpdated=false
-    backupActiveFile "$destinationFile"
+    backupActiveFile "$activeFile"
     # package may already have been installed - check to see
     needToUpdate=true
     if $mayHaveBeenUpdated ; then
-        cmp -s "$sourceFile" "$destinationFile" > /dev/null
+        cmp -s "$sourceFile" "$activeFile" > /dev/null
         # already updated - no change to active file
         if (( $? == 0 )); then
             needToUpdate=false
         fi
     fi
     if $needToUpdate ; then
-        cp "$sourceFile" "$destinationFile"
+        cp "$sourceFile" "$activeFile"
         filesUpdated=true
         thisFileUpdated=true
     fi
@@ -283,7 +331,7 @@ restoreActiveFile ()
 #   If the new active files for the new version all match another version
 #       the new file set is populated automatically with replacement files from the other version
 #		and may be used with no further action
-#   If not, new file set is marked INCOMPLETE and scriptAction is set to EXIT
+#   If not, new file set is marked INCOMPLETE and installation fail information is set
 #	The package can not be installed on this Venus OS version
 #
 # Replacement files that have no original specify an "alternate original" that is used
@@ -429,31 +477,12 @@ _checkFileSets ()
     done
 
     if [ -f "$fileSet/INCOMPLETE" ]; then
-        logMessage "ERROR: incomplete file set for $venusVersion - can't continue"
-        exit $EXIT_FILE_SET_ERROR
+        setInstallFailed $EXIT_FILE_SET_ERROR "ERROR: incomplete file set for $venusVersion - can't continue"
 	# if we get this far and fs is not marked INCOMPLETE, then the file set does not need to be checked again next pass
 	else
 		touch "$fileSet/COMPLETE"
     fi
 }
-
-# restart the GUI service
-# begining at about v3.20~18, changes were made to accommodate the gui-v2
-# and these changes require different handling of a GUI service restart
- 
-restartGuiService ()
-{
-
-	# start-gui is the new service which supports gui-v2
-	#	that service will start gui-v2 if selected in Settings or run the older gui if not
-	if [ -e "/service/start-gui" ]; then
-		svc -t "/service/start-gui"
-	# gui is the older service that runs GUI v1
-	else
-		svc -t "/service/gui"
-	fi
-}
-
 
 # determine how startup script should exit based on $scriptAction and other flags
 # may EXIT or REBOOT within the function - DOES NOT RETURN TO CALLER
@@ -525,14 +554,8 @@ endScript ()
 	# if installation was attempted but failed, exit without checking anything else
 	#	or signaling GUI restart or reboot
 	if $installFailed ; then
-		logMessage "installation failed - package uninstalled - exiting"
-		exit $EXIT_FILE_SET_ERROR
-	elif $versionNotCompatible ; then
-		logMessage "version not compatible - exiting"
-		exit $EXIT_INCOMPATIBLE_VERSION
-	elif $platformNotCompatible ; then
-		logMessage "platform not compatible - exiting"
-		exit $EXIT_INCOMPATIBLE_PLATFOM
+		logMessage "installation failed - package has been uninstalled - exiting"
+		exit $installExitReason
 	elif $rebootNeeded ; then
 		if $userInteraction ; then
 			yesNoPrompt "Reboot system now (y) or do it manually later (n): "
@@ -602,8 +625,19 @@ endScript ()
 # It is set to false here the 'auto' parameter is passed on the command line
 #	which indicates this script is NOT being run from the command line
 
-# initialize version strings and numbers for future checks
+# move old installedFlag ("...inInstalled...")
+# to its new name ...installedVersionFile...
+if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
+	installedVersion=$(cat "$installedFlag")
+	if [ -z $installedVersion ]; then
+		installedVersion=""
+	else
+		echo $installedVersion > "$installedVersionFile"
+	fi
+fi
+rm -f "$installedFlag"
 
+# initialize version strings and numbers for future checks
 if [ -f "$installedVersionFile" ]; then
 	installedVersion=$(cat "$installedVersionFile")
 	versionStringToNumber $(cat "$installedVersionFile")
@@ -662,8 +696,14 @@ while [ $# -gt 0 ]; do
 done
 
 # make sure rootfs is mounted R/W & and resized to allow space for replacement files
-if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-    /opt/victronenergy/swupdate-scripts/resize2fs.sh
+if (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
+	if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+		logMessage "remounting root read-write"
+		/opt/victronenergy/swupdate-scripts/resize2fs.sh
+	else
+		logMessage "ERROR: can't remount root read-write - can't continue"
+		exit $EXIT_ROOT_FULL
+	fi
 fi
 
 # make sure the root partition has space for the package
@@ -673,18 +713,6 @@ if (( $availableSpace < 10 )); then
 	logMessage "no room for modified files on /root ($availableSpace MB remaining) - can't continue"
 	exit $EXIT_ROOT_FULL
 fi
-
-# move old installedFlag ("...inInstalled...")
-# to its new name ...installedVersionFile...
-if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
-	installedVersion=$(cat "$installedFlag")
-	if [ -z $installedVersion ]; then
-		installedVersion=""
-	else
-		echo $installedVersion > "$installedVersionFile"
-	fi
-fi
-rm -f "$installedFlag"
 
 # packages that require options to proceed unattended
 # must include the optionsRequried flag file in their package directory
@@ -756,33 +784,20 @@ if [ ! -z $obsoleteVersion ] && [ ! -f "$scriptDir/obsoleteVersion" ]; then
 fi
 
 # prevent installing Raspberry Pi packages on other platforms
-platformNotCompatible=false
 if [ -f "$scriptDir/raspberryPiOnly" ]; then 
 	if [ -f /etc/venus/machine ]; then
 		machine=$(cat /etc/venus/machine)
+	else
+		machine=""
 	fi
 	if [ -z $machine ]; then
-		if $isInstalled ; then
-			logMessage "can't determine Venus device type - uninstalling"
-			scriptAction='UNINSTALL'
-		else
-			logMessage "can't determine Venus device type - exiting"
-			exit $EXIT_INCOMPATIBLE_PLATFOM
-		fi
-	elif [ $machine != "raspberrypi2" ] && [ $machine != "raspberrypi4" ]; then
-		platformNotCompatible=true
-		if $isInstalled ; then
-			logMessage "$packageName not compatible with $machine - uninstalling"
-			scriptAction='UNINSTALL'
-		else
-			logMessage "$packageName not compatible with $machine - exiting"
-			exit $EXIT_INCOMPATIBLE_PLATFOM
-		fi
+		setInstallFailed $EXIT_INCOMPATIBLE_VERSION "can't determine Venus device type - uninstalling"
+	elif [[ $machine != *"raspberrypi"* ]]; then
+		setInstallFailed $EXIT_INCOMPATIBLE_PLATFOM "$packageName not compatible with $machine"
 	fi
 fi
 
 # check to see if package is compatible with this Venus version
-versionNotCompatible=false
 if [ -f "$scriptDir/firstCompatibleVersion" ]; then
 	firstCompatibleVersion=$(cat "$scriptDir/firstCompatibleVersion")
 # no first compatible version specified - use the default
@@ -793,47 +808,61 @@ fi
 versionStringToNumber $firstCompatibleVersion
 firstCompatibleVersionNumber=$versionNumber
 if (( $venusVersionNumber < $firstCompatibleVersionNumber )); then
-	versionNotCompatible=true
+	setInstallFailed $EXIT_INCOMPATIBLE_VERSION "ERROR $venusVersion before first compatible $firstCompatibleVersion"
 elif [ -f "$scriptDir/obsoleteVersion" ]; then
-	versionStringToNumber $(cat "$scriptDir/obsoleteVersion")
+	obsoleteVersion=$(cat "$scriptDir/obsoleteVersion")
+	versionStringToNumber $obsoleteVersion
 	obsoleteVersionNumber=$versionNumber
 	if (( $venusVersionNumber >= $obsoleteVersionNumber )); then
-		versionNotCompatible=true
+		setInstallFailed $EXIT_INCOMPATIBLE_VERSION "ERROR $venusVersion after last compatible $obsoleteVersion"
 	fi
 fi
-if $versionNotCompatible ; then
-	# if not installed, log message and exit
-	if ! $isInstalled ; then
-		logMessage "$packageName not compatible with Venus $venusVersion - can't install"
-			exit $EXIT_INCOMPATIBLE_VERSION
-	else
-		logMessage "$packageName not compatible with Venus $venusVersion - uninstalling"
-		scriptAction='UNINSTALL'
-	fi
-else
-	if [ ! -d "$setupOptionsRoot" ]; then
-		logMessage "creating root setup options directory $setupOptionsRoot"
-		mkdir $setupOptionsRoot
-	fi
-
+if ! $installFailed ; then
 	if [ ! -d "$setupOptionsDir" ]; then
 		logMessage "creating package options directory $setupOptionsDir"
-		mkdir $setupOptionsDir
+		mkdir -p $setupOptionsDir
 	fi
 fi
 
 # attempting an install without the comand line prompting
-#	and needed options have not been set yet
-#	can't continue
+#	and needed options have not been set yet - can't continue
 if [ $scriptAction == 'INSTALL' ]; then
 	if ! $optionsSet ; then
-		logMessage "ERROR required options have not been set - can't install"
-		exit $EXIT_OPTIONS_NOT_SET
+		setInstallFailed $EXIT_OPTIONS_NOT_SET "ERROR required options have not been set - can't install"
 	fi
 fi
-# if forcing an uninstall, skip file set checks
+# if checks failed or uninstall specified on command line, skip file set checks
 if [ $scriptAction != 'UNINSTALL' ]; then
-	# note _checkFileSets will exit if file set error exists
+	# check file sets for this version, attempt to created it if it does not exist
     _checkFileSets
 fi
+# determine if GUI v1 is installed and selected to run
+if [ ! -d "/opt/victronenergy/gui" ]; then
+	guiV1present=false
+else
+	# a value of 2 indicates gui-v2 is selected to run
+	selectedGui=$(dbus-send --system --print-reply=literal --dest=com.victronenergy.settings\
+            /Settings/Gui/RunningVersion com.victronenergy.BusItem.GetValue 2> /dev/null | awk '{print $3}')
+	if [ "$selectedGui" == "2" ]; then
+		guiV1present=false
+	fi
+fi
+
+# packages can bypass GUI v1 checks and allow installs
+if [ -f "$scriptDir/GUI_V1_NOT_REQUIRED" ]; then
+	guiV1required=false
+# otherwise, files in the GUI v1 directory are considered mandatory
+elif (( $(grep 'updateActiveFile' "$scriptDir/setup" | grep -c '$qmlDir') > 0 )); then
+	guiV1required=true
+else
+	guiV1required=false
+fi
+
+# block installs if any GUI files would be modified and GUI v1 is not present
+if ! $guiV1present && $guiV1required ; then
+	setInstallFailed $EXIT_NO_GUI_V1 "ERROR $packageName requires GUI v1 which is not on the system - can't install"
+fi
+
+
+
 

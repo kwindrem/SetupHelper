@@ -143,6 +143,11 @@ removeService ()
 
 installService ()
 {
+	# don't do any work if install has already failed
+	if $installFailed; then
+		return
+	fi
+
 	local serviceName=""
     if (( $# >= 1 )); then
         serviceName=$1

@@ -92,15 +92,16 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		rm -f "/var/volatile/tmp/PageSettings.qml"
 	fi
 
-    updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
-    updateActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
     updateActiveFile "$qmlDir/PageSettingsAddPackageList.qml"
     updateActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
-    updateActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
     updateActiveFile "$qmlDir/PageSettingsPmBackup.qml"
     updateActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
+    updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
+    updateActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
+    updateActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
+
 
 	# revert to VisualItemModel if before v3.00~14 (v3.00~14 uses VisibleItemModel)
 	versionStringToNumber "v3.00~14"
@@ -118,7 +119,6 @@ if [ $scriptAction == 'INSTALL' ] ; then
 		done
 	fi
 
-
     installService PackageManager
 
     cleanup
@@ -129,12 +129,12 @@ if [ $scriptAction == 'UNINSTALL' ] ; then
     restoreActiveFile "$qmlDir/PageSettingsPackageManager.qml"
     restoreActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
     restoreActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
-    restoreActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
 	restoreActiveFile "$qmlDir/PageSettingsAddPackageList.qml"
 	restoreActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
-	restoreActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
 	restoreActiveFile "$qmlDir/PageSettingsPmBackup.qml"
 	restoreActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
+    restoreActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
+	restoreActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
 
     removeService PackageManager
 

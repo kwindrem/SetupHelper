@@ -47,6 +47,12 @@ MbItem {
 			return qsTr ( "  no file set for " + osVersion )
 		else if (incompatibleReason == 'CMDLINE' && installedVersion.item.value == "")
 			return qsTr ( "  must install from command line" )
+			else if (incompatibleReason == 'ROOT_FULL')
+				return qsTr ( "  no space on root partition" )
+			else if (incompatibleReason == 'DATA_FULL')
+				return qsTr ( "  no space on /data partition" )
+			else if (incompatibleReason == 'GUI_V1_MISSING')
+				return qsTr ( "  GUI v1 not installed" )
 		else
 			return ""
 	}

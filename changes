@@ -1,3 +1,6 @@
+v5.17:
+	fixed: root not always resized after firmware update
+
 v5.16:
 	fixed: white/black screen on first boot after firmware update
 	incorporate changes for GUI v1 and gui-v2 selection,

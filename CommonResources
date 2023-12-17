@@ -696,23 +696,27 @@ while [ $# -gt 0 ]; do
 done
 
 # make sure rootfs is mounted R/W & and resized to allow space for replacement files
-if (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
+#	arbitrary minimum size of 10 MB
+availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+if (( $availableSpace < 10 )) || (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
 	if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-		logMessage "remounting root read-write"
+		logMessage "remounting root read-write and resizing"
 		/opt/victronenergy/swupdate-scripts/resize2fs.sh
-	else
+		availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+	fi
+	# check to see if remount was successful
+	if (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
 		logMessage "ERROR: can't remount root read-write - can't continue"
 		exit $EXIT_ROOT_FULL
+	# make sure the root partition has space for the package
+	elif (( $availableSpace < 10 )); then
+		logMessage "no room for modified files on root ($availableSpace MB remaining) - can't continue"
+		exit $EXIT_ROOT_FULL
+	else
+		logMessage "root now has $availableSpace MB now available"
 	fi
 fi
 
-# make sure the root partition has space for the package
-#	arbitrary minimum size of 10 MB for now
-availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-if (( $availableSpace < 10 )); then
-	logMessage "no room for modified files on /root ($availableSpace MB remaining) - can't continue"
-	exit $EXIT_ROOT_FULL
-fi
 
 # packages that require options to proceed unattended
 # must include the optionsRequried flag file in their package directory

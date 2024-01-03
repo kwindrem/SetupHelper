@@ -1,3 +1,6 @@
+v5.18:
+	fixed: installs fail on CCGX (resize2fs failure)
+
 v5.17:
 	fixed: root not always resized after firmware update
 

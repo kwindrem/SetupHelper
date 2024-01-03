@@ -637,6 +637,12 @@ if [ ! -f "$installedVersionFile" ] && [  -f "$installedFlag" ]; then
 fi
 rm -f "$installedFlag"
 
+if [ -f /etc/venus/machine ]; then
+	machine=$(cat /etc/venus/machine)
+else
+	machine=""
+fi
+
 # initialize version strings and numbers for future checks
 if [ -f "$installedVersionFile" ]; then
 	installedVersion=$(cat "$installedVersionFile")
@@ -696,25 +702,45 @@ while [ $# -gt 0 ]; do
 done
 
 # make sure rootfs is mounted R/W & and resized to allow space for replacement files
-#	arbitrary minimum size of 10 MB
+#	arbitrary minimum size of 3 MB
+rootMinimumSize=3
 availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-if (( $availableSpace < 10 )) || (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
-	if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-		logMessage "remounting root read-write and resizing"
+
+# remount read-write
+if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
+	# only remount read-write for CCGX
+	if [ "$machine" == "ccgx" ]; then
+		if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
+			logMessage "remounting root read-write"
+			/opt/victronenergy/swupdate-scripts/remount-rw.sh
+		fi
+	# remount and resize for other platforms
+	elif [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
 		/opt/victronenergy/swupdate-scripts/resize2fs.sh
 		availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+		logMessage "remounting read-write root and resizing - $availableSpace MB now available"
 	fi
 	# check to see if remount was successful
-	if (( $(mount | grep ' / ' | grep -c 'ro') != 0 )); then
-		logMessage "ERROR: can't remount root read-write - can't continue"
+	if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
+		logMessage "ERROR: unable to remount root read-write - can't continue"
 		exit $EXIT_ROOT_FULL
-	# make sure the root partition has space for the package
-	elif (( $availableSpace < 10 )); then
-		logMessage "no room for modified files on root ($availableSpace MB remaining) - can't continue"
-		exit $EXIT_ROOT_FULL
-	else
-		logMessage "root now has $availableSpace MB now available"
 	fi
+# root already read-write, attempt to resize if space is limited (CCGX can't resize)
+elif (( $availableSpace < $rootMinimumSize )); then
+	if [ "$machine" == "ccgx" ]; then
+		logMessage "can't resize root on CCGX"
+	else
+		if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+			/opt/victronenergy/swupdate-scripts/resize2fs.sh
+			availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+			logMessage "resized root - $availableSpace MB now available"
+		fi
+	fi
+fi
+# make sure the root partition has space for the package
+if (( $availableSpace < $rootMinimumSize )); then
+	logMessage "no room for modified files on root ($availableSpace MB remaining) - can't continue"
+	exit $EXIT_ROOT_FULL
 fi
 
 
@@ -789,11 +815,6 @@ fi
 
 # prevent installing Raspberry Pi packages on other platforms
 if [ -f "$scriptDir/raspberryPiOnly" ]; then 
-	if [ -f /etc/venus/machine ]; then
-		machine=$(cat /etc/venus/machine)
-	else
-		machine=""
-	fi
 	if [ -z $machine ]; then
 		setInstallFailed $EXIT_INCOMPATIBLE_VERSION "can't determine Venus device type - uninstalling"
 	elif [[ $machine != *"raspberrypi"* ]]; then

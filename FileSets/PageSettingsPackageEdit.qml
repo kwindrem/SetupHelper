@@ -176,7 +176,7 @@ MbPage {
             {
                 id: gitHubVersion
                 item { bind: getServiceBind("GitHubVersion") }
-                height: 25; width: 80
+                height: 25; width: 90
             }
             Text
             {
@@ -188,7 +188,7 @@ MbPage {
             {
                 id: packageVersion
                 item { bind: getServiceBind("PackageVersion") }
-                height: 25; width: 80
+                height: 25; width: 90
             }
             Text
             {
@@ -230,7 +230,7 @@ MbPage {
                 id: installedVersion
                 item { bind: getServiceBind("InstalledVersion") }
                 height: 25
-                width: incompatible ? 0 : 80
+                width: incompatible ? 0 : 90
             }
         }
         MbEditBox

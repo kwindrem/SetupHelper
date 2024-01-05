@@ -133,7 +133,7 @@ MbItem {
 			{
 				id: gitHubVersion
 				item { bind: getServiceBind("GitHubVersion") }
-				height: 20; width: 80
+				height: 20; width: 90
 			}
 			Text // puts a bit of space below version boxes - only needed in one column
 			{
@@ -158,7 +158,7 @@ MbItem {
 			{
 				id: packageVersion
 				item { bind: getServiceBind("PackageVersion") }
-				height: 20; width: 80
+				height: 20; width: 90
 			}
 		}
 		Column
@@ -178,7 +178,7 @@ MbItem {
 			{
 				id: installedVersion
 				item { bind: getServiceBind("InstalledVersion") }
-				height: 20; width: 80
+				height: 20; width: 90
 			}
 		}
     }

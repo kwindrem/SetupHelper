@@ -223,11 +223,15 @@ ERROR_NO_SETUP_FILE = 		999
 #
 #	Operations that take little time can usually be done in-line (without queuing)
 #
-# PackageManager manages flag files in the package folder:
-#	DO_NOT_AUTO_ADD				indicates the package was manually removed and PackageManager should not
-#								automaticlly add it
+# PackageManager manages flag files in the package's setup options folder:
 #	DO_NOT_AUTO_INSTALL			indicates the package was manually removed and PackageManager should not
 #								automatically install it
+#	DO_NOT_AUTO_ADD				indicates the package was manually removed and PackageManager should not
+#								automaticlly add it
+#	FORCE_REMOVE				instructs PackageManager to remove the package from active packages list
+#								Used rarely, only case is GuiMods setup forcing GeneratorConnector to be removed
+#								this is done only at boot time.
+#								
 #
 #	these flags are stored in /data/setupOptions/<packageName> which is non-volatile and survives a package download
 #
@@ -290,7 +294,7 @@ ERROR_NO_SETUP_FILE = 		999
 #
 #		ONE_TIME_INSTALL
 #			If present in a package directory, the package is automatically installed
-#				even if automatic installs are diabled and the DO_NOT_INSTALL flag is set
+#				even if automatic installs are diabled and the DO_NOT_AUTO_INSTALL flag is set
 #			This flag file is removed when the install is performed
 #				to prevent repeated installs
 #			Packages may be deployed with this flag set to insure it is installed
@@ -320,7 +324,6 @@ ERROR_NO_SETUP_FILE = 		999
 #			handleGuiEditAction ()
 #			UpdatePackageCount ()
 #			various Gets and Sets for dbus parameters
-#			TransferOldDbusPackageInfo
 #			UpdateDefaultPackages ()
 #			ReadDefaultPackagelist ()
 #			LOCK ()
@@ -328,7 +331,6 @@ ERROR_NO_SETUP_FILE = 		999
 #	PackageClass
 #		PackageList [] one per package
 #		UpdateDownloadPending ()
-#		UpdateInstallPending ()
 #		LocatePackage ()
 #		RemoveDbusSettings ()
 #		settingChangedHandler ()
@@ -337,12 +339,11 @@ ERROR_NO_SETUP_FILE = 		999
 #		AddStoredPackages ()
 #		AddPackage ()
 #		RemovePackage ()
-#		UpdateFileFlagsAndVersions ()
+#		UpdateVersionsAndFlags ()
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
 #		UpdateDoNotInstall ()
-#		MoveFlagFiles ()
 #		InstallVersionCheck ()
 #	UpdateGitHubVersionClass
 #		UpdateGitHubVersion (thread)
@@ -381,7 +382,7 @@ import platform
 import argparse
 import logging
 
-# set variables for logging levels:
+# set constants for logging levels:
 CRITICAL = 50
 ERROR = 40
 WARNING = 30
@@ -397,6 +398,17 @@ import dbus
 import time
 import re
 import glob
+
+
+# delay for GitHub version refreshes
+# slow refresh also controls GitHub version expiration
+FAST_GITHUB_REFRESH = 0.25
+SLOW_GITHUB_REFRESH = 600.0
+
+# fast and slow delays for package downloads
+FAST_DOWNLOAD = 2.0
+SLOW_DOWNLOAD = 600.0
+
 
 PythonVersion = sys.version_info
 # accommodate both Python 2 and 3
@@ -421,12 +433,10 @@ global DbusIf
 global Platform
 global VenusVersion
 global VenusVersionNumber
-global SystemReboot
-global GuiRestart
-global PackageIndex
-global WaitForGitHubVersions
-global InitializePackageManager
-
+global SystemReboot	# initialized/used in main, set in mainloop
+global GuiRestart	# initialized in main, set in PushAction and InstallPackage, used in mainloop
+global WaitForGitHubVersions # initialized in main, set in UpdateGitHubVersion used in mainLoop 
+global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
 
 #	PushAction
 #
@@ -450,7 +460,7 @@ global InitializePackageManager
 # PushAction sets the ...Pending flag to prevent duplicate operations
 #	for a given package
 #
-# the 'Reboot' and 'restartGui' actions are NOT pushed on any queue
+# the 'Reboot','restartGui' and initialize actions are NOT pushed on any queue
 #	they are handled in line since they just set a global flag
 #	to be handled in mainLoop
 
@@ -465,6 +475,7 @@ def PushAction (command=None, source=None):
 		packageName = parts[1]
 	else:
 		packageName = ""
+
 	if action == 'download':
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
@@ -484,23 +495,29 @@ def PushAction (command=None, source=None):
 	elif action == 'add' or action == 'remove':
 		theQueue = AddRemove.AddRemoveQueue
 		queueText = "AddRemove"
+
+	# the remaining actions are handled here (not pushed on a queue)
 	elif action == 'reboot':
 		logging.warning ( "received Reboot request from " + source)
 		# set the flag - reboot is done in main_loop
 		global SystemReboot
 		SystemReboot = True
+		return
 	elif action == 'restartGui':
 		logging.warning ( "received GUI restart request from " + source)
 		# set the flag - reboot is done in main_loop
 		global GuiRestart
 		GuiRestart = True
+		return
 	elif action == 'INITIALIZE':
 		logging.warning ( "received PackageManager INITIALIZE request from " + source)
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global InitializePackageManager
 		InitializePackageManager = True
+		return
 	elif action == 'gitHubScan':
 		UpdateGitHubVersion.SetPriorityGitHubVersion (packageName)
+		return
 	# ignore blank action - this occurs when PackageManager changes the action on dBus to 0
 	#	which acknowledges a GUI action
 	elif action == '':
@@ -519,67 +536,75 @@ def PushAction (command=None, source=None):
 # end PushAction
 
 
-#	VersionToNumber
+# convert a version string to an integer to make comparisions easier
+# the Victron format for version numbers is: vX.Y~Z-large-W
+# the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
+# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
+#	large builds now have the same version number as the "normal" build
 #
-# convert a version string in the form of vX.Y~Z-large-W to an integer to make comparisions easier
-# the ~Z portion indicates a pre-release version so a version without it is later than a version with it
-# the -W portion is like the ~Z for large builds
-# 	the large portion is IGNORED !!!!
-#	note part[0] is always null because there is nothing before v which is used as a separator
+# the version string passed to this function allows for quite a bit of flexibility
+#	any alpha characters are permitted prior to the first digit
+#	up to 3 version parts PLUS a prerelease part are permitted
+#		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
+#	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
+#	any non-numeric character can be used to separate main versions
+#	special significance is assigned to single caracter separators between the numeric strings
+#		b or ~ indicates a beta release
+#		a indicates an alpha release
+#		d indicates an development release
+# 		these offset the pre-release number so that b/~ has higher numeric value than any a
+#			and a has higher value than d separator
 #
-# the incoming verison string is split on every non-digit character
-# the first three of those pieces are combined into a single integer
-# additional pieces are ignored
+# a blank version or one without at least one number part is considered invalid
+# alpha and beta seperators require at least two number parts
+#	if only one number part is found the prerelease seperator is IGNORED
 #
-#	for example v1.2~3 			would be  1002003
-#	for example v11.22.33  		would be 11022033
-#	for example v11.22-large-33	would be 11022999
-# an empty file or one that contains "unknown" or does not beging with 'v'
-# 	has a version number = 0
-#
-# the separators ~, b, a and d are given special significance
-#	indicating beta (~ and b), alpha or develompent releases
-#	which are prioritized: release is the highest, then beta, then alpha then development
-#	by spliting the third number range into individual ranges
-#	a released version is given the highest numerical value: 999
-#		none for release	--		999
-#		~ or b for beta		0-398	600-998
-#		a for alpha 		0-299	300-599
-#		d for development	0-299	0-299
-#
-#	returns the version number
+#	returns the version number or 0 if string does not parse into needed sections
 
 def VersionToNumber (version):
-	if version == None or version == "" or version[0] != 'v':
-		return 0
-
 	version = version.replace ("large","L")
-	parts = re.split ('\D', version[1:])
+	numberParts = re.split ('\D+', version)
+	otherParts = re.split ('\d+', version)
+	# discard first element if it is blank
+	#	this can happen if the version string starts with alpha characters (like "v"
+	if numberParts [0] == "":
+		numberParts.pop(0)
 
-	preReleasePart = False
-	# assemble core version number from major, minor and preRelease parts
+	numberPartsLength = len (numberParts)
+
+	if numberPartsLength == 0:
+		return 0
 	versionNumber = 0
-	if len(parts) >= 1:
-		if parts[0].isdigit():
-			versionNumber += int ( parts[0] ) * 1000000
-	if len(parts) >= 2:
-		if parts[1].isdigit():
-			versionNumber += int ( parts[1] ) * 1000
-	if len(parts) >= 3:
-		if parts[2].isdigit():
-			versionNumber += int ( parts[2] )
-			preReleasePart = True
+	releaseType='release'
+	if numberPartsLength >= 2:
+		if 'b' in otherParts or '~' in otherParts:
+			releaseType = 'beta'
+			versionNumber += 60000
+		elif 'a' in otherParts:
+			releaseType = 'alpha'
+			versionNumber += 30000
+		elif 'd' in otherParts:
+			releaseType = 'develop'
 
-	# adjust based on type
-	if '~' in version:
-		versionNumber += 600
-	elif 'b' in version:
-		versionNumber += 600
-	elif 'a' in version:
-		versionNumber += 300
-	# a release version should not contain a third part, but use it as-is if present
-	elif not preReleasePart:
-		versionNumber += 999
+
+
+	# if release all parts contribute to the main version number
+	#	and offset is greater than all prerelease versions
+	if releaseType == 'release':
+		versionNumber += 90000
+	# if pre-release, last part will be the pre release part
+	#	and others part will be part the main version number
+	else:
+		numberPartsLength -= 1
+		versionNumber += int (numberParts [numberPartsLength])
+
+	# include core version number
+	versionNumber += int (numberParts [0]) * 10000000000000
+	if numberPartsLength >= 2:
+		versionNumber += int (numberParts [1]) * 1000000000
+	if numberPartsLength >= 3:
+		versionNumber += int (numberParts [2]) * 100000
+
 	return versionNumber
 
 
@@ -671,6 +696,11 @@ class AddRemoveClass (threading.Thread):
 	# run () checks the threadRunning flag and returns if it is False,
 	#	essentially taking the thread off-line
 	#	the main method should catch the tread with join ()
+	#
+	# run () also serves as and idle loop to add packages found in /data (AddStoredPacakges)
+	#	this is only called every 3 seconds
+	#	and may push add commands onto the AddRemoveQueue
+	#
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
@@ -682,15 +712,31 @@ class AddRemoveClass (threading.Thread):
 	#
 	# process package Add/Remove actions
 	def run (self):
+		changes = False
 		while self.threadRunning:
+			# if package was added or removed, don't wait for queue empty
+			# so package lists can be updated immediately
+			if changes:
+				delay = 0.0
+			else:
+				delay = 3.0
 			try:
-				command = self.AddRemoveQueue.get ()
+				command = self.AddRemoveQueue.get (timeout = delay)
+			except queue.Empty:
+				# adds/removes since last queue empty
+				if changes:
+					DbusIf.UpdateDefaultPackages ()
+				# no changes so do idle processing:
+				#	add packages in /data that aren't included in package list
+				else:
+					PackageClass.AddStoredPackages ()
+				changes = False
+				continue
 			except:
 				logging.error ("pull from AddRemoveQueue failed")
 				continue
 			if len (command) == 0:
 				logging.error ("pull from AddRemove queue failed - empty comand")
-				time.sleep (5.0)
 				continue
 			# thread shutting down
 			if command [0] == 'STOP' or self.threadRunning == False:
@@ -704,13 +750,11 @@ class AddRemoveClass (threading.Thread):
 					action = parts[0].strip ()
 					packageName = parts[1].strip ()
 				else:
-					logging.error ("AddRemoveQueue - no action and/or package name - discarding", command)
-					time.sleep (5.0)
+					logging.error ("AddRemoveQueue - no action or no package name - discarding", command)
 					continue
 				source = command[1]
 			else:
 				logging.error ("AddRemoveQueue - no command and/or source - discarding", command)
-				time.sleep (5.0)
 				continue
 
 			if action == 'add':
@@ -741,12 +785,13 @@ class AddRemoveClass (threading.Thread):
 						user = default[1]
 						branch = default[2]
 
-				PackageClass.AddPackage (packageName = packageName, source=source,
-								gitHubUser=user, gitHubBranch=branch )
+				if PackageClass.AddPackage (packageName = packageName, source=source,
+								gitHubUser=user, gitHubBranch=branch ):
+					changes = True
 
 			elif action == 'remove':
-				PackageClass.RemovePackage ( packageName=packageName )
-
+				if PackageClass.RemovePackage ( packageName=packageName ):
+					changes = True
 			else:
 				logging.warning ( "received invalid action " + command + " from " + source + " - discarding" )
 		# end while True
@@ -765,7 +810,6 @@ class AddRemoveClass (threading.Thread):
 #		handleGuiEditAction
 #		UpdatePackageCount
 #		RemoveDbusSettings
-#		TransferOldDbusPackageInfo
 #		UpdateDefaultPackages ()
 #		ReadDefaultPackagelist ()
 #		various Gets and Sets for dbus parameters
@@ -840,89 +884,6 @@ class DbusIfClass:
 			if returnCode != 0:
 				logging.error ("dbus RemoveSettings failed " + str (returnCode))
 				logging.error ("stderr: " + stderr)
-
-
-	#	TransferOldDbusPackageInfo
-	# PackageManager dbus storage was moved
-	# from ...PackageMonitor... to ...PackageManager...
-	# this method moves the info to the new location and deletes the old Settings
-	# this assumes the new dbus environment is already set up
-	# the transfer is only done if the new location has no packages
-	# should only be called from initialization so we don't LOCK while accessing the package list
-
-
-	@classmethod
-	def TransferOldDbusPackageInfo (cls):
-		bus = dbus.SystemBus()
-		oldPath = "/Settings/PackageMonitor"
-		newPath = "/Settings/PackageManager"
-		try:
-			oldCount = bus.get_object("com.victronenergy.settings", oldPath + "/Count").GetValue()
-		# nothing to tranfer/delete
-		except:
-			return
-
-
-		try:
-			newCount = bus.get_object("com.victronenergy.settings", newPath + "/Count").GetValue()
-		except:
-			logging.error ("PackageManager dbus Settings has no package count")
-			return
-
-		# if the new dbus info has no packages, transfer them from the old location
-		if newCount == 0:
-			transferPackages = True
-		else:
-			transferPackages = False
-
-		logging.warning ("moving PackageManager dbus settings from old location")
-		
-		# remove package-related Settings
-		i = 0
-		while i < oldCount:
-			oldNamePath = oldPath + '/' + str (i) + "/PackageName"
-			oldUserPath = oldPath + '/' + str (i) + "/GitHubUser"
-			oldBranchPath = oldPath + '/' + str (i) + "/GitHubBranch"
-
-			# create a new package and transfer old info to it
-			try:
-				name = bus.get_object("com.victronenergy.settings", oldNamePath).GetValue ()
-			except:
-				name = None
-			if transferPackages and name != None:
-				logging.warning ("moving " + name + " settings")
-
-				try:
-					user = bus.get_object("com.victronenergy.settings", (oldUserPath)).GetValue ()
-				except:
-					user = "?"
-				try:
-					branch = bus.get_object("com.victronenergy.settings", oldBranchPath).GetValue ()
-				except:
-					branch = "?"
-
-				PackageClass.AddPackage (packageName=name, source='TRANSFER',
-						gitHubUser= user, gitHubBranch=branch )
-
-			# remove the old package-related dbus Settings
-			cls.RemoveDbusSettings ( [oldNamePath, oldUserPath, oldBranchPath ] )
-			i += 1
-
-		# transfer and remove Settings not part of a package
-		if transferPackages:
-			
-			DbusIf.SetAutoInstall ( bus.get_object("com.victronenergy.settings",
-							oldPath + "/AutoInstall").GetValue () )
-			DbusIf.SetAutoDownload ( bus.get_object("com.victronenergy.settings",
-							oldPath + "/GitHubAutoDownload").GetValue () )
-		otherSettings = [oldPath + "/AutoInstall",
-							oldPath + "/GitHubAutoDownload",
-							oldPath + "/Edit/GitHubBranch",
-							oldPath + "/Edit/GitHubUser",
-							oldPath + "/Edit/PackageName",
-							oldPath + "/Count"
-						]
-		cls.RemoveDbusSettings ( otherSettings )
 
 	
 	#	UpdateStatus
@@ -1079,14 +1040,8 @@ class DbusIfClass:
 	#
 	# refreshes the defaultPackageList to include only packages NOT be in PackageList
 	# this also updates the dbus default packages used by the GUI Add Package menu
-	# skip unless package was added/removed ????
-	# alwaysRun forces processing for the init pass from main ()
 
-	def UpdateDefaultPackages (self, alwaysRun = False):
-		if alwaysRun == False and self.RefreshDefaultPackages == False:
-			return
-		self.RefreshDefaultPackages = False
-		
+	def UpdateDefaultPackages (self):
 		DbusIf.LOCK ()
 		# don't touch "new" entry (index 0)
 		index = 1
@@ -1189,7 +1144,7 @@ class DbusIfClass:
 		self.DbusService.add_path ('/DefaultCount', 0 )
 
 		# a special package used for editing a package prior to adding it to Package list
-		self.EditPackage = PackageClass ( section = "Edit", packageName = "new" )
+		self.EditPackage = PackageClass ( section = "Edit", packageName = "" )
 		
 		self.rawDefaultPackages = []
 		self.defaultPackageList = []
@@ -1205,8 +1160,6 @@ class DbusIfClass:
 		#	if they do, this parameter is set and a button appears on the main Package manager menu
 
 		self.DbusService.add_path ( "/ActionNeeded", '' )
-
-		self.RefreshDefaultPackages = False
 
 		self.DbusService.add_path ( '/BackupMediaAvailable', 0, writeable = True )
 		self.DbusService.add_path ( '/BackupSettingsFileExist', 0, writeable = True )
@@ -1232,17 +1185,15 @@ class DbusIfClass:
 #		LocatePackage
 #		various Gets and Sets
 #		UpdateDownloadPending () (class method)
-#		UpdateInstallPending () (class method)
 #		AddPackagesFromDbus (class method)
 #		AddStoredPackages (class method)
 #		AddPackage (class method)
 #		RemovePackage (class method)
-#		UpdateFileFlagsAndVersions ()
+#		UpdateVersionsAndFlags ()
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
 #		UpdateDoNotInstall ()
-#		MoveFlagFiles ()
 #		InstallVersionCheck ()
 #
 #	Globals:
@@ -1346,45 +1297,7 @@ class PackageClass:
 			else:
 				if not os.path.exists (flagFile):
 					open (flagFile, 'a').close()
-	
-	# move flag files that prevent automatic downloads or installs
-	#	from <package> to /setupOptions/<package>
-	# called only during init
 
-	def MoveFlagFiles (self):
-		packageName = self.PackageName
-		if packageName == None:
-			logging.error ("MoveFlagFiles - no packageName")
-			return
-
-		# nothing to do if package directory doesn't exist
-		packageDir = "/data/" + packageName
-		if not os.path.isdir (packageDir):
-			return
-
-		# create setupOptions directory if it doesn't already exist
-		#	this would happen if the package was being added / installed for the first time
-		optionsDir = "/data/setupOptions/"
-		optionsPath = optionsDir + packageName
-		if not os.path.isdir (optionsDir):
-			os.mkdir (optionsDir)
-		if not os.path.isdir (optionsPath):
-			os.mkdir (optionsPath)
-
-		# move auto add block flag
-		oldFlag = packageDir + "/REMOVED"
-		flagFile = optionsPath +  "/DO_NOT_AUTO_ADD"
-		if os.path.exists (oldFlag):
-			open (flagFile, 'a').close()
-			os.remove (oldFlag)
-
-		# move auto install block flag
-		oldFlag = packageDir + "/DO_NOT_AUTO_INSTALL"
-		flagFile = optionsPath +  "/DO_NOT_AUTO_INSTALL"
-		if os.path.exists (oldFlag):
-			open (flagFile, 'a').close()
-			os.remove (oldFlag)
-		
 
 	#	InstallVersionCheck
 	#
@@ -1423,6 +1336,10 @@ class PackageClass:
 
 	def SetPackageVersion (self, version):
 		global VersionToNumber
+		# clear incompatible file set if version number changed
+		# so install can be tried again
+		if version != self.PackageVersion and self.Incompatible == 'NO_FILE_SET':
+			self.SetIncompatible ("")
 		self.PackageVersion = version
 		self.PackageVersionNumber = VersionToNumber (version)
 		if self.packageVersionPath != "":
@@ -1432,6 +1349,8 @@ class PackageClass:
 		global VersionToNumber
 		self.GitHubVersion = version
 		self.GitHubVersionNumber = VersionToNumber (version)
+		if version != "":
+			self.gitHubExpireTime = time.time () + SLOW_GITHUB_REFRESH + 2
 		if self.gitHubVersionPath != "":
 			DbusIf.DbusService[self.gitHubVersionPath] = version
 
@@ -1555,13 +1474,14 @@ class PackageClass:
 		self.GitHubUser = self.DbusSettings['gitHubUser']
 		self.GitHubBranch = self.DbusSettings['gitHubBranch']
 		
-		self.section = section
 		# these flags are used to insure multiple actions aren't executed on top of each other
 		self.DownloadPending = False
 		self.InstallPending = False
 
 		self.AutoInstallOk = False
 		self.FileSetOk = False
+
+		self.gitHubExpireTime = 0
 
 
 	# dbus Settings is the primary non-volatile storage for packageManager
@@ -1639,42 +1559,27 @@ class PackageClass:
 	#	diretory must contain a file named version
 	#	first character of version file must be 'v'
 	#	name must be unique - that is not match any existing packages
-	# order of validating tests minimizes execution time
+	# order of validating tests minimizes execution time (determined emperically)
 	#
-	# to reduce time in mainLoop, only 5 potential packages are processed each pass
-	#	doAll forces a complete refresh which is done in the main initialization
-
-	packageAddDirectoryList = []
-	packageAddListLength = 0
-	packageAddIndex = 0
+	# AddStoredPackages is called from init
+	#	and the AddPackages run () loop for background updates
 
 	@classmethod
-	def AddStoredPackages (cls, doAll = False):
+	def AddStoredPackages (cls):
 		global Platform
 
 		platformIsRaspberryPi = Platform[0:4] == 'Rasp'
-		if cls.packageAddIndex == 0:
-			cls.packageAddDirectoryList = os.listdir ("/data")
-			cls.packageAddListLength = len (cls.packageAddDirectoryList)
-			cls.packageAddIndex = 0
-		
-		if doAll:
-			lastIndex = cls.packageAddIndex + cls.packageAddListLength
-		else:
-			lastIndex = cls.packageAddIndex + 5
-			if lastIndex >= cls.packageAddListLength:
-				lastIndex = cls.packageAddListLength
-		while cls.packageAddIndex < lastIndex:
-			packageName = cls.packageAddDirectoryList[cls.packageAddIndex]
-			cls.packageAddIndex += 1
 
+		for packageName in os.listdir ("/data"):
 			if not PackageClass.PackageNameValid (packageName):
 				continue
+			# if package is already in the active list - skip it
 			DbusIf.LOCK ()
 			package = PackageClass.LocatePackage (packageName)
 			DbusIf.UNLOCK ()			
 			if package != None:
 				continue
+
 			packageDir = "/data/" + packageName
 
 			# skip if no setup file - also verifies packageDir is a directory!
@@ -1697,11 +1602,8 @@ class PackageClass:
 			# skip if package was manually removed
 			if not PackageClass.GetAutoAddOk (packageName):
 				continue
-			# continue only if package is unique
-			if package == None:
-				PushAction (command='add:' + packageName, source='AUTO')
-		if cls.packageAddIndex >= cls.packageAddListLength:
-			cls.packageAddIndex = 0
+			# package is unique and passed all tests - schedule the package addition
+			PushAction (command='add:' + packageName, source='AUTO')
 
 	
 	# the DownloadPending and InstallPending flags prevent duplicate actions for the same package
@@ -1717,14 +1619,9 @@ class PackageClass:
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.DownloadPending = state
-		DbusIf.UNLOCK ()
-
-	@classmethod
-	def UpdateInstallPending (cls, packageName, state):
-		DbusIf.LOCK ()
-		package = PackageClass.LocatePackage (packageName)
-		if package != None:
-				package.InstallPending = state
+			# update package versions at end of download
+			if state == False:
+				package.UpdateVersionsAndFlags ()
 		DbusIf.UNLOCK ()
 
 		
@@ -1751,7 +1648,7 @@ class PackageClass:
 			return False
 
 		# insure packageName is unique before adding this new package
-		matchFound = False
+		success = False
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
 
@@ -1762,7 +1659,7 @@ class PackageClass:
 			section = len(cls.PackageList)
 			cls.PackageList.append( PackageClass ( section, packageName = packageName ) )
 			DbusIf.UpdatePackageCount ()
-			DbusIf.RefreshDefaultPackages = True
+			success = True
 
 			# add user/branch from caller
 			package = PackageClass.LocatePackage (packageName)
@@ -1788,6 +1685,7 @@ class PackageClass:
 				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=WARNING )
 		
 		DbusIf.UNLOCK ()
+		return success
 	# end AddPackage
 
 
@@ -1811,21 +1709,21 @@ class PackageClass:
 
 	@classmethod
 	def RemovePackage (cls, packageName=None, packageIndex=None ):
-		# packageName specified so this is a call from the package editor
+		# packageName specified so this is a call from the GUI
 		if packageName != None:
-			manualRemove = True
+			guiRequestedRemove = True
 			if packageName == "SetupHelper":
 				DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
 			else:
 				DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
 		# no package name specified, so this is a call from system initialization - messages to log only
 		elif packageIndex != None:
-			manualRemove = False
+			guiRequestedRemove = False
 			name = PackageClass.PackageList [packageIndex].PackageName
 			if name == None or name == "":
 				logging.error ( "RemovePackage: removing package without a name" )
 			else:
-				logging.error ( "RemovePackage: removing " + name )
+				logging.warning ( "RemovePackage: removing " + name )
 		# neither package name nor package instance passed - can't do anything
 		else:
 			logging.error ( "RemovePackage: no package info passed - nothing done" )
@@ -1834,12 +1732,13 @@ class PackageClass:
 		DbusIf.LOCK ()
 		packages = PackageClass.PackageList
 		listLength = len (packages)
-		if len (packages) == 0:
+		if listLength == 0:
 			DbusIf.UNLOCK ()
 			return
 
 		# locate index of packageName
-		if manualRemove:
+		#	LocaatePackage not used because we want the index anyway
+		if guiRequestedRemove:
 			toIndex = 0
 			matchFound = False
 			while toIndex < listLength:
@@ -1852,7 +1751,13 @@ class PackageClass:
 			toIndex = packageIndex
 			matchFound = True
 
-		if matchFound:
+		packageIsInstalled = packages[toIndex].InstalledVersion != ""
+		
+		# if package is installed, don't remove it
+		if matchFound and not packageIsInstalled:
+			# block future automatic adds since the package is being removed
+			PackageClass.SetAutoAddOk (packageName, False)
+
 			# move packages after the one to be remove down one slot (copy info)
 			# each copy overwrites the lower numbered package
 			fromIndex = toIndex + 1
@@ -1875,6 +1780,9 @@ class PackageClass:
 				# package variables
 				toPackage.DownloadPending = fromPackage.DownloadPending
 				toPackage.InstallPending = fromPackage.InstallPending
+				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
+				toPackage.FileSetOk = fromPackage.FileSetOk
+				toPackage.AutoRemove = fromPackage.AutoRemove
 
 				toIndex += 1
 				fromIndex += 1
@@ -1897,16 +1805,11 @@ class PackageClass:
 
 			# remove entry from package list
 			packages.pop (toIndex)
-
-			DbusIf.RefreshDefaultPackages = True
-
-			# update package count
-			DbusIf.UpdatePackageCount ()		
-
+			DbusIf.UpdatePackageCount ()
 		DbusIf.UNLOCK ()
-		# this package was manually removed block automatic adds
+		# this package was manually removed so block automatic adds
 		#	in the package directory
-		if manualRemove:
+		if guiRequestedRemove:
 			if matchFound:
 				# block automatic adds
 				PackageClass.SetAutoAddOk (packageName, False)
@@ -1916,9 +1819,11 @@ class PackageClass:
 			else:
 				DbusIf.UpdateStatus ( message=packageName + " not removed - name not found", where='Editor', logLevel=ERROR )
 				DbusIf.SetGuiEditAction ( 'ERROR' )
+		return matchFound
+	# end RemovePackage
 
 
-	#	UpdateFileFlagsAndVersions
+	#	UpdateVersionsAndFlags
 	#
 	# retrieves packages versions from the file system
 	#	each package contains a file named version in it's root directory
@@ -1937,7 +1842,7 @@ class PackageClass:
 	#
 	# must be called while LOCKED !!
 
-	def UpdateFileFlagsAndVersions (self):
+	def UpdateVersionsAndFlags (self):
 		global VersionToNumber
 		global VenusVersion
 		global VenusVersionNumber
@@ -2004,24 +1909,20 @@ class PackageClass:
 		if incompatible == False:
 			try:
 				fd = open (packageDir + "/firstCompatibleVersion", 'r')
-			except:
-				firstVersion = "v2.71"
-			else:
 				firstVersion = fd.readline().strip()
 				fd.close ()
+			except:
+				firstVersion = "v2.71"
 			try:
 				fd = open (packageDir + "/obsoleteVersion", 'r')
-			except:
-				obsoleteVersion = None
-			else:
 				obsoleteVersion = fd.readline().strip()
+				fd.close ()
+			except:
+				obsoleteVersion = "v9999.9999.9999"
 			
 			firstVersionNumber = VersionToNumber (firstVersion)
 			obsoleteVersionNumber = VersionToNumber (obsoleteVersion)
-			if VenusVersionNumber < firstVersionNumber:
-				self.SetIncompatible ('VERSION')
-				incompatible = True
-			elif obsoleteVersionNumber != 0 and VenusVersionNumber >= obsoleteVersionNumber:
+			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
 				self.SetIncompatible ('VERSION')
 				incompatible = True
 
@@ -2034,7 +1935,11 @@ class PackageClass:
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
 					self.SetIncompatible ('CMDLINE')
 					incompatible = True
-	# end UpdateFileFlagsAndVersions
+
+		# clear GitHub version if not refreshed in 10 minutes
+		if self.GitHubVersion != "" and time.time () > self.gitHubExpireTime:
+			self.SetGitHubVersion ("")
+	# end UpdateVersionsAndFlags
 # end Package
 
 
@@ -2169,17 +2074,25 @@ class UpdateGitHubVersionClass (threading.Thread):
 
 		gitHubVersionPackageIndex = 0
 		WaitForGitHubVersions = True
-		fastRefresh = False
+		forcedRefresh = True
+
 		lastRefreshTime = 0
+		packageListLength = 0
 		
 		while self.threadRunning:
 			command = ""
 			# do initial refreshes quickly
-			if fastRefresh:
-				delay = 0.5
-			# otherwise scan one version every 10 minutes
+			if forcedRefresh:
+				delay = FAST_GITHUB_REFRESH
+			# no packages set arbitrary, long delay
+			#	won't actually be used because some message will be pushed to the queue
+			#	but this prevents divide by zero
+			elif packageListLength == 0:
+				delay = SLOW_GITHUB_REFRESH
+			# otherwise set delay to complete scan of all versions in the slow refresh period
+			#	this prevents GitHub versions from going undefined if refreshes are happening
 			else:
-				delay = 600.0
+				delay = SLOW_GITHUB_REFRESH / packageListLength
 			# queue gets STOP and REFRESH commands or priority package name
 			# empty queue signals it's time for a background update
 			# queue timeout is used to pace background updates
@@ -2194,85 +2107,68 @@ class UpdateGitHubVersionClass (threading.Thread):
 			if command == 'STOP' or self.threadRunning == False:
 				return
 
+			doUpdate = False
+
 			# the REFRESH command triggers a refresh of all pachage Git Hub versions
 			if command == 'REFRESH':
 				gitHubVersionPackageIndex = 0
 				# hold off other processing until refresh is complete
 				WaitForGitHubVersions = True
-				fastRefresh = True		# guarantee at least one pass even if auto downloads are off
+				forcedRefresh = True		# guarantee at least one pass even if auto downloads are off
 			# if GUI is requesting a refresh of all package versions, trigger a one-time refresh (same as REFRESH command)
 			# unlike REFRESH, other processing is NOT held off during this refresh
 			elif command == 'ALL':
 				DbusIf.SetGuiEditAction ('')
 				# if a recent refresh is still in progress, don't start another
-				if not fastRefresh:
+				if not forcedRefresh:
 					gitHubVersionPackageIndex = 0
-					fastRefresh = True
-					# if no refreshes in 2 minutes and if auto downloads is turned off
-					# clear old versions before filling in new values
-					# so stale versions are not shown in the GUI
-					if DbusIf.GetAutoDownloadMode () == AUTO_DOWNLOADS_OFF and time.time () > lastRefreshTime + 120:
-						DbusIf.LOCK ()
-						for package in PackageClass.PackageList:
-							package.SetGitHubVersion ("")
-						DbusIf.UNLOCK ()
+					forcedRefresh = True
 			# command contains a package name for priority update
 			elif command != "":
 				DbusIf.SetGuiEditAction ('')
-				priorityPackageName = command
+				packageName = command
 				DbusIf.LOCK ()
-				package = PackageClass.LocatePackage (priorityPackageName)
+				package = PackageClass.LocatePackage (packageName)
 				if package != None:
 					user = package.GitHubUser
 					branch = package.GitHubBranch
 					doUpdate = True
 				else:
-					doUpdate = False
+					logging.error ("can't fetch GitHub version - " + packageName + " not in package list")
 				DbusIf.UNLOCK ()
-				if doUpdate:
-					self.updateGitHubVersion (priorityPackageName, user, branch)
-					# skip background refresh if just did a priority update
-					continue
-				else:
-					logging.error ("can't fetch GitHub version - " + priorityPackageName + " not in package list")
 
-			DbusIf.LOCK ()
-			length = len (PackageClass.PackageList)
-			# empty package list - no refreshes possible
-			if length == 0:
+			doBackground = forcedRefresh or DbusIf.GetAutoDownloadMode () != AUTO_DOWNLOADS_OFF
+			# insure background updates will begin with fisrt package when the start again
+			if not doBackground:
 				gitHubVersionPackageIndex = 0
-				WaitForGitHubVersions = False
-				package = None
-			# reached end of list - all package Git Hub versions have been refreshed
-			# no refreshes possible
-			elif gitHubVersionPackageIndex >= length:
-				gitHubVersionPackageIndex = 0
-				# notify the main loop that all versions have been refreshed and
-				# download modes can now be changed if appropriate
-				WaitForGitHubVersions = False
-				fastRefresh = False
-				package = None
-			# select package to update
-			else:
-				package = PackageClass.PackageList[gitHubVersionPackageIndex]
-				gitHubVersionPackageIndex += 1
-
-			doUpdate = False
-			if package != None:
-				# do one background update
-				if fastRefresh or DbusIf.GetAutoDownloadMode () != AUTO_DOWNLOADS_OFF:
-					# save package info for update below
+			# no priority update - do background update
+			elif not doUpdate:
+				DbusIf.LOCK ()
+				packageListLength = len (PackageClass.PackageList)
+				# empty package list - no refreshes possible
+				if packageListLength == 0:
+					gitHubVersionPackageIndex = 0
+				# select package to update
+				elif gitHubVersionPackageIndex < packageListLength:
+					package = PackageClass.PackageList[gitHubVersionPackageIndex]
 					packageName = package.PackageName
 					user = package.GitHubUser
 					branch = package.GitHubBranch
 					doUpdate = True
-			DbusIf.UNLOCK ()
+					gitHubVersionPackageIndex += 1
+				# reached end of list - all package Git Hub versions have been refreshed
+				if gitHubVersionPackageIndex >= packageListLength:
+					gitHubVersionPackageIndex = 0
+					# notify the main loop that all versions have been refreshed and
+					# download modes can now be changed if appropriate
+					WaitForGitHubVersions = False
+					forcedRefresh = False
+				DbusIf.UNLOCK ()
 
 			# do the actual background update outsde the above LOCKED section
 			#	since the update requires internet access
 			if doUpdate:
 				self.updateGitHubVersion (packageName, user, branch)
-				lastRefreshTime = time.time ()
 		# end while self.threadRunning
 	# end UpdateGitHubVersion run ()
 # end UpdateGitHubVersionClass
@@ -2315,10 +2211,10 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 	# this method downloads a package from GitHub
 	# it is called from run() below
-	# also, download requests are pushed for automatic downloads from mainloop
+	#
+	# download requests are pushed for automatic downloads from mainloop
 	# and also for a manual download triggered from the GUI
-	# statusMethod provides text status to the caller
-	# callBack provides notificaiton of completion (or error)
+	#
 	# automatic downloads that fail are logged but otherwise not reported
 
 	def GitHubDownload (self, packageName= None, source=None):
@@ -2581,8 +2477,18 @@ class InstallPackagesClass (threading.Thread):
 	# the operation can take many seconds
 	# 	i.e., the time it takes to run the package's setup script
 	#	do not call from a thread that should not block
+	#
+	# uninstalling SetupHelper is a special case since that action will end PackageManager
+	#	so it is deferred until mainLoop detects the request and exits to main
+	#	where the actual uninstall occurs
 
 	def InstallPackage ( self, packageName=None, source=None , direction='install' ):
+
+		global SetupHelperUninstall
+		
+		if packageName == "SetupHelper" and direction == 'uninstall':
+			SetupHelperUninstall = True
+			return
 
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ()
@@ -2605,6 +2511,7 @@ class InstallPackagesClass (threading.Thread):
 		if not os.path.isdir (packageDir):
 			logging.error ("InstallPackage - no package directory " + packageName)
 			package.InstallPending = False
+			package.UpdateVersionsAndFlags ()
 			DbusIf.UNLOCK ()
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
@@ -2626,6 +2533,7 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			package.InstallPending = False
+			package.UpdateVersionsAndFlags ()
 			DbusIf.UNLOCK ()
 			return
 
@@ -2634,10 +2542,18 @@ class InstallPackagesClass (threading.Thread):
 		# provide an innitial status message for the action since it takes a while for PackageManager
 		#	to fill in EditStatus
 		# this provides immediate user feedback that the button press was detected
+		#
+		# SetupHelper is handled differentlly because it will restart PackageManager and will loose the
+		#	user prompt for GUI restart or reboot - so let setup script restart GUI or reboot as needed
+		#
 		DbusIf.UpdateStatus ( message=direction + "ing " + packageName,
 								where=sendStatusTo, logLevel=WARNING )
 		try:
-			proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
+			if packageName == "SetupHelper":
+				proc = subprocess.Popen ( [ setupFile, direction, 'auto' ],
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			else:
+				proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 			proc.wait()
 			stdout, stderr = proc.communicate ()
@@ -2749,6 +2665,7 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 
+		package.UpdateVersionsAndFlags ()
 		DbusIf.UNLOCK ()
 	# end InstallPackage ()
 
@@ -3400,59 +3317,98 @@ class MediaScanClass (threading.Thread):
 	# end run ()
 # end MediaScanClass
 
-global noActionCount
+
+# persistent storage for mainLoop
+packageScanComplete = False
+packageChecksSkipped = False
+packageIndex = 0
+noActionCount = 0
+lastAutoDownloadTime = 0.0
+downloadDelay = FAST_DOWNLOAD
+lastDownloadMode = AUTO_DOWNLOADS_OFF
+currentDownloadMode = AUTO_DOWNLOADS_OFF
+bootInstall = False
 
 def mainLoop():
 	global mainloop
-	global SystemReboot
-	global GuiRestart
-	global PackageIndex # initialized in main
 	global PushAction
-	global WaitForGitHubVersions  # initialized main and set in UpdateGitHubVersion 
-	global lastDownloadMode # initialized in main
-	global currentDownloadMode # initialized in main
-	global noActionCount
 	global MediaScan
-	global InitializePackageManager
-	global SetupHelperUninstall
-	global LastAutoDownloadTime # initialized in main
-	global PackageScanComplete # initialized in main
-	global downloadDelay # initialized in main
+	global SystemReboot	# initialized/used in main, set in mainloop, PushAction, InstallPackage
+	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
+	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop 
+	global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
+
+	global noActionCount
+	global packageScanComplete
+	global packageChecksSkipped
+	global packageIndex
+	global noActionCount
+	global lastAutoDownloadTime
+	global downloadDelay
+	global lastDownloadMode
+	global currentDownloadMode
+	global bootInstall
+
 	startTime = time.time()
 
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
+	#	or SetupHelper uninstall was deferred
 	# exit mainLoop and do uninstall in main, then reboot
 	# skip all processing below !
-	if MediaScan.AutoUninstall:
+	if MediaScan.AutoUninstall or SetupHelperUninstall:
+		DbusIf.UpdateStatus ( "uninstalling SetupHelper ...", where='PmStatus' )
+		DbusIf.UpdateStatus ( "uninstalling SetupHelper ...", where='Editor' )
 		mainloop.quit()
 		return False
-	SetupHelperUninstall = False
-	statusMessage = ""
-
-	# detect download mode changes and switch back to fast scan
-	lastDownloadMode = currentDownloadMode
-	currentDownloadMode = DbusIf.GetAutoDownloadMode ()
-	autoInstall = DbusIf.GetAutoInstall ()
-
-	# check to see if reinstallMods is running
-	#	to prevent conflicts with it's installs and those done here
-	proc = subprocess.Popen ( "pgrep reinstallMods", shell=True,
-			stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-	proc.wait()
-	stdout, stderr = proc.communicate ()
-	# convert from binary to string
-	stdout = stdout.decode ().strip ()
-	if stdout == "":
-		waitForReinstall = False
-	else:
-		waitForReinstall = True
-
-	# setup status messages
 	idleMessage = ""
 	actionMessage = ""
 	statusMessage = ""
+
+	# if boot-time reinstall has been requiested by reinstallMods
+	#	override modes and initiate auto install of all packages
+	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
+	if os.path.exists (bootReinstallFile):
+		# beginning of boot install - reset package index to insure a complete scan
+		if not bootInstall:
+			packageScanComplete = False
+			packageIndex = 0
+			logging.warning ("starting boot-time reinstall")
+		bootInstall = True
+		currentDownloadMode = AUTO_DOWNLOADS_OFF
+		lastDownloadMode = AUTO_DOWNLOADS_OFF
+		autoInstall = True
+	# not doing boot install - use dbus values
+	else:
+		# save mode before chaning so changes can be detected below
+		lastDownloadMode = currentDownloadMode
+		currentDownloadMode = DbusIf.GetAutoDownloadMode ()
+		autoInstall = DbusIf.GetAutoInstall ()
+
+	# hold off processing if reinstallMods is running to prevent conflicts
+	#	probalby never happen but just in case
+	if os.path.exists ("/etc/venus/REINSTALL_MODS_RUNNING"):
+		waitForReinstall = True
+	else:
+		waitForReinstall = False
+
+
+	# hold off all package processing if package list is empty
+	# or until the GitHub versions have been updated
+	#	and reinstallMods has finished reinstalling packages after Venus OS update
+	if len (PackageClass.PackageList) == 0:
+		holdOffScan = True
+		emptyPackageList = True
+	else:
+		emptyPackageList = False
+		holdOffScan = waitForReinstall or ( WaitForGitHubVersions and not bootInstall )
+
+	# setup idle messages
+	if emptyPackageList:
+		idleMessage = "no active packages"
 	# no updates has highest prioroity
-	if currentDownloadMode == AUTO_DOWNLOADS_OFF and not autoInstall:
+	elif bootInstall:
+		idleMessage = "reinstalling packages after firmware update"
+	elif currentDownloadMode == AUTO_DOWNLOADS_OFF and not autoInstall:
 		idleMessage = ""
 	# hold-off of processing has next highest priority
 	elif WaitForGitHubVersions:
@@ -3467,81 +3423,87 @@ def mainLoop():
 	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and not autoInstall:
 		idleMessage = "checking for downloads"
 
-	# hold off all package processing until the GitHub versions have been updated
-	#	and reinstallMods has finished reinstalling packages after Venus OS update
-	if waitForReinstall or WaitForGitHubVersions:
-		PackageScanComplete = False
-		PackageIndex = 0	# make sure new scan starts at beginning
-
-	# after a complete scan, change modes if appropirate
-	if PackageScanComplete:
-		# set GitHub download delay to background rate
-		downloadDelay = 600.0
-		if currentDownloadMode == ONE_DOWNLOAD:
-			DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
-		PackageScanComplete = False
-
-	if currentDownloadMode != lastDownloadMode:
-		# signal mode change to the GitHub threads
-		if currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF:
-			# reset index to start of package list when mode changes
-			PackageIndex = 0
-			PackageScanComplete = False
-			UpdateGitHubVersion.GitHubVersionQueue.put ('REFRESH')
-			downloadDelay = 2.0
-
-	PackageClass.AddStoredPackages ()
-
-	DbusIf.UpdateDefaultPackages ()
-
-	# process one package per pass of mainloop
-	DbusIf.LOCK ()	
-	packageListLength = len (PackageClass.PackageList)
-	if packageListLength > 0:
-		if PackageIndex >= packageListLength:
-			PackageIndex = 0
-			PackageScanComplete = True
-	else:
-		PackageIndex = 0
-		PackageScanComplete = False
-
 	# hold off other processing until boot package reinstall and Git Hub version refresh is complete
 	# this insures download checks are based on up to date Git Hub versions
 	# installs are also held off to prevent install of older version,
 	#	then another install of the more recent version
-	# waiting for reinstallMods to finish prevents conflicts between these two processes
-	if not waitForReinstall and not WaitForGitHubVersions:
-		package = PackageClass.PackageList [PackageIndex]
-		packageName = package.PackageName
-		PackageIndex += 1
 
-		package.UpdateFileFlagsAndVersions ()
+	# after a complete scan, change modes if appropirate
+	# packageScanComplete is true only if all needed operations have been queued
+	if packageScanComplete:
+		packageScanComplete = False
+		if not packageChecksSkipped:
+			# set GitHub download delay to background rate
+			downloadDelay = SLOW_DOWNLOAD
+			if currentDownloadMode == ONE_DOWNLOAD:
+				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
+
+			# end of boot install
+			if bootInstall:
+				logging.warning ("boot-time reinstall complete")
+				bootInstall = False
+				if os.path.exists (bootReinstallFile):
+					os.remove (bootReinstallFile)
+		packageChecksSkipped = False
+		
+
+	if holdOffScan:
+		# don't do anything yet but make sure new scan starts at beginning
+		packageScanComplete = False
+		packageIndex = 0
+		downloadDelay = FAST_DOWNLOAD
+	else:
+		# process one package per pass of mainloop
+		DbusIf.LOCK ()	
+		packageListLength = len (PackageClass.PackageList)
+		if packageIndex >= packageListLength:
+			packageIndex = 0
+			packageScanComplete = True
+
+		package = PackageClass.PackageList [packageIndex]
+		packageName = package.PackageName
+		packageIndex += 1
+
+		if currentDownloadMode != lastDownloadMode:
+			# signal mode change to the GitHub threads
+			if currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF:
+				# reset index to start of package list when mode changes
+				packageIndex = 0
+				packageScanComplete = False
+				WaitForGitHubVersions = True
+				UpdateGitHubVersion.GitHubVersionQueue.put ('REFRESH')
+				downloadDelay = FAST_DOWNLOAD
+
+		package.UpdateVersionsAndFlags ()
 		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
 
 		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
 					and DownloadGitHub.DownloadVersionCheck (package):
-			# don't allow install if download is needed
+			# don't allow install if download is needed - even if it has not started yet
 			packageOperationOk = False
 
-			timeToGo = downloadDelay + LastAutoDownloadTime - time.time()
+			timeToGo = downloadDelay + lastAutoDownloadTime - time.time()
 			# it's time - queue the download request
 			if timeToGo <= 0:
 				actionMessage = "downloading " + packageName + " ..."
 				PushAction ( command='download' + ':' + packageName, source='AUTO' )
-				LastAutoDownloadTime = time.time ()
+				lastAutoDownloadTime = time.time ()
 			# it's not time to download yet - update status message with countdown
-			if timeToGo > 90:
+			elif timeToGo > 90:
 				actionMessage = packageName + " download begins in " + "%0.1f minutes" % ( timeToGo / 60 )
 			elif  timeToGo > 1.0:
 				actionMessage = packageName + " download begins in " + "%0.0f seconds" % ( timeToGo )
 
 		# validate package for install
-		if packageOperationOk and package.FileSetOk and package.Incompatible == '':
+		#	ignore incompatible if running as a boot install
+		#		allows previous failures to be ignored and a fress install attempt made
+		if packageOperationOk and package.FileSetOk and ( package.Incompatible == '' or bootInstall ):
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
 			installOk = False
 
-			# check for one time install flag to force installation, overriding auto install conditions and DO_NOT_INSTALL flag - but DO check versions
+			# check for one time install flag to force installation, overriding auto install conditions
+			#	and DO_NOT_INSTALL flag - but DO check versions
 			if os.path.exists (oneTimeInstallFile):
 				if package.InstallVersionCheck ():
 					installOk = True
@@ -3553,22 +3515,28 @@ def mainLoop():
 
 			# auto install is enabled and it's OK to auto install this package
 			elif package.AutoInstallOk and package.InstallVersionCheck ():
-				if DbusIf.GetAutoInstall ():
+				if autoInstall:
 					installOk = True
 				else:
 					autoInstallFile = "/data/" + packageName + "/AUTO_INSTALL"
 					if os.path.exists (autoInstallFile):
 						installOk = True
-				
+			# package checks skipped - continue with current download update
+			if not packageOperationOk:
+				packageChecksSkipped = True
+	
+
 			if installOk:
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
-	# end if not WaitForGitHubVersions
+		DbusIf.UNLOCK ()
+	# end if not holdOffScan
 
 	# check all packages before looking for reboot or GUI restart
 	rebootNeeded = False
 	guiRestartNeeded = False
 	actionsPending = False
+	DbusIf.LOCK ()
 	for package in PackageClass.PackageList:
 		if package.DownloadPending or package.InstallPending:
 			actionsPending = True
@@ -3595,13 +3563,8 @@ def mainLoop():
 			# exit the main loop
 			mainloop.quit()
 			return False
-		if InitializePackageManager:
+		elif InitializePackageManager:
 			statusMessage = "restarting PackageManager ..."
-			# exit the main loop
-			mainloop.quit()
-			return False
-		if SetupHelperUninstall:
-			statusMessage = "uninstalling SetupHelper ..."
 			# exit the main loop
 			mainloop.quit()
 			return False
@@ -3635,10 +3598,11 @@ def mainLoop():
 	else:
 		DbusIf.UpdateStatus ( idleMessage, where='PmStatus' )
 
-	elapsedTime = time.time() - startTime
-	# enable the following line to report execution time of main loop
-	#print ("main loop time %3.3f mS" % ( elapsedTime * 1000 ))
-	# continue the main loop
+	# enable the following lines to report execution time of main loop
+	####endTime = time.time()
+	####print ("main loop time %3.1f mS" % ( (endTime - startTime) * 1000 ))
+
+	# to continue the main loop, must return True
 	return True
 
 
@@ -3661,7 +3625,7 @@ def	directUninstall (packageName):
 		pass
 
 
-# remove all packages found in /data
+# uninstall all packages found in /data
 # package must be a directory with a file named version
 # with the first character of that file 'v'
 # and an executale file named 'setup' must exist in the directory
@@ -3670,7 +3634,7 @@ def	directUninstall (packageName):
 # if found, returns true if it was found so it can be done later
 #	just before the program ends
 
-def removeAllPackages ():
+def uninstallAllPackages ():
 	deferredSetupHelperRemove = False
 	for path in os.listdir ("/data"):
 		packageDir = "/data/" + path
@@ -3702,26 +3666,16 @@ def removeAllPackages ():
 #
 def main():
 	global mainloop
-	global SystemReboot
-	global GuiRestart
-	global PackageIndex
-	global noActionCount
-	global InitializePackageManager
+	global SystemReboot	# initialized/used in main, set in mainloop, PushAction, InstallPackage
+	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
+	global InitializePackageManager # initialized in main, set in PushAction, used in mainloop
 	global SetupHelperUninstall
-	global LastAutoDownloadTime
-	global PackageScanComplete
-	global WaitForGitHubVersions  # set in UpdateGitHubVersion used in mainLoop
-	global downloadDelay
-	PackageScanComplete = False
+	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop
 	SystemReboot = False
 	GuiRestart = False
 	InitializePackageManager = False
 	SetupHelperUninstall = False
-	PackageIndex = 0
-	noActionCount = 0
-	LastAutoDownloadTime = 0.0
 	WaitForGitHubVersions = True	# hold off package processing until first GitHub version refresh pass
-	downloadDelay = 600.0
 
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )
@@ -3798,15 +3752,9 @@ def main():
 	global DbusIf
 	DbusIf = DbusIfClass ()
 	
+	# populate local package information from dbus settings
+	#	this creates package class instances
 	PackageClass.AddPackagesFromDbus ()
-
-	DbusIf.TransferOldDbusPackageInfo ()
-	
-	# clean up package list - eliminate any packages if its name is not valid
-	#	invalid package names may be left over from a previous version
-	for (index, package) in enumerate (PackageClass.PackageList):
-		if not PackageClass.PackageNameValid (package.PackageName):
-			PackageClass.RemovePackage (packageIndex=index)
 
 	global UpdateGitHubVersion
 	UpdateGitHubVersion = UpdateGitHubVersionClass ()
@@ -3829,15 +3777,48 @@ def main():
 
 	DbusIf.ReadDefaultPackagelist ()
 
-	PackageClass.AddStoredPackages (doAll=True)
+	PackageClass.AddStoredPackages ()
 	
-	DbusIf.UpdateDefaultPackages (alwaysRun = True)
+	# make a pass through the package list to:
+	#	update local versions and flags
+	#		( this is needed anyway before mainLoop so do it here while we have the package )
+	#	remove any packages if its name is not valid
+	#		(invalid package names may be left over from a previous version)
+	# 	remove any packages with their forced removal flag is set
+	#		package conflicts are sometimes resolved by uninstalling a package
+	#			(done in their setup script eg GuiMods force removes GeneratorConnector)
+	# could be time-consuming (uninstall, removal and checking all packages)
+	# lock is really unecessary since threads aren't running yet
 
 	DbusIf.LOCK ()
-	for package in PackageClass.PackageList:
-		package.MoveFlagFiles ()
-		package.UpdateFileFlagsAndVersions ()
+	for (index, package) in enumerate (PackageClass.PackageList):
+		packageName = package.PackageName
+		# valid package name
+		if PackageClass.PackageNameValid (packageName):
+
+			package.UpdateVersionsAndFlags ()
+
+			# do not force remove SetupHelper !!!!!
+			if packageName != "SetupHelper":
+				continue
+			flagFile = "/data/setupOptions/" + packageName + "/FORCE_REMOVE" 
+			# no forced removal flag
+			if not os.path.exists (flagFile):
+				continue
+			# need to force remove but package is installed so uninstall first
+			if package.InstalledVersion != "":
+				directUninstall (packageName)
+			# now remove the package
+			PackageClass.RemovePackage (packageIndex=index)
+			os.remove (flagFile)
+		# invalid package name (including a null string) so remove the package from the list
+		else:
+			PackageClass.RemovePackage (packageIndex=index)
 	DbusIf.UNLOCK ()
+
+	DbusIf.UpdateDefaultPackages ()
+
+	#### start threads - must use LOCK / UNLOCK to protect access to DbusIf from here on
 
 	UpdateGitHubVersion.start()
 	DownloadGitHub.start()
@@ -3845,19 +3826,14 @@ def main():
 	AddRemove.start()
 	MediaScan.start ()
 
-	global	lastDownloadMode
-	global	currentDownloadMode
-	lastDownloadMode = AUTO_DOWNLOADS_OFF
-	currentDownloadMode = AUTO_DOWNLOADS_OFF
-
-	# call the main loop - every 2 seconds
+	# call the main loop - every 1 second
 	# this section of code loops until mainloop quits
-	GLib.timeout_add(2000, mainLoop)
+	GLib.timeout_add(1000, mainLoop)
 	mainloop = GLib.MainLoop()
 	mainloop.run()
 
 
-	# this section of code runs only after the mainloop quits
+	#### this section of code runs only after the mainloop quits (LOCK / UNLOCK no longer necessary)
 
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
 	if MediaScan.AutoUninstall:
@@ -3866,9 +3842,12 @@ def main():
 		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
 
 
-		# remove all pacakges - returns True if SetupHelper was found and skipped
+		# uninstall all pacakges - returns True if SetupHelper was found and skipped
 		#	 so it can be done later
-		SetupHelperUninstall = removeAllPackages ()
+		#	note: SetupHelperUninstall may have been set when an uninstall command
+		#		was received from the GUI so don't clear it here.
+		if uninstallAllPackages ():
+			SetupHelperUninstall = True
 
 	elif SystemReboot:
 		DbusIf.UpdateStatus ( message="REBOOTING ...", where='PmStatus')
@@ -3901,7 +3880,7 @@ def main():
 
 	DbusIf.RemoveDbusService ()
 
-	# reboot with SetupHelper uninstall
+	# SetupHelper uninstall with delayed reboot
 	if SetupHelperUninstall:
 		try:
 			logging.critical (">>>> uninstalling SetupHelper and exiting")
@@ -3923,7 +3902,7 @@ def main():
 
 	if SystemReboot or SetupHelperUninstall:
 		# insure the package manager service doesn't restart when we exit
-		#	it will start up again after the reboot
+		#	it will start up again after the reboot if it is still installed
 		try:
 			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:

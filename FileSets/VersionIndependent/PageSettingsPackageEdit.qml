@@ -155,7 +155,7 @@ MbPage {
         MbEditBox
         {
             id: packageNameBox
-            description: qsTr ("Package name")
+            description: qsTr ("Package name and versions")
             maximumLength: 30
             item.bind: getSettingsBind ("PackageName")
             overwriteMode: false
@@ -164,7 +164,7 @@ MbPage {
         }
         MbRowSmall
         {
-            description: qsTr ("Versions")
+            description: " "
             height: 25
             Text
             {
@@ -176,7 +176,7 @@ MbPage {
             {
                 id: gitHubVersion
                 item { bind: getServiceBind("GitHubVersion") }
-                height: 25; width: 80
+                height: 25; width: 105
             }
             Text
             {
@@ -188,7 +188,7 @@ MbPage {
             {
                 id: packageVersion
                 item { bind: getServiceBind("PackageVersion") }
-                height: 25; width: 80
+                height: 25; width: 105
             }
             Text
             {
@@ -230,7 +230,7 @@ MbPage {
                 id: installedVersion
                 item { bind: getServiceBind("InstalledVersion") }
                 height: 25
-                width: incompatible ? 0 : 80
+                width: incompatible ? 0 : 105
             }
         }
         MbEditBox

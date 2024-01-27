@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # LogHandler for SetupHelper
 # contains a functions and variables necessare=y to write to and output logs
 #
@@ -8,12 +10,6 @@
 # there may be two logs associated with a setup script:
 # the script helper log and optionally the package log
 # logs are written to both places and additionally the command line if not running from reinstallMods
-
-# check to prevent sourcing this file again
-if [[ $logHandlerSourced == "yes" ]] ; then
-	return
-fi
-logHandlerSourced="yes"
 
 setupLogFile="/var/log/SetupHelper"
 

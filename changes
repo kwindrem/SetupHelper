@@ -1,4 +1,14 @@
-v5.18:
+v6.0:
+	PackageManager: clear no file set flag when stored version changes
+	add automated install, uninstall based on file, services and dBuse Settings lists
+	moved package reinstall after Venus OS update to PackageManager
+		only SetupHelper installed by reinstallMods now
+	the unix patch facility is available for modifying replacement files
+		this may not work for version-dependenet files however
+	"helper resources" can now reside in the package directory in addition to
+		SetupHelper. The code checks for the newest copy and uses that
+
+v5.18
 	fixed: installs fail on CCGX (resize2fs failure)
 
 v5.17:

@@ -16,7 +16,23 @@ The SetupHelper package provides:
 			PackageManager
 			gui
 
-SetupHelper is also required for other packages
+NOTE: SetupHelper v6.0 changes significantly from prevous versions
+	providing more automatic installation and installation of files, services and dBus Settings
+
+	v6.0 will install older packages but package setup scripts that utilize the new
+	automated install and uninstall functions will not work with SetupHelper v5.x
+	
+	For this reason, packages that rely on the v6.0 setup helper functionality
+	should also include a copy of the HelperResources found in SetupHelper v6.0 and newer
+	
+	Sourceing these helpers has also changed in v6.0. But there is also a backward
+	compatible hook for older packages.
+	
+	The new sourcing mechanism can be found in the file SetupHelper/HelperResources/forSetupScript.
+
+SetupHelper may also required for other packages
+	although packages are being rewritten to contain helper files
+	to be independent of SetupHelper.
 	SetupHelper includes utilities used by these packages
 	and must be installed BEFORE running the other package setup scripts
 

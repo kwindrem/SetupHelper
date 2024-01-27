@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # DbusSettingsResources for SetupHelper
 #
 # contains a functions and variables necessary to access dbus Settings parameters
@@ -7,15 +9,6 @@
 # need to make settings changes
 # These functions check to see if the settings system is operational and defer
 # the set/create/remove activity so the calling script may continue
-
-# check to prevent sourcing this file again
-if [[ $dbusSettingsResourcesSourced == "yes" ]] ; then
-	return
-fi
-dbusSettingsResourcesSourced="yes"
-
-source "/data/SetupHelper/EssentialResources"
-source "/data/SetupHelper/LogHandler"
 
 # dbus Settings funcitons
 # These functions encapsulate an interface to dbus Settings
@@ -95,6 +88,47 @@ updateDbusRealSetting ()
 
     dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null
 }
+
+
+
+# addAllDbusSettings adds settings from DbusSettingsList in the package directory
+# the format of each line is:
+# {"path":"/Settings/GuiMods/ShortenTankNames", "default":1, "min":0, "max":1}
+# min and max are optional
+
+addAllDbusSettings ()
+{
+	local settings
+
+	if [ -f "$scriptDir/DbusSettingsList" ]; then
+		logMessage "updating dbus Settings"
+		while read -r line || [[ -n "$line" ]]; do
+			settings+="$line, "
+		done < "$scriptDir/DbusSettingsList"
+
+		dbus -y com.victronenergy.settings / AddSettings "%[ $settings  ]" &> /dev/null
+	fi
+}
+
+# same as above but removes them
+# typically settings are retained when removing a package so
+# the developer must make this call specifically in the setup script's UNINSTALL section
+# if they wish to remove the settings
+
+removeAllDbusSettings ()
+{
+	local settings
+
+	if [ -f "$scriptDir/DbusSettingsList" ]; then
+		logMessage "removing dbus Settings"
+		while read -r line || [[ -n "$line" ]]; do
+				settings+=$( echo $line | awk -F[:,] '{print $2, ","}' )
+		done < "$scriptDir/DbusSettingsList"
+
+		dbus -y com.victronenergy.settings / RemoveSettings "%[ $settings  ]"
+	fi
+}
+
 
 
 # removeDbusSettings removes the setting from dbus Settings

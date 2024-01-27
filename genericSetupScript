@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# this script will install any package that can use
+# the automated install and uninstall mechanisms provided by SetupHelper
+# that is, no custom prompting for command line exection
+#	and no custom installation such as editing replacement files
+#
+# link the package's setup script to this one:
+#	ln -s /data/SetupHelper/genericSetupScript /data/<package name>/setup
+
+# tell CommonResources to:
+#	prompt for install/uninstall
+#	auto install or auto uninstall
+#	then exit
+#	CommonResources will NOT return here !
+
+standardPromptAndActions='yes'
+
+#### following lines incorporate helper resources into this script
+pkgDir=$( dirname $0 )
+pkgName=$( basename $pkgDir )
+pkgRoot=$( dirname $pkgDir )
+if [ -e "$pkgDir/HelperResources/IncludeHelpers" ]; then
+	source "$pkgDir/HelperResources/IncludeHelpers"
+elif [ -e "$pkgRoot/SetupHelper/HelperResources/IncludeHelpers" ]; then
+	source "$pkgRoot/SetupHelper/HelperResources/IncludeHelpers"
+else
+	echo "$pkgName: helper files not found - can't continue" | tee -a "/data/log/SetupHelper"
+	exit 1
+fi
+#### end of lines to include helper resources
+
+# never returns from CommonResources !

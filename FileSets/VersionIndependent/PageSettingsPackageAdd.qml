@@ -27,6 +27,7 @@ MbPage {
     property VBusItem editGitHubUser: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubUser" ) }
     property VBusItem editGitHubBranch: VBusItem { bind: Utils.path ( settingsPrefix, "/Edit/", "GitHubBranch" ) }
 	property bool addPending: false
+	property bool entryValid: editPackageName.value != "" && editGitHubUser.value != "" && editGitHubBranch.value != ""
 
 	Component.onCompleted:
 	{
@@ -55,7 +56,10 @@ MbPage {
 	function updateEdit ()
 	{
 		bindPrefix = Utils.path(servicePrefix, "/Default/", defaultIndex )
-		editPackageName.setValue ( defaultPackageName.valid ? defaultPackageName.value : "??" )
+		var defaultName = defaultPackageName.valid ? defaultPackageName.value : "??"
+		if (defaultName == "new")
+			defaultName = ""
+		editPackageName.setValue ( defaultName )
 		editGitHubUser.setValue ( defaultGitHubUser.valid ? defaultGitHubUser.value : "??" )
 		editGitHubBranch.setValue ( defaultGitHubBranch.valid ? defaultGitHubBranch.value : "??" )
 		editStatus.setValue ("")
@@ -76,10 +80,13 @@ MbPage {
 	}
     function confirm ()
     {
-		addPending = true
-		// provide local confirmation of action - takes PackageManager too long
-		editStatus.setValue ( "adding " + packageName)
-		editActionItem.setValue ('add:' + packageName)
+		if (entryValid)
+		{
+			addPending = true
+			// provide local confirmation of action - takes PackageManager too long
+			editStatus.setValue ( "adding " + packageName)
+			editActionItem.setValue ('add:' + packageName)
+		}
     }
 	model: VisibleItemModel
     {
@@ -94,7 +101,7 @@ MbPage {
         }
         MbEditBox
         {
-            id: gitHubUser
+            id: gitHubUserBox
             description: qsTr ("GitHub user")
             maximumLength: 20
             item.bind: getSettingsBind ("GitHubUser")
@@ -103,7 +110,7 @@ MbPage {
         }
         MbEditBox
         {
-            id: gitHubBranch
+            id: gitHubBranchBox
             description: qsTr ("GitHub branch or tag")
             maximumLength: 20
             item.bind: getSettingsBind ("GitHubBranch")
@@ -127,7 +134,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: editAction == ''
+            show: editAction == '' && entryValid
             writeAccessLevel: User.AccessInstaller
         }
         Text
@@ -141,8 +148,16 @@ MbPage {
             {
 				if (editStatus.valid && editStatus.value != "")
 					return editStatus.value
-				else
+				else if (entryValid)
 					return ("add " + packageName + " ?")
+				else if (editPackageName.value == "")
+					return ("enter package name")
+				else if (editGitHubUser.value == "")
+					return ("enter GitHub user")
+				else if (editGitHubBranch.value == "")
+					return ("enter GitHub branch")
+				else
+					return ("")
 			}
             color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
         }

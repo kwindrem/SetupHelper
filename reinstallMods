@@ -1,97 +1,81 @@
 #!/bin/sh
 
-# reinstalMods will reinstall customizations to Venus following a software update
+# reinstalMods will reinstall SetupHelper if a Venus OS update removes it
 #
-# some setup scripts access dbus Settings which are not up early in the boot process
-# therefore, this script is run as a background task and waits for dbus Settings
+# other packages will then be reinstalled by PackageManager
 #
 
-setupHelperDir="/data/SetupHelper"
-source "$setupHelperDir/EssentialResources"
-source "$scriptDir/LogHandler"
+scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
+packageBase="$( dirname $scriptDir )"
+helperFilesDir="$scriptDir/HelperResources"
+source "$helperFilesDir/EssentialResources"
+source "$helperFilesDir/LogHandler"
 
 # disable outputting log messages to console
 runningAtBoot=true
 
-if [ ! -f "$reinstallScriptsList" ] ; then
-    logMessage "$reinstallScriptsList file not found"
-    exit
-fi
-
 logMessage "reinstallMods starting"
 
-# read lines from script list file specified above
-# and call each script
+# prevent PackageManager from conflicting with this script
+rm -f "/etc/venus/REINSTALL_PACKAGES"
+
+# call setup script only if SetupHelper not currently installed and was not manually uninstalled
 rebootNeeded=false
-guiRestartNeeded=false
-okToInstall=false
+if [ -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL" ]; then
+	logMessage "CRITICAL: SetupHelper was manually uninstalled therefore it was not reinstalled"
+	logMessage "    other packages will NOT BE REINSTALLED either !!!!!"
+	exit
+fi
 
-while read -u 9 line ; do
-    # ignore blank and comment lines
-    if [ ! -z "$line" ] && ! [[ "$line" == \#* ]]; then
-        # strip command parameters and add new ones here
-        command=$(awk '{print var $1}' <<< $line)
-		scriptDir=$(dirname $command)
-		packageName=$(basename $scriptDir)
-		if [ ! -f $command ] ; then
-			logMessage "Error: $packageName setup script not found - skipping reinstall"
-			continue
-		fi
+# SetupHelper not installed, attempt to do so
+if ! [ -f "$installedVersionFile" ]; then
+	command="$scriptDir/setup"
+	if [ ! -f $command ] ; then
+		logMessage "ERROR: SetupHelper setup script not found - can't reinstall"
+		exit
+	fi
 
-		packageVersionFile="$scriptDir/version"
-		installedVersionFile="$installedVersionPrefix$packageName"
-		doReinstall=false
-		# call setup script if versions are different or package not currently installed
-		if [ -f "$installedVersionFile" ]; then
-			installedVersion=$(cat "$installedVersionFile")
-		else
-			installedVersion=""
-			doReinstall=true
-		fi
-		if [ -f "$packageVersionFile" ]; then
-			packageVersion=$(cat "$packageVersionFile")
-		else
-			packageVersion=""
-		fi
-		if [ "$packageVersion" != "$installedVersion" ]; then
-			doReinstall=true
-		fi
+	# flag to prevent PackageManager from conflicting with installing SetupHelper here
+	#	probably will never happen but just in case
+	touch "/etc/venus/REINSTALL_MODS_RUNNING"
 
-        if $doReinstall ; then
-			# wait until dbus settings and GUI are active before calling setup script
-			#	this is done before first reinstall so PackageManager isn't held off if there are no reinstalls
-			while ! $okToInstall ; do
-				if [ $(dbus -y | grep -c "com.victronenergy.settings") == 0 ]; then
-					logMessage "waiting for dBus settings"
-					sleep 2
-				else
-					okToInstall=true
-				fi
-			done
+	# run setup script
+	$command reinstall auto deferReboot
+	returnCode=$?
 
-			# run setup script
-			fullCommand=$(echo "$command reinstall auto deferReboot deferGuiRestart")
-			$fullCommand
-			returnCode=$?
-			if (( $returnCode == $EXIT_REBOOT )) ; then
-				logMessage "$packageName reinstall requested reboot"
-				rebootNeeded=true
-			elif (( $returnCode == $EXIT_RESTART_GUI )) ; then
-				logMessage "$packageName reinstall requested GUI restart"
-				guiRestartNeeded=true
-			fi
-		fi
-    fi
-done 9< "$reinstallScriptsList"
+	rm -f "/etc/venus/REINSTALL_MODS_RUNNING"
 
-logMessage "reinstallMods complete"
+	case $returnCode in
+		$EXIT_SUCCESS )
+			;;
+		$EXIT_REBOOT )
+			rebootNeeded=true
+			;;
+		$EXIT_NO_GUI_V1 )
+			logMessage "ERROR: SetupHelper install failed - no GUI v1 installed"
+			exit
+			;;
+		$EXIT_ROOT_FULL )
+			logMessage "ERROR: SetupHelper install failed - no room in root partition"
+			exit
+			;;
+		*)
+			logMessage "ERROR: SetupHelper install failed - reason $returnCode"
+			exit
+			;;
+	esac
+	logMessage "SetupHelper installed"
+else
+	logMessage "SetupHelper already installed"
+fi
 
-# reboot or restart GUI now if any script reboots were indicated
+# tell PackageManager to reinstall the remaining packages"
+logMessage "PackageManager will reinstall remaining packages"
+touch "/etc/venus/REINSTALL_PACKAGES"
+
+# reboot now if signaled from setup script
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
-elif $guiRestartNeeded ; then
-    logMessage "restarting GUI"
-    restartGuiService
 fi
 

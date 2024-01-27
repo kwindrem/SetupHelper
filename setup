@@ -1,149 +1,35 @@
 #!/bin/bash
 
-# this script sets up the SetupHelper service and other resources associated with package updates
-# This service provides automatic and manual updates for Venus modificaiton packages
+# SetupHelper provides a set of utilities used by other packages to streamline installing and removing packages
+#	and facilitates reinstallation following a Venus OS update
+# package setup scripts can be run from the command line for manual installation and uninstallation,
+#	and in some cases inputing configuration options
 #
+# SetupHelper includes PackageManager which manages package updates from GitHub
+# 	as well as package installation an uninstallation from the main GUI
+#
+# this setup script does NOT use version-dependent file sets
+# 	rather it makes modifications as part of this script
+#	so that updates are not required when Venus OS versions are added
 
-#### following lines incorporate SetupHelper utilities into this script
-# Refer to the SetupHelper ReadMe file for details.
+# tell CommonResources to:
+#	prompt for install/uninstall
+#	auto install or auto uninstall
+#	then exit
+#	CommonResources will NOT return here !
 
-source "/data/SetupHelper/CommonResources"
+standardPromptAndActions='yes'
 
-#### end of lines to include SetupHelper
-
-# remove settings that are no longer used
-
-function cleanup ()
-{
-    # cleanup from older versions
-    restoreActiveFile "$qmlDir/PageSettingsPackageControl.qml"
-
-    dbus-send --system --print-reply=literal --dest=com.victronenergy.settings /Settings/GuiMods/GitHubAutoUpdate\
-                com.victronenergy.BusItem.GetValue &> /dev/null
-    if (( $? == 0 )); then
-            removeDbusSettings /Settings/GuiMods/PackageVersions/GeneratorConnector /Settings/GuiMods/PackageVersions/GuiMods\
-								/Settings/GuiMods/PackageVersions/GuiMods /Settings/GuiMods/PackageVersions/RpiDisplaySetup\
-								/Settings/GuiMods/PackageVersions/RpiGpioSetup /Settings/GuiMods/PackageVersions/RpiTemp\
-								/Settings/GuiMods/PackageVersions/SetupHelper /Settings/GuiMods/PackageVersions/TankRepeater,\
-								/Settings/GuiMods/PackageVersions/VeCanSetup /Settings/GuiMods/PackageVersions/ShutdownMonitor\
-								/Settings/GuiMods/CheckingPackage /Settings/GuiMods/GitHubAutoUpdate > /dev/null
-			removeDbusSettings	/Settings/PackageVersion/Count  /Settings/PackageVersion/New/GitHubUser \
-								/Settings/PackageVersion/New/GitHubBranch  /Settings/PackageVersion/New/InstalledVersion \
-								/Settings/PackageVersion/New/PackageName  /Settings/PackageVersion/New/PackageVersion \
-								/Settings/PackageVersion/GitHubAutoUpdate  /Settings/PackageVersion/EditAction \
-								/Settings/PackageVersion/CheckingPackage  > /dev/null
-    fi
-}
-
-
-#### running manually and OK to proceed - prompt for input
-if [ $scriptAction == 'NONE' ] ; then
-    # create dbus Settings if they haven't been set previously
-    # if one setting exists, assume they are all there
-    # NOTE: if new settings are added in the future, change test for that one
-    # to avoid creating that new parameter !!!!
-    
-    # display initial message
-    echo
-    echo "This package provides support functions and utilities for Venus modification packages"
-    echo "Packages are automatically reinstalled following a Venus OS update"
-    echo "All actions are controlled via /Settings/PackageMonitor in the GUI"
-    echo "  Packages may be automatically updated from GitHub or a USB stick"
-    echo "  Previously uninstalled packages can also be downloaded an installed"
-    echo
-
-    standardActionPrompt
+#### following lines incorporate helper resources into this script
+pkgDir=$( dirname $0 )
+pkgName=$( basename $pkgDir )
+pkgRoot=$( dirname $pkgDir )
+if [ -e "$pkgDir/HelperResources/IncludeHelpers" ]; then
+	source "$pkgDir/HelperResources/IncludeHelpers"
+elif [ -e "$pkgRoot/SetupHelper/HelperResources/IncludeHelpers" ]; then
+	source "$pkgRoot/SetupHelper/HelperResources/IncludeHelpers"
+else
+	echo "$pkgName: helper resources not found - can't continue" | tee -a "/data/log/SetupHelper"
+	exit 1
 fi
-
-if [ $scriptAction == 'INSTALL' ] ; then
-	# modify PageSettings here so SetupHelper is independent of Venus OS verison
-	origFile=""
-	if [ -f "$qmlDir/PageSettings.qml.orig" ]; then
-		lineCount=$(wc "$qmlDir/PageSettings.qml.orig" | awk '{print $1}')
-		if (( $lineCount > 50 )); then
-			origFile="$qmlDir/PageSettings.qml.orig"
-		fi
-	elif [ -z "$origFile" ]; then
-		lineCount=$(wc "$qmlDir/PageSettings.qml" | awk '{print $1}')
-		if (( $lineCount > 50 )); then
-			origFile="$qmlDir/PageSettings.qml"
-		fi
-	fi
-	if [ -z "$origFile" ]; then
-		logMessage "ERROR: PageSettings.qml not found - can't continue"
-		exit $EXIT_ERROR
-	elif (( $(grep -c "PackageManager" $origFile) > 0)); then
-		logMessage "WARNING: PageSettings.qml already modified for PackageManager -- skipping that modification"
-	else
-		rm -f "/var/volatile/tmp/PageSettings.qml"
-		echo "//////// modified to insert PackageManager menu" > "/var/volatile/tmp/PageSettings.qml"
-		# find line with second to last }
-		insertBefore=$(awk '{print NR  " " $s}' "$origFile" | grep '}' | tail -2 | head -n 1 | awk '{print $1}')
-		((insertBefore -= 1))
-		if (( $insertBefore < 10 )); then
-			logMessage "ERROR: PageSettings.qml could not be modified - can't continue"
-			exit $EXIT_ERROR
-		fi
-		# include all lines before that one
-		head -n $insertBefore $origFile >> "/var/volatile/tmp/PageSettings.qml"
-		# file with PackageManager menu code includes the last two }
-		cat "$pkgFileSets/PackageManagerMenu.txt" >> "/var/volatile/tmp/PageSettings.qml"
-		updateActiveFile "/var/volatile/tmp/PageSettings.qml" "$qmlDir/PageSettings.qml"
-		rm -f "/var/volatile/tmp/PageSettings.qml"
-	fi
-
-    updateActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
-    updateActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
-    updateActiveFile "$qmlDir/PageSettingsAddPackageList.qml"
-    updateActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
-    updateActiveFile "$qmlDir/PageSettingsPmBackup.qml"
-    updateActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
-    updateActiveFile "$qmlDir/PageSettingsPackageManager.qml"
-    updateActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
-    updateActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
-
-
-	# revert to VisualItemModel if before v3.00~14 (v3.00~14 uses VisibleItemModel)
-	versionStringToNumber "v3.00~14"
-	if (( $venusVersionNumber < $versionNumber )); then
-		logMessage "replacing VisibleItemModel with VisualItemModel"
-		fileList="$qmlDir/PageSettingsPackageManager.qml"
-		fileList+=" $qmlDir/PageSettingsPackageVersions.qml"
-		fileList+=" $qmlDir/PageSettingsPackageEdit.qml"
-		fileList+=" $qmlDir/PageSettingsAddPackageList.qml"
-		fileList+=" $qmlDir/PageSettingsPackageAdd.qml"
-		fileList+=" $qmlDir/PageSettingsPmBackup.qml"
-		fileList+=" $qmlDir/PageSettingsPmInitialize.qml"
-		for file in $fileList ; do
-			sed -i -e 's/VisibleItemModel/VisualItemModel/' "$file"
-		done
-	fi
-
-    installService PackageManager
-
-    cleanup
-fi
-
-if [ $scriptAction == 'UNINSTALL' ] ; then
-    restoreActiveFile "$qmlDir/PageSettings.qml"
-    restoreActiveFile "$qmlDir/PageSettingsPackageManager.qml"
-    restoreActiveFile "$qmlDir/PageSettingsPackageVersions.qml"
-    restoreActiveFile "$qmlDir/PageSettingsPackageEdit.qml"
-	restoreActiveFile "$qmlDir/PageSettingsAddPackageList.qml"
-	restoreActiveFile "$qmlDir/PageSettingsPackageAdd.qml"
-	restoreActiveFile "$qmlDir/PageSettingsPmBackup.qml"
-	restoreActiveFile "$qmlDir/PageSettingsPmInitialize.qml"
-    restoreActiveFile "$qmlDir/MbDisplayPackageVersion.qml"
-	restoreActiveFile "$qmlDir/MbDisplayDefaultPackage.qml"
-
-    removeService PackageManager
-
-    cleanup
-fi
-
-if $filesUpdated ; then
-    restartGui=true
-fi
-
-# thats all folks - SCRIPT EXITS INSIDE THE FUNCTION
-endScript
+#### end of lines to include helper resources

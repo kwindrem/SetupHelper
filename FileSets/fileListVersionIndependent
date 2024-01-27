@@ -1,0 +1,9 @@
+/opt/victronenergy/gui/qml/PageSettingsPackageManager.qml
+/opt/victronenergy/gui/qml/PageSettingsPackageVersions.qml
+/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml
+/opt/victronenergy/gui/qml/PageSettingsAddPackageList.qml
+/opt/victronenergy/gui/qml/PageSettingsPackageAdd.qml
+/opt/victronenergy/gui/qml/PageSettingsPmBackup.qml
+/opt/victronenergy/gui/qml/PageSettingsPmInitialize.qml
+/opt/victronenergy/gui/qml/MbDisplayPackageVersion.qml
+/opt/victronenergy/gui/qml/MbDisplayDefaultPackage.qml

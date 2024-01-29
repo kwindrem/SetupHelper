@@ -1241,7 +1241,9 @@ for package in $packageList; do
 			read -p "choose action from list above (u / p / d): " response
 			case $response in
 				[uU]*)
-					if (( $packageErrors != 0 )); then
+					if (( $packageErrors == 0 )); then
+						endAction='update'
+					else
 						echo
 						if yesNoPrompt "$package has errors - update anyway (y/n)? " ;then
 							logMessage "updating $package (with errors)"

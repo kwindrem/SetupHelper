@@ -1,3 +1,6 @@
+v6.1:
+	fixed: white screen for VenusOs prior to v3.00
+
 v6.0:
 	PackageManager: clear no file set flag when stored version changes
 	add automated install, uninstall based on file, services and dBuse Settings lists

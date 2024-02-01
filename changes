@@ -1,3 +1,6 @@
+v6.3:
+	fixed: removing active pachage freezes PackageManager
+
 v6.2:
 	fixed: repeaded PackageManager install attempts when failure occurs
 

@@ -566,10 +566,14 @@ def VersionToNumber (version):
 	version = version.replace ("large","L")
 	numberParts = re.split ('\D+', version)
 	otherParts = re.split ('\d+', version)
-	# discard first element if it is blank
-	#	this can happen if the version string starts with alpha characters (like "v"
-	if numberParts [0] == "":
-		numberParts.pop(0)
+	# discard blank elements
+	#	this can happen if the version string starts with alpha characters (like "v")
+	# 	of if there are no numeric digits in the version string
+	try:
+		while numberParts [0] == "":
+			numberParts.pop(0)
+	except:
+		pass
 
 	numberPartsLength = len (numberParts)
 

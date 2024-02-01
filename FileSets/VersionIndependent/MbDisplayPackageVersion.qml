@@ -53,6 +53,8 @@ MbItem {
 			return qsTr ( "no space on /data partition" )
 		else if (incompatibleReason == 'GUI_V1_MISSING')
 			return qsTr ( "GUI v1 not installed" )
+		else if (incompatibleReason != '')
+			return qsTr ( "unknown error" )
 		else
 			return ""
 	}

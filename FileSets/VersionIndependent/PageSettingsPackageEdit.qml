@@ -208,8 +208,8 @@ MbPage {
 								return qsTr ( "no room on root partition" )
 						else if (incompatibleReason == 'DATA_FULL')
 							return qsTr ( "no room on data partition" )
-							else if (incompatibleReason == 'GUI_V1_MISSING')
-								return qsTr ( "GUI v1\nnot installed" )
+						else if (incompatibleReason == 'GUI_V1_MISSING')
+							return qsTr ( "GUI v1\nnot installed" )
 						else
 							return qsTr ("incompatible ???" ) // compatible for unknown reason
 					}

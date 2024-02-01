@@ -643,13 +643,14 @@ for package in $packageList; do
 
 	# relocate ALT_ORIG files to .../FileSets/AlternateOriginals
 	# do as a loop so each move is reported
+	# must have some alt orig files in FileSets for this to happen
 	altOrigFileDir="$workingFiles/AlternateOriginals"
-	if ! [ -d "$altOrigFileDir" ] && yesNoPrompt "no AlternateOriginal directory create and move (y/n)? " ; then
-		mkdir -p "$altOrigFileDir"
-	fi
-
-	if ! [ -d "$altOrigFileDir" ]; then
-		for file in $altOrigList ; do
+	oldAltOrigList=( $( ls "$workgingFiles"/*.ALT_ORIG 2> /dev/null) )
+	if ! [ -z "$oldAltOrigList" ] && yesNoPrompt "move alternate originals to AlternateOriginal directory (y/n)? " ; then
+		if ! [ -d "$altOrigFileDir" ]; then
+			mkdir -p "$altOrigFileDir"
+		fi
+		for file in ${altOrigList[@]} ; do
 			baseName=$(basename "$file")
 			if [ -f "$altOrigFileDir/$baseName" ]; then
 				logMessage "$package: $baseName exists in FileSets AND AlternateOriginals - not moved"
@@ -1173,6 +1174,7 @@ for package in $packageList; do
 		done
 	done
 	# update the package's copy of helper resources
+	updateHelperResources=false
 	if [ -f "$workingDirectory/HelperResources/version" ]; then
 		pkgHelperVersion=$( cat "$workingDirectory/HelperResources/version" )
 		versionStringToNumber $pkgHelperVersion
@@ -1185,7 +1187,6 @@ for package in $packageList; do
 		updateHelperResources=true
 	# if versions are the same, compare file mod dates
 	elif (( helperVersionNumber == pkgHelperVersionNumber )); then
-		updateHelperResources=false
 		for file in $( ls "$packageRoot/HelperResources" ); do
 			baseName=$( basename $file )
 			if [[ "$packageRoot/HelperResources/$baseName" -nt "$workingDirectory/HelperResources$( baseName $file )" ]]; then

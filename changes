@@ -1,3 +1,6 @@
+v6.2:
+	fixed: repeaded PackageManager install attempts when failure occurs
+
 v6.1:
 	fixed: white screen for VenusOs prior to v3.00
 

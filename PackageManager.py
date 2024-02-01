@@ -51,6 +51,7 @@ ONE_DOWNLOAD = 2
 #													'DATA_FULL' no room on /data partition to install package modificaitons
 #													'CMDLINE' setup must be run from command line
 #														currently only for Raspberry PI packages only
+#													'UNKNOWN' unknown error
 #
 #		for both Settings and the the dbus service:
 #			n is a 0-based section used to reference a specific package
@@ -125,7 +126,7 @@ EXIT_SUCCESS =				0
 EXIT_REBOOT =				123
 EXIT_RESTART_GUI =			124
 EXIT_INCOMPATIBLE_VERSION =	254
-EXIT_INCOMPATIBLE_PLATFOM =	253
+EXIT_INCOMPATIBLE_PLATFORM = 253
 EXIT_FILE_SET_ERROR	=		252
 EXIT_OPTIONS_NOT_SET =		251
 EXIT_RUN_AGAIN = 			250
@@ -1336,9 +1337,9 @@ class PackageClass:
 
 	def SetPackageVersion (self, version):
 		global VersionToNumber
-		# clear incompatible file set if version number changed
+		# clear incompatible reason if version number changed
 		# so install can be tried again
-		if version != self.PackageVersion and self.Incompatible == 'NO_FILE_SET':
+		if version != self.PackageVersion:
 			self.SetIncompatible ("")
 		self.PackageVersion = version
 		self.PackageVersionNumber = VersionToNumber (version)
@@ -2621,7 +2622,7 @@ class InstallPackagesClass (threading.Thread):
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
-		elif returnCode == EXIT_INCOMPATIBLE_PLATFOM:
+		elif returnCode == EXIT_INCOMPATIBLE_PLATFORM:
 			global Platform
 			package.SetIncompatible ('PLATFORM')
 			DbusIf.UpdateStatus ( message=packageName + " not compatible with " + Platform,
@@ -2659,6 +2660,7 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
+			package.SetIncompatible ('UNKNOWN')
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
 			logging.error ("stderr: " + stderr)

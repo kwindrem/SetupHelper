@@ -1,3 +1,8 @@
+v6.4:
+	fixed: setup scripts fail if no fileList file
+	updatePacakge: fixed problems related to incompatible versions
+	updatePackage: fixed: helper resources updated even if there were no changes
+
 v6.3:
 	fixed: removing active pachage freezes PackageManager
 

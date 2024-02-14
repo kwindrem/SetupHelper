@@ -1,3 +1,6 @@
+v6.5:
+	fixed: package download failure not always reported on the GUI
+
 v6.4:
 	fixed: setup scripts fail if no fileList file
 	updatePacakge: fixed problems related to incompatible versions

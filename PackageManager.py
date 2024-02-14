@@ -620,10 +620,7 @@ def VersionToNumber (version):
 # all directories at the current level are checked
 #	to see if they contain a file named 'version'
 #	indicating a package directory has been found
-#
-#	further, the version file must begin with 'v'
-#
-# if so, that path is returned
+#	if so, that path is returned
 #
 # if a directory NOT containing 'version' is found
 #	this method is called again to look inside that directory
@@ -641,13 +638,7 @@ def LocatePackagePath (origPath):
 			# found version file, make sure it is "valid"
 			versionFile = newPath + "/version"
 			if os.path.isfile( versionFile ):
-				fd = open ( versionFile, 'r' )
-				version = fd.readline().strip()
-				fd.close()
-				if version[0] == 'v':
-					return newPath
-				else:
-					logging.error ("version file not a valid version " + versionFile + " = " + version )
+				return newPath
 			else:
 				packageDir = locatePackagePath (newPath)
 				# found a package directory
@@ -2261,7 +2252,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
-			return False
+			return
 		else:
 			proc.wait()
 			stdout, stderr = proc.communicate ()
@@ -2278,7 +2269,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
 			shutil.rmtree (tempDirectory)
-			return False
+			return
 		try:
 			proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -2289,7 +2280,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
 			shutil.rmtree (tempDirectory)
-			return False
+			return
 
 		proc.wait()
 		stdout, stderr = proc.communicate ()
@@ -2306,39 +2297,44 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
 			shutil.rmtree (tempDirectory)
-			return False
+			return
 
 		# attempt to locate a directory that contains a version file
-		# the first directory in the tree starting with tempDicrectory
-		# is returned
+		# the first directory in the tree starting with tempDirectory is returned
 		unpackedPath = LocatePackagePath (tempDirectory)
 		if unpackedPath == None:
 			PackageClass.UpdateDownloadPending (packageName, False)
 			shutil.rmtree (tempDirectory)
 			logging.error ( "GitHubDownload: no archive path for " + packageName )
-			return False
+			return
 
 		# move unpacked archive to package location
-		# LOCK this critical section of code to prevent others
+		# LOCK this section of code to prevent others
 		#	from accessing the directory while it's being updated
 		packagePath = "/data/" + packageName
 		tempPackagePath = packagePath + "-temp"
+		message = ""
 		DbusIf.LOCK ()
-		if os.path.exists (packagePath):
-			os.rename (packagePath, tempPackagePath)
 		try:
-			shutil.move (unpackedPath, packagePath)
+			if os.path.exists (packagePath):
+				if os.path.exists (tempPackagePath):
+					shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
+				os.rename (packagePath, tempPackagePath)
+				shutil.move (unpackedPath, packagePath)
 		except:
-			logging.error ( "GitHubDownload: couldn't relocate " + packageName )
-		if os.path.exists (tempPackagePath):
-			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
+			message = "GitHubDownload: couldn't update " + packageName
+			logging.error ( message )
 		DbusIf.UNLOCK ()
 		PackageClass.UpdateDownloadPending (packageName, False)
-		DbusIf.UpdateStatus ( message="", where=where )
+		DbusIf.UpdateStatus ( message=message, where=where )
 		if source == 'GUI':
-			DbusIf.SetGuiEditAction ( '' )
+			if message == "":
+				DbusIf.SetGuiEditAction ( '' )
+			else:
+				DbusIf.SetGuiEditAction ( 'ERROR' )
+		if os.path.exists (tempPackagePath):
+			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		shutil.rmtree (tempDirectory)
-		return True
 	# end GitHubDownload
 
 

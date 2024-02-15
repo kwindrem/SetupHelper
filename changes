@@ -1,3 +1,7 @@
+v6.6:
+	fixed: PackageManager hangs on remove
+	fixed: PackageManager not setting no file set for incomplete fs
+
 v6.5:
 	fixed: package download failure not always reported on the GUI
 

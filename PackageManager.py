@@ -1778,7 +1778,6 @@ class PackageClass:
 				toPackage.InstallPending = fromPackage.InstallPending
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
 				toPackage.FileSetOk = fromPackage.FileSetOk
-				toPackage.AutoRemove = fromPackage.AutoRemove
 
 				toIndex += 1
 				fromIndex += 1
@@ -1898,6 +1897,8 @@ class PackageClass:
 		flagFile = packageDir + "/FileSets/" + VenusVersion + "/INCOMPLETE"
 		if os.path.exists (flagFile):
 			self.FileSetOk = False
+			self.SetIncompatible ('NO_FILE_SET')
+			incompatible = True
 		else:
 			self.FileSetOk = True
 
@@ -3527,7 +3528,6 @@ def mainLoop():
 			if not packageOperationOk:
 				packageChecksSkipped = True
 	
-
 			if installOk:
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )

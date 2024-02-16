@@ -1,3 +1,6 @@
+v6.7:
+	fixed: GUI white screen for versions prior to v3.00
+
 v6.6:
 	fixed: PackageManager hangs on remove
 	fixed: PackageManager not setting no file set for incomplete fs

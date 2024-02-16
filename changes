@@ -1,3 +1,7 @@
+v6.8:
+	fixed: PackageManager won't download if package directory doesn't exist
+		bug created in or about v6.5
+
 v6.7:
 	fixed: GUI white screen for versions prior to v3.00
 

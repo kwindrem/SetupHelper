@@ -2269,7 +2269,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
-			shutil.rmtree (tempDirectory)
+			if os.path.exists (tempDirectory):
+				shutil.rmtree (tempDirectory)
 			return
 		try:
 			proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
@@ -2280,7 +2281,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
-			shutil.rmtree (tempDirectory)
+			if os.path.exists (tempDirectory):
+				shutil.rmtree (tempDirectory)
 			return
 
 		proc.wait()
@@ -2297,7 +2299,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 			PackageClass.UpdateDownloadPending (packageName, False)
-			shutil.rmtree (tempDirectory)
+			if os.path.exists (tempDirectory):
+				shutil.rmtree (tempDirectory)
 			return
 
 		# attempt to locate a directory that contains a version file
@@ -2305,7 +2308,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		unpackedPath = LocatePackagePath (tempDirectory)
 		if unpackedPath == None:
 			PackageClass.UpdateDownloadPending (packageName, False)
-			shutil.rmtree (tempDirectory)
+			if os.path.exists (tempDirectory):
+				shutil.rmtree (tempDirectory)
 			logging.error ( "GitHubDownload: no archive path for " + packageName )
 			return
 
@@ -2321,7 +2325,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				if os.path.exists (tempPackagePath):
 					shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 				os.rename (packagePath, tempPackagePath)
-				shutil.move (unpackedPath, packagePath)
+			shutil.move (unpackedPath, packagePath)
 		except:
 			message = "GitHubDownload: couldn't update " + packageName
 			logging.error ( message )
@@ -2335,7 +2339,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
-		shutil.rmtree (tempDirectory)
+		if os.path.exists (tempDirectory):
+			shutil.rmtree (tempDirectory)
 	# end GitHubDownload
 
 

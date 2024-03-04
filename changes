@@ -1,3 +1,7 @@
+v6.10:
+	enable auto download and install after package add
+		previously, packagew would not auto install if uninstalled manually
+
 v6.9:
 	fixed: file uninstall fails if extracted from setup script
 	removed PackageManager download delays

@@ -337,7 +337,7 @@ ERROR_NO_SETUP_FILE = 		999
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
-#		UpdateDoNotInstall ()
+#		SetAutoInstallOk ()
 #		InstallVersionCheck ()
 #	UpdateGitHubVersionClass
 #		UpdateGitHubVersion (thread)
@@ -1178,7 +1178,7 @@ class DbusIfClass:
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		AutoInstallOk (class method)
-#		UpdateDoNotInstall ()
+#		SetAutoInstallOk ()
 #		InstallVersionCheck ()
 #
 #	Globals:
@@ -1262,10 +1262,10 @@ class PackageClass:
 					open (flagFile, 'a').close()
 
 
-	def UpdateDoNotInstall (self, state):
+	def SetAutoInstallOk (self, state):
 		packageName = self.PackageName
 		if packageName == None:
-			logging.error ("UpdateDoNotInstall - no packageName")
+			logging.error ("SetAutoInstallOk - no packageName")
 			return
 
 		# if package options directory exists set/clear auto install flag
@@ -1659,9 +1659,11 @@ class PackageClass:
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( '' )
 				DbusIf.UpdateStatus ( message = "", where='Editor')
-				# package added from the GUI (aka, manually)
-				#	allow auto adds
-				PackageClass.SetAutoAddOk (packageName, True)
+
+			# allow auto adds and auto installs
+			PackageClass.SetAutoAddOk (packageName, True)
+			package.SetAutoInstallOk (True)
+
 		else:
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=WARNING )
@@ -2486,11 +2488,11 @@ class InstallPackagesClass (threading.Thread):
 			sendStatusTo = 'Editor'
 			# uninstall sets the uninstall flag file to prevent auto install
 			if direction == 'uninstall':
-				package.UpdateDoNotInstall (False)
+				package.SetAutoInstallOk (True)
 				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
 			else:
-				package.UpdateDoNotInstall (True)
+				package.SetAutoInstallOk (False)
 				logging.warning (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
 			sendStatusTo = 'PmStatus'

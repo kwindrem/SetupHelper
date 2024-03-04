@@ -1,3 +1,7 @@
+v6.9:
+	fixed: file uninstall fails if extracted from setup script
+	removed PackageManager download delays
+
 v6.8:
 	fixed: PackageManager won't download if package directory doesn't exist
 		bug created in or about v6.5

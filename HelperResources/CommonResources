@@ -697,6 +697,8 @@ buildUninstallListsfromSetupScript ()
 					param=$( echo ${params[i+1]} | sed s?'$qmlDir'?$qmlDir? )
 				fi
 				if ! [ -z "$param" ] && ! [[ $param == \#* ]]; then
+					# remove any  quotes around parameters
+					param=$( echo $param | sed -e 's?"?? g' -e "s?'?? g" )
 					scriptUninstallFilesList+=("$param")
 				fi
 				;;
@@ -707,6 +709,8 @@ buildUninstallListsfromSetupScript ()
 				if ! [ -z "$param" ] && ! [[ $param == \#* ]]; then
 					scriptUninstallServicesList+=("$param")
 				else
+					# remove any quotes around parameters
+					param=$( echo $param | sed -e 's?"?? g' -e "s?'?? g" )
 					scriptUninstallServicesList+=($packageName)
 				fi
 				;;
@@ -1086,7 +1090,7 @@ if [ -f /etc/venus/machine ]; then
 	machine=$(cat /etc/venus/machine)
 else
 	machine=""
-	setInstallFailed $EXIT_INCOMPATIBLE_VERSION "can't determine Venus device type"
+	setInstallFailed $EXIT_INCOMPATIBLE_PLATFORM "can't determine Venus device type"
 fi
 
 # initialize version strings and numbers for future checks
@@ -1252,13 +1256,6 @@ fi
 # used below and in _checkFileSets
 versionStringToNumber $venusVersion
 venusVersionNumber=$versionNumber
-
-# create obsolete version file if it does not already exist
-#	accommodates previous mechanism that used shell varaible
-if [ ! -z $obsoleteVersion ] && [ ! -f "$scriptDir/obsoleteVersion" ]; then
-	echo $obsoleteVersion > "$scriptDir/obsoleteVersion"
-fi
-
 
 # prevent installing Raspberry Pi packages on other platforms
 if [ -f "$scriptDir/raspberryPiOnly" ]; then 

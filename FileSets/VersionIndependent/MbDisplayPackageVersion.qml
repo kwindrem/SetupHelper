@@ -41,20 +41,8 @@ MbItem {
 			return qsTr ("GUI restart needed")
 		else if (incompatibleReason == 'PLATFORM')
 			return qsTr ( "incompatible with " + platform )
-		else if (incompatibleReason == 'VERSION')
-			return qsTr ( "incompatible with " + osVersion )
-		else if (incompatibleReason == 'NO_FILE_SET')
-			return qsTr ( "no file set for " + osVersion )
-		else if (incompatibleReason == 'CMDLINE' && installedVersion.item.value == "")
-			return qsTr ( "install from command line" )
-		else if (incompatibleReason == 'ROOT_FULL')
-			return qsTr ( "no space on root partition" )
-		else if (incompatibleReason == 'DATA_FULL')
-			return qsTr ( "no space on /data partition" )
-		else if (incompatibleReason == 'GUI_V1_MISSING')
-			return qsTr ( "GUI v1 not installed" )
-		else if (incompatibleReason != '')
-			return qsTr ( "unknown error" )
+		else if (incompatibleReason != "")
+			return incompatibleReason
 		else
 			return ""
 	}

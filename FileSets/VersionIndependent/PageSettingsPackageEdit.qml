@@ -194,25 +194,8 @@ MbPage {
             {
                 text:
                 {
-					if (incompatible)
-					{
-						if (incompatibleReason == 'PLATFORM')
-							return ( qsTr ("not compatible with\n") + platformItem.value )
-						else if (incompatibleReason == 'VERSION')
-							return ( qsTr ("not compatible with\n") + osVersion )
-						else if (incompatibleReason == 'CMDLINE')
-							return qsTr ("must install\nfrom command line" )
-						else if (incompatibleReason == 'NO_FILE_SET')
-							return qsTr ( "no file set for\n" + osVersion )
-							else if (incompatibleReason == 'ROOT_FULL')
-								return qsTr ( "no room on root partition" )
-						else if (incompatibleReason == 'DATA_FULL')
-							return qsTr ( "no room on data partition" )
-						else if (incompatibleReason == 'GUI_V1_MISSING')
-							return qsTr ( "GUI v1\nnot installed" )
-						else
-							return qsTr ("incompatible ???" ) // compatible for unknown reason
-					}
+					if (incompatibleReason != "")
+						return incompatibleReason
 					else if (rebootNeeded.value == 1)
 						return qsTr ("REBOOT:")
 					else if (guiRestartNeeded.value == 1)

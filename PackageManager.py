@@ -42,16 +42,9 @@ ONE_DOWNLOAD = 2
 #		/Package/n/PackageVersion 					from /data <packageName>/version from the package directory
 #		/Package/n/InstalledVersion 				from /etc/venus/isInstalled-<packageName>
 #		/Package/n/RebootNeeded						indicates a reboot is needed to activate this package
-#		/Package/n/Incompatible						indicates if package is or is not compatible with the system
-#													'' if compatible
-#													'VERSION' if the system version is outside the package's acceptable range
-#													'PLATFORM' package can not run on this platform
-#													'NO_FILE_SET' missing or incomplete file set for Venus OS version
-#													'ROOT_FULL' no room on root partition to install package modificaitons
-#													'DATA_FULL' no room on /data partition to install package modificaitons
-#													'CMDLINE' setup must be run from command line
-#														currently only for Raspberry PI packages only
-#													'UNKNOWN' unknown error
+#		/Package/n/Incompatible						indicates the reason the package not compatible with the system
+#													"" if compatible
+#													any other text if not compatible
 #
 #		for both Settings and the the dbus service:
 #			n is a 0-based section used to reference a specific package
@@ -405,10 +398,6 @@ import glob
 # slow refresh also controls GitHub version expiration
 FAST_GITHUB_REFRESH = 0.25
 SLOW_GITHUB_REFRESH = 600.0
-
-# fast and slow delays for package downloads
-FAST_DOWNLOAD = 2.0
-SLOW_DOWNLOAD = 600.0
 
 
 PythonVersion = sys.version_info
@@ -1346,7 +1335,7 @@ class PackageClass:
 		self.GitHubVersion = version
 		self.GitHubVersionNumber = VersionToNumber (version)
 		if version != "":
-			self.gitHubExpireTime = time.time () + SLOW_GITHUB_REFRESH + 2
+			self.gitHubExpireTime = time.time () + SLOW_GITHUB_REFRESH + 10
 		if self.gitHubVersionPath != "":
 			DbusIf.DbusService[self.gitHubVersionPath] = version
 
@@ -1793,7 +1782,7 @@ class PackageClass:
 			toPackage.SetPackageVersion ("?")
 			toPackage.SetRebootNeeded (False)
 			toPackage.SetGuiRestartNeeded (False)
-			toPackage.SetIncompatible (False)
+			toPackage.SetIncompatible ("")
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -1866,7 +1855,7 @@ class PackageClass:
 			self.SetPackageVersion ("")
 			self.AutoInstallOk = False
 			self.FileSetOk = False
-			self.SetIncompatible ('')
+			self.SetIncompatible ("")
 			return
 
 		# fetch package version (the one in /data/packageName)
@@ -1883,7 +1872,7 @@ class PackageClass:
 		incompatible = False
 		if os.path.exists (packageDir + "/raspberryPiOnly" ):
 			if Platform[0:4] != 'Rasp':
-				self.SetIncompatible ('PLATFORM')
+				self.SetIncompatible ("incompatible with " + Platform)
 				incompatible = True
 
 		# update local auto install flag based on DO_NOT_AUTO_INSTALL
@@ -1897,7 +1886,7 @@ class PackageClass:
 		flagFile = packageDir + "/FileSets/" + VenusVersion + "/INCOMPLETE"
 		if os.path.exists (flagFile):
 			self.FileSetOk = False
-			self.SetIncompatible ('NO_FILE_SET')
+			self.SetIncompatible ("no file set for " + str (VenusVersion))
 			incompatible = True
 		else:
 			self.FileSetOk = True
@@ -1920,7 +1909,7 @@ class PackageClass:
 			firstVersionNumber = VersionToNumber (firstVersion)
 			obsoleteVersionNumber = VersionToNumber (obsoleteVersion)
 			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
-				self.SetIncompatible ('VERSION')
+				self.SetIncompatible ("incompatible with " + str(VenusVersionNumber))
 				incompatible = True
 
 		# platform and versions OK, check to see if command line is needed for install
@@ -1930,7 +1919,7 @@ class PackageClass:
 		if incompatible == False:
 			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
-					self.SetIncompatible ('CMDLINE')
+					self.SetIncompatible ("install from command line")
 					incompatible = True
 
 		# clear GitHub version if not refreshed in 10 minutes
@@ -2419,27 +2408,19 @@ class DownloadGitHubPackagesClass (threading.Thread):
 					packageName = parts[1].strip ()
 				else:
 					logging.error ("DownloadQueue - no action and/or package name - discarding", command)
-					time.sleep (5.0)
 					continue
 				source = command[1]
 			else:
 				logging.error ("DownloadQueue - no command and/or source - discarding", command)
-				time.sleep (5.0)
 				continue
 
 			# invalid action for this queue
 			if action != 'download':
 				logging.error ("received invalid command from Install queue: ", command )
-				time.sleep (5.0)
 				continue
 
 			# do the download here
-			downloadStartTime = time.time()
 			self.GitHubDownload (packageName=packageName, source=source )
-
-			# sleep twice the time it took to download the archive to avoid flooding internet connection
-			downloadTime = (time.time() - downloadStartTime) * 2
-			time.sleep (downloadTime)
 		# end while True
 	# end run
 # end DownloadGitHubPackagesClass
@@ -2584,7 +2565,7 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_SUCCESS:
-			package.SetIncompatible ('')	# this marks the package as compatible
+			package.SetIncompatible ("")	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( '' )
@@ -2623,15 +2604,15 @@ class InstallPackagesClass (threading.Thread):
 											where=sendStatusTo, logLevel=WARNING )
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
-			package.SetIncompatible ('VERSION')
-			DbusIf.UpdateStatus ( message=packageName + " not compatible with " + VenusVersion,
+			package.SetIncompatible ("incompatible with " + str(VenusVersion))
+			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFORM:
 			global Platform
-			package.SetIncompatible ('PLATFORM')
-			DbusIf.UpdateStatus ( message=packageName + " not compatible with " + Platform,
+			package.SetIncompatible ("incompatible with " + Platform)
+			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
@@ -2641,32 +2622,32 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_FILE_SET_ERROR:
-			package.SetIncompatible ('NO_FILE_SET')
+			package.SetIncompatible ("no file set for " + str(VenusVersion))
 			DbusIf.UpdateStatus ( message=packageName + " no file set for " + VenusVersion,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_ROOT_FULL:
-			package.SetIncompatible ('ROOT_FULL')
+			package.SetIncompatible ("no room on root partition ")
 			DbusIf.UpdateStatus ( message=packageName + " no room on root partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_DATA_FULL:
-			package.SetIncompatible ('DATA_FULL')
+			package.SetIncompatible ("no room on data partition ")
 			DbusIf.UpdateStatus ( message=packageName + " no room on data partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_NO_GUI_V1:
-			package.SetIncompatible ('GUI_V1_MISSING')
+			package.SetIncompatible ("GUI v1 not installed")
 			DbusIf.UpdateStatus ( message=packageName + " GUI v1 not installed",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
-			package.SetIncompatible ('UNKNOWN')
+			package.SetIncompatible ("unknown error " + str (returnCode))
 			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
 			logging.error ("stderr: " + stderr)
@@ -3331,8 +3312,6 @@ packageScanComplete = False
 packageChecksSkipped = False
 packageIndex = 0
 noActionCount = 0
-lastAutoDownloadTime = 0.0
-downloadDelay = FAST_DOWNLOAD
 lastDownloadMode = AUTO_DOWNLOADS_OFF
 currentDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
@@ -3351,8 +3330,6 @@ def mainLoop():
 	global packageChecksSkipped
 	global packageIndex
 	global noActionCount
-	global lastAutoDownloadTime
-	global downloadDelay
 	global lastDownloadMode
 	global currentDownloadMode
 	global bootInstall
@@ -3441,8 +3418,6 @@ def mainLoop():
 	if packageScanComplete:
 		packageScanComplete = False
 		if not packageChecksSkipped:
-			# set GitHub download delay to background rate
-			downloadDelay = SLOW_DOWNLOAD
 			if currentDownloadMode == ONE_DOWNLOAD:
 				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
 
@@ -3459,7 +3434,6 @@ def mainLoop():
 		# don't do anything yet but make sure new scan starts at beginning
 		packageScanComplete = False
 		packageIndex = 0
-		downloadDelay = FAST_DOWNLOAD
 	else:
 		# process one package per pass of mainloop
 		DbusIf.LOCK ()	
@@ -3480,7 +3454,6 @@ def mainLoop():
 				packageScanComplete = False
 				WaitForGitHubVersions = True
 				UpdateGitHubVersion.GitHubVersionQueue.put ('REFRESH')
-				downloadDelay = FAST_DOWNLOAD
 
 		package.UpdateVersionsAndFlags ()
 		# disallow operations on this package if anything is pending
@@ -3491,17 +3464,8 @@ def mainLoop():
 			# don't allow install if download is needed - even if it has not started yet
 			packageOperationOk = False
 
-			timeToGo = downloadDelay + lastAutoDownloadTime - time.time()
-			# it's time - queue the download request
-			if timeToGo <= 0:
-				actionMessage = "downloading " + packageName + " ..."
-				PushAction ( command='download' + ':' + packageName, source='AUTO' )
-				lastAutoDownloadTime = time.time ()
-			# it's not time to download yet - update status message with countdown
-			elif timeToGo > 90:
-				actionMessage = packageName + " download begins in " + "%0.1f minutes" % ( timeToGo / 60 )
-			elif  timeToGo > 1.0:
-				actionMessage = packageName + " download begins in " + "%0.0f seconds" % ( timeToGo )
+			actionMessage = "downloading " + packageName + " ..."
+			PushAction ( command='download' + ':' + packageName, source='AUTO' )
 
 		# validate package for install
 		#	ignore incompatible if running as a boot install
@@ -3615,6 +3579,7 @@ def mainLoop():
 
 # uninstall a package with a direct call to it's setup script
 # used to do a blind uninstall in main () below
+# or a forced remove (FORCE_REMOVE flag set)
 
 def	directUninstall (packageName):
 	try:

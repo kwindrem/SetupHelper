@@ -473,6 +473,8 @@ def PushAction (command=None, source=None):
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.DownloadPending = True
+			# clear any incompatible reason as download is requested
+			package.SetIncompatible ("")
 		DbusIf.UNLOCK ()
 		theQueue = DownloadGitHub.DownloadQueue
 		queueText = "Download"
@@ -1609,6 +1611,10 @@ class PackageClass:
 			# update package versions at end of download
 			if state == False:
 				package.UpdateVersionsAndFlags ()
+			# clear incompatble reason at beginning of download
+			else:
+				logging.warning ("#### download pending True " + packageName)
+				package.SetIncompatible ("")
 		DbusIf.UNLOCK ()
 
 		

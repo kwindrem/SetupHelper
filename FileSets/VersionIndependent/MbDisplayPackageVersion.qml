@@ -56,28 +56,6 @@ MbItem {
 		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
 
-	function versionToNumber (item)
-	{
-		var parts=["x", "x", "x", "x", "x"]
-		var versionNumber = 0
-
-		if (item.valid && item.value.substring  (0,1) == "v")
-		{
-			parts = item.value.split (/[v.~]+/ , 4)
-			{
-				if (parts.length >= 2)
-					versionNumber += parseInt(parts[1]) * 1000000
-				if (parts.length >= 3)
-					versionNumber += parseInt(parts[2]) * 1000
-				if (parts.length >= 4)
-					versionNumber += parseInt(parts[3])
-				else
-					versionNumber += 999
-			}
-		}
-		return versionNumber
-	}
-
     MbRowSmall
     {
         description: ""

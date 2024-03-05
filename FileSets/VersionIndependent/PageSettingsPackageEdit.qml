@@ -33,7 +33,7 @@ MbPage {
     property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
     property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
     property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-    property bool installOk: packageValid && packageVersion.item.value  != "" && ! incompatible
+    property bool installOk: packageValid && packageVersion.item.value  != ""
     property string requestedAction: ''
     property bool actionPending: requestedAction != ''
     property bool navigate: ! actionPending && ! waitForAction
@@ -288,8 +288,8 @@ MbPage {
         MbOK
         {
             id: confirmButton
-            width: 375
-            anchors { left: parent.left; bottom: statusMessage.bottom }
+            width: 90
+            anchors { right: cancelButton.left; bottom: statusMessage.bottom }
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
@@ -356,8 +356,9 @@ MbPage {
         {
             id: statusMessage
             width: 250
+			height: 35
             wrapMode: Text.WordWrap
-            anchors { left: parent.left; leftMargin: 10; top: gitHubBranch.bottom; topMargin: 22 }
+            anchors { left: parent.left; leftMargin: 10; top: gitHubBranch.bottom; topMargin: 5 }
             font.pixelSize: 12
             color: actionPending && isSetupHelper ? "red" : root.style.textColor
             text:
@@ -371,6 +372,8 @@ MbPage {
 				}
 				else if (editStatus.valid && editStatus.value != "")
 					return editStatus.value
+				else if (incompatible)
+					return incompatibleReason
 				else
 					return " "
 			}

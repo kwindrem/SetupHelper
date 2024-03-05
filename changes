@@ -1,3 +1,12 @@
+v6.12: (pending)
+	fixed: running setup script from inside the package directory fails
+		e.g., cd /data/GuiMods; ./setup
+	add package conflict exit code
+	add RemoteGPIO to default package list
+	improved reporting of errors in Package editor
+
+v6.11: skipped
+
 v6.10:
 	enable auto download and install after package add
 		previously, packagew would not auto install if uninstalled manually

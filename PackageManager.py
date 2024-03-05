@@ -114,7 +114,7 @@ ONE_DOWNLOAD = 2
 #									3 set by PackageManager to indicate a backup is in progress
 #									4 set by PackageManager to indicate a restore is in progress
 #
-# setup script return codes and install states
+# setup script return codes
 EXIT_SUCCESS =				0
 EXIT_REBOOT =				123
 EXIT_RESTART_GUI =			124
@@ -126,6 +126,8 @@ EXIT_RUN_AGAIN = 			250
 EXIT_ROOT_FULL =			249
 EXIT_DATA_FULL =			248
 EXIT_NO_GUI_V1 =			247
+EXIT_PACKAGE_CONFLICT =		246
+
 
 EXIT_ERROR =				255 # generic error
 # install states only
@@ -2643,16 +2645,21 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_NO_GUI_V1:
 			package.SetIncompatible ("GUI v1 not installed")
-			DbusIf.UpdateStatus ( message=packageName + " GUI v1 not installed",
+			DbusIf.UpdateStatus ( message=packageName + "GUI v1 not installed",
+											where=sendStatusTo, logLevel=ERROR )
+			if source == 'GUI':
+				DbusIf.SetGuiEditAction ( 'ERROR' )
+		elif returnCode == EXIT_PACKAGE_CONFLICT:
+			package.SetIncompatible ("package conflict")
+			DbusIf.UpdateStatus ( message=stderr,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
 			package.SetIncompatible ("unknown error " + str (returnCode))
-			DbusIf.UpdateStatus ( message=packageName + " " + direction + " unknown error " + str (returnCode),
+			DbusIf.UpdateStatus ( message=packageName + " unknown error " + str (returnCode) + " " + stderr,
 											where=sendStatusTo, logLevel=ERROR )
-			logging.error ("stderr: " + stderr)
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 

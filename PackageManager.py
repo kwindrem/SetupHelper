@@ -455,6 +455,8 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 # the 'Reboot','restartGui' and initialize actions are NOT pushed on any queue
 #	they are handled in line since they just set a global flag
 #	to be handled in mainLoop
+#
+# returns True if command was accepted, False if not
 
 def PushAction (command=None, source=None):
 	parts = command.split (":")
@@ -496,37 +498,44 @@ def PushAction (command=None, source=None):
 		# set the flag - reboot is done in main_loop
 		global SystemReboot
 		SystemReboot = True
-		return
+		return True
 	elif action == 'restartGui':
 		logging.warning ( "received GUI restart request from " + source)
 		# set the flag - reboot is done in main_loop
 		global GuiRestart
 		GuiRestart = True
-		return
+		return True
 	elif action == 'INITIALIZE':
 		logging.warning ( "received PackageManager INITIALIZE request from " + source)
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global InitializePackageManager
 		InitializePackageManager = True
-		return
+		return True
 	elif action == 'gitHubScan':
 		UpdateGitHubVersion.SetPriorityGitHubVersion (packageName)
-		return
+		return True
+	elif action == 'resolveConflicts':
+		theQueue = InstallPackages.InstallQueue
+		queueText = "Install"
+
 	# ignore blank action - this occurs when PackageManager changes the action on dBus to 0
 	#	which acknowledges a GUI action
 	elif action == '':
-		return
+		return True
 	else:
-		logging.error ("PushAction received unrecognized command: " + command)
-		return
+		logging.error ("PushAction received unrecognized command from " + source + ": " + command)
+		return False
 
 	if theQueue != None:
 		try:
 			theQueue.put ( (command, source), block=False )
+			return True
 		except queue.Full:
 			logging.error ("command " + command + " from " + source + " lost - " + queueText + " - queue full")
+			return False
 		except:
 			logging.error ("command " + command + " from " + source + " lost - " + queueText + " - other queue error")
+			return False
 # end PushAction
 
 
@@ -922,9 +931,12 @@ class DbusIfClass:
 
 	def handleGuiEditAction (self, path, command):
 		global PushAction
-		PushAction ( command=command, source='GUI' )
-
-		return True	# True acknowledges the dbus change - other wise dbus parameter does not change
+		if PushAction ( command=command, source='GUI' ):
+			return True	# True acknowledges the dbus change - other wise dbus parameter does not change
+		# command rejected - inform user and reject change
+		else:
+			DbusIf.SetEditStatus ("command failed")
+			return False
 
 	def UpdatePackageCount (self):
 		count = len(PackageClass.PackageList)
@@ -1356,6 +1368,10 @@ class PackageClass:
 		if self.incompatiblePath != "":
 			DbusIf.DbusService[self.incompatiblePath] = value	
 
+	def SetIncompatibleDetails (self, value):
+		if self.incompatibleDetailsPath != "":
+			DbusIf.DbusService[self.incompatibleDetailsPath] = value	
+
 	def SetRebootNeeded (self, value):
 		self.RebootNeeded = value
 		if self.rebootNeededPath != "":
@@ -1395,6 +1411,7 @@ class PackageClass:
 			self.rebootNeededPath = '/Package/' + section + '/RebootNeeded'
 			self.guiRestartNeededPath = '/Package/' + section + '/GuiRestartNeeded'
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
+			self.incompatibleDetailsPath = '/Package/' + section + '/IncompatibleDetails'
 
 			# create service paths if they don't already exist
 			try:
@@ -1421,6 +1438,10 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.incompatiblePath]
 			except:
 				DbusIf.DbusService.add_path (self.incompatiblePath, "" )
+			try:
+				foo = DbusIf.DbusService[self.incompatibleDetailsPath]
+			except:
+				DbusIf.DbusService.add_path (self.incompatibleDetailsPath, "" )
 
 
 		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
@@ -1866,6 +1887,7 @@ class PackageClass:
 			self.AutoInstallOk = False
 			self.FileSetOk = False
 			self.SetIncompatible ("")
+			self.SetIncompatibleDetails ("")
 			return
 
 		# fetch package version (the one in /data/packageName)
@@ -1883,6 +1905,7 @@ class PackageClass:
 		if os.path.exists (packageDir + "/raspberryPiOnly" ):
 			if Platform[0:4] != 'Rasp':
 				self.SetIncompatible ("incompatible with " + Platform)
+				self.SetIncompatibleDetails ("")
 				incompatible = True
 
 		# update local auto install flag based on DO_NOT_AUTO_INSTALL
@@ -1897,6 +1920,7 @@ class PackageClass:
 		if os.path.exists (flagFile):
 			self.FileSetOk = False
 			self.SetIncompatible ("no file set for " + str (VenusVersion))
+			self.SetIncompatibleDetails ("")
 			incompatible = True
 		else:
 			self.FileSetOk = True
@@ -1919,7 +1943,8 @@ class PackageClass:
 			firstVersionNumber = VersionToNumber (firstVersion)
 			obsoleteVersionNumber = VersionToNumber (obsoleteVersion)
 			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
-				self.SetIncompatible ("incompatible with " + str(VenusVersionNumber))
+				self.SetIncompatible ("incompatible with " + VenusVersion)
+				self.SetIncompatibleDetails ("")
 				incompatible = True
 
 		# platform and versions OK, check to see if command line is needed for install
@@ -1930,7 +1955,45 @@ class PackageClass:
 			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
 					self.SetIncompatible ("install from command line")
+					self.SetIncompatibleDetails ("")
 					incompatible = True
+
+		# check for conflicting packages
+		if incompatible == False:
+			dependencyFile = "/data/" + packageName + "/packageDependencies"
+			dependencyConflict = False
+			dependencyReason = ""
+			try:
+				with open (dependencyFile, 'r') as file:
+					for item in file:
+						parts = item.split ()
+						if len (parts) < 2:
+							logging.error ("package dependency " + item + " requires package name and requirement")
+							continue
+						dependencyPackage = parts [0]
+						dependencyRequirement = parts [1]
+
+						if os.path.exists ("/etc/venus/installedVersion-" + dependencyPackage):
+							if dependencyRequirement == "uninstalled":
+								if dependencyConflict:
+									dependencyReason += "; "
+								dependencyReason += dependencyPackage + " is installed - uninstall?"
+								dependencyConflict = True
+						else:
+							if dependencyRequirement == "installed":
+								if dependencyConflict:
+									dependencyReason += "; "
+								dependencyConflict = True
+								dependencyReason += dependencyPackage + " is not installed - install?"
+			except:
+				pass
+			if dependencyConflict:
+				self.SetIncompatible ("package conflict")
+				self.SetIncompatibleDetails (dependencyReason)
+				incompatible = True
+		if incompatible == False:
+				self.SetIncompatible ("")
+				self.SetIncompatibleDetails ("")
 
 		# clear GitHub version if not refreshed in 10 minutes
 		if self.GitHubVersion != "" and time.time () > self.gitHubExpireTime:
@@ -2576,6 +2639,8 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_SUCCESS:
 			package.SetIncompatible ("")	# this marks the package as compatible
+			package.SetIncompatibleDetails ("")
+
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( '' )
@@ -2615,6 +2680,7 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
 			package.SetIncompatible ("incompatible with " + str(VenusVersion))
+			package.SetIncompatibleDetails ("")
 			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
@@ -2622,6 +2688,7 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFORM:
 			global Platform
 			package.SetIncompatible ("incompatible with " + Platform)
+			package.SetIncompatibleDetails ("")
 			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
@@ -2633,38 +2700,44 @@ class InstallPackagesClass (threading.Thread):
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_FILE_SET_ERROR:
 			package.SetIncompatible ("no file set for " + str(VenusVersion))
+			package.SetIncompatibleDetails ("")
 			DbusIf.UpdateStatus ( message=packageName + " no file set for " + VenusVersion,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_ROOT_FULL:
 			package.SetIncompatible ("no room on root partition ")
+			package.SetIncompatibleDetails ("")
 			DbusIf.UpdateStatus ( message=packageName + " no room on root partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_DATA_FULL:
 			package.SetIncompatible ("no room on data partition ")
+			package.SetIncompatibleDetails ("")
 			DbusIf.UpdateStatus ( message=packageName + " no room on data partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_NO_GUI_V1:
 			package.SetIncompatible ("GUI v1 not installed")
+			package.SetIncompatibleDetails ("GUI v1 required but not installed")
 			DbusIf.UpdateStatus ( message=packageName + "GUI v1 not installed",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_PACKAGE_CONFLICT:
 			package.SetIncompatible ("package conflict")
+			package.SetIncompatibleDetails (stderr)
 			DbusIf.UpdateStatus ( message=stderr,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
-			package.SetIncompatible ("unknown error " + str (returnCode))
-			DbusIf.UpdateStatus ( message=packageName + " unknown error " + str (returnCode) + " " + stderr,
+			package.SetIncompatible ("unknown error")
+			package.SetIncompatibleDetails (str (returnCode) + " " + stderr)
+			DbusIf.UpdateStatus ( message=packageName + "unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
@@ -2672,6 +2745,36 @@ class InstallPackagesClass (threading.Thread):
 		package.UpdateVersionsAndFlags ()
 		DbusIf.UNLOCK ()
 	# end InstallPackage ()
+
+
+	# 	ResolveConflicts
+	#
+	# this method checks the conflicts for the indicated package
+	# if conflicts are found, the conflicting packages are installed or uninstalled
+	# by pushing them on the install queue
+	
+	def ResolveConflicts ( self, packageName=None, source=None ):
+		dependencyFile = "/data/" + packageName + "/packageDependencies"
+		try:
+			with open (dependencyFile, 'r') as file:
+				for item in file:
+					parts = item.split ()
+					if len (parts) < 2:
+						logging.error ("package dependency " + item + " requires package name and requirement")
+						continue
+					dependencyPackage = parts [0]
+					dependencyRequirement = parts [1]
+
+					if os.path.exists ("/etc/venus/installedVersion-" + dependencyPackage):
+						if dependencyRequirement == "uninstalled":
+							logging.warning ("uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
+							PushAction ( command='uninstall' + ':' + dependencyPackage, source=source )
+					else:
+						if dependencyRequirement == "installed":
+							logging.warning ("installing " + dependencyPackage + " so that " + packageName + " can be installed" )
+							PushAction ( command='install' + ':' + dependencyPackage, source=source )
+		except:
+			pass
 
 
 	#	InstallPackage run (the thread)
@@ -2699,7 +2802,6 @@ class InstallPackagesClass (threading.Thread):
 				continue
 			if len (command) == 0:
 				logging.error ("pull from Install queue failed - empty comand")
-				time.sleep (5.0)
 				continue
 			# thread shutting down
 			if command[0] == 'STOP' or self.threadRunning == False:
@@ -2714,24 +2816,23 @@ class InstallPackagesClass (threading.Thread):
 					packageName = parts[1].strip ()
 				else:
 					logging.error ("InstallQueue - no action and/or package name - discarding", command)
-					time.sleep (5.0)
 					continue
 				source = command[1]
 			else:
 				logging.error ("InstallQueue - no command and/or source - discarding", command)
-				time.sleep (5.0)
 				continue
 
 			if action == 'install':
 				self.InstallPackage (packageName=packageName, source=source , direction='install' )
-				time.sleep (5.0)
 			elif action == 'uninstall':
 				self.InstallPackage (packageName=packageName, source=source , direction='uninstall' )
-				time.sleep (5.0)
+			# resolve conflicts may cause OTHER packages to install or uninstall
+			elif action == 'resolveConflicts':
+				self.ResolveConflicts (packageName=packageName, source=source)
+
 			# invalid action for this queue
 			else:
 				logging.error ("received invalid command from Install queue: ", command )
-				time.sleep (5.0)
 				continue
 	# end run
 # end InstallPackagesClass

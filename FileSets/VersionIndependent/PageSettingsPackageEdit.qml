@@ -24,16 +24,19 @@ MbPage {
 
     property VBusItem rebootNeeded: VBusItem { bind: getServiceBind ( "RebootNeeded") }
     property VBusItem guiRestartNeeded: VBusItem { bind: getServiceBind ( "GuiRestartNeeded") }
-    property VBusItem incompatibleReasonItem: VBusItem { bind: getServiceBind ( "Incompatible") }
-    property string incompatibleReason: incompatibleReasonItem.valid ? incompatibleReasonItem.value : ""
+	property VBusItem incompatibleReasonItem: VBusItem { bind: getServiceBind ( "Incompatible") }
+	property string incompatibleReason: incompatibleReasonItem.valid ? incompatibleReasonItem.value : ""
+	property VBusItem incompatibleDetailsItem: VBusItem { bind: getServiceBind ( "IncompatibleDetails") }
+	property string incompatibleDetails: incompatibleDetailsItem.valid ? incompatibleDetailsItem.value : ""
     property bool incompatible: incompatibleReason != ""
     property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
+	property bool showIncompableDetails: false
 
     property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
     property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
     property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
     property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-    property bool installOk: packageValid && packageVersion.item.value  != ""
+    property bool installOk: packageValid && packageVersion.item.value  != "" && ! incompatible
     property string requestedAction: ''
     property bool actionPending: requestedAction != ''
     property bool navigate: ! actionPending && ! waitForAction
@@ -56,7 +59,7 @@ MbPage {
 		resetPackageIndex ()
 		// request PackageManager to refresh GitHub version info for this package
 		editAction.setValue ('gitHubScan' + ':' + packageName)
-	}
+		}
 
 	function resetPackageIndex ()
 	{
@@ -106,7 +109,12 @@ MbPage {
     }
     function confirm ()
     {
-        if (actionPending)
+		if (showIncompableDetails)
+		{
+			showIncompableDetails = false
+			editAction.setValue ("resolveConflicts" + ':' + packageName)
+		}
+        else if (actionPending)
         {
 			// provide local confirmation of action - takes PackageManager too long
 			editStatus.setValue ( (requestedAction == 'remove' ? "removing " : requestedAction + "ing ") + packageName)
@@ -192,20 +200,9 @@ MbPage {
             }
             Text
             {
-                text:
-                {
-					if (incompatibleReason != "")
-						return incompatibleReason
-					else if (rebootNeeded.value == 1)
-						return qsTr ("REBOOT:")
-					else if (guiRestartNeeded.value == 1)
-						return qsTr ("GUI\nRestart:")
-					else
-						return qsTr ("installed:")
-				}
+                text: qsTr ("installed:")
                 color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				horizontalAlignment: Text.AlignRight
-				width: incompatible ? 50 + 80 + 3 : 50
                 font.pixelSize: 10
             }
             MbTextBlock
@@ -213,7 +210,7 @@ MbPage {
                 id: installedVersion
                 item { bind: getServiceBind("InstalledVersion") }
                 height: 25
-                width: incompatible ? 0 : 105
+                width: 105
             }
         }
         MbEditBox
@@ -236,24 +233,13 @@ MbPage {
         }
         MbOK
         {
-            id: removeButton
-            width: 170
-            anchors { right: parent.right; bottom: statusMessage.bottom}
-            description: ""
-            value: qsTr("Remove package")
-            onClicked: remove ()
-            writeAccessLevel: User.AccessInstaller
-            show: navigate && ! installedValid
-        }
-        MbOK
-        {
             id: cancelButton
             width: 90
             anchors { right: parent.right; bottom: statusMessage.bottom }
             description: ""
             value: qsTr("Cancel")
-            onClicked: cancelEdit ()
-            show: ! navigate && ! waitForAction
+            onClicked: showIncompableDetails ? showIncompableDetails = false : cancelEdit ()
+            show: ! navigate && ! waitForAction || showIncompableDetails
         }
         MbOK
         {
@@ -263,7 +249,7 @@ MbPage {
             description: ""
             value: qsTr("OK")
             onClicked: cancelEdit ()
-            show: editAction.value == 'ERROR'
+            show: editAction.value == 'ERROR' || editStatus.value == "command failed"
         }
         MbOK
         {
@@ -293,7 +279,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: ! navigate && actionPending
+            show: ! navigate && actionPending || showIncompableDetails
             writeAccessLevel: User.AccessInstaller
         }
 
@@ -346,11 +332,22 @@ MbPage {
             width: 100
             anchors { right: parent.right; top: statusMessage.bottom; topMargin: 5 }
             description: ""
-            value: qsTr("Uninstall")
+            value: installedValid ? qsTr("Uninstall") : qsTr("Remove")
             onClicked: uninstall ()
-            opacity: navigate && installedValid > 0 ? 1.0 : 0.2
+            opacity: navigate ? 1.0 : 0.2
             writeAccessLevel: User.AccessInstaller
         }
+		MbOK
+		{
+			id: showDetailsButton
+			width: 170
+			anchors { right: parent.right; bottom: statusMessage.bottom}
+			description: ""
+			value: qsTr("Show Details")
+			onClicked: showIncompableDetails = true
+			writeAccessLevel: User.AccessInstaller
+			show: navigate && incompatibleDetails != "" && ! showIncompableDetails && ! dismissErrorButton.show
+		}
 		// at bottom so it's not in the middle of hard button cycle
         Text
         {
@@ -363,7 +360,9 @@ MbPage {
             color: actionPending && isSetupHelper ? "red" : root.style.textColor
             text:
             {
-				if (actionPending)
+				if (showIncompableDetails)
+					return incompatibleDetails
+				else if (actionPending)
 				{
 					if (isSetupHelper && requestedAction == 'uninstall')
 						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")

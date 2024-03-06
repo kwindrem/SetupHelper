@@ -447,6 +447,7 @@ updateActiveFile ()
     # separate source and replacement files specified
     local sourceFile=""
     local activeFile=""
+    local prevousPackage=""
     if [ $# == 2 ]; then
         if [ -f "$1" ]; then
 			sourceFile="$1"
@@ -502,38 +503,40 @@ updateActiveFile ()
 		return 1
 	fi
 
-	# attempt backup --if not made
-	#	indicates installing over a previous install - so check if activeFile would be changed
-	#		this would occur if installing over the top of an already installed package
-	#		which SHOULD update the active file
-	#	or a conflict with another package - OTHER PACKAGE'S MOD (active file) IS OVERWRITTEN SILENTLY !!!!!!
-	#	or a previous install step failed (not relavant here -- already checked above)
-    if ! backupActiveFile "$activeFile" ; then
-		# check to see if active file needs to be updated
-		if [ -f "$activeFile" ]; then
-			# already updated - no change to active file
-			if cmp -s "$sourceFile" "$activeFile" > /dev/null ; then
-				return 1
-			fi
+	# check for package conflicts
+	if [ -f "$activeFile.package" ]; then
+		prevousPackage=$( cat "$activeFile.package" )
+		if [ $packageName != $prevousPackage ]; then
+			setInstallFailed $EXIT_PACKAGE_CONFLICT "$(basename $activeFile) was already modfied by $prevousPackage"
+			return 1
+		fi
+	fi
+	# already updated - nothing to do
+	if [ -f "$activeFile" ]; then
+		if cmp -s "$sourceFile" "$activeFile" > /dev/null ; then
+			return 1
 		fi
 	fi
 
-	# all checks passed - update active file
-	if [ -e "$activeFile.orig" ] || [ -e "$activeFile.NO_ORIG" ]; then
-		# add file to installed files list (used for uninstallAll)
-		# do this before actually modifying things just in case there's an error
-		#	that way the uninstall is assured
-		echo "$activeFile" >> "$installedFilesList"
-		cp "$sourceFile" "$activeFile"
-
-		updateRestartFlags "$activeFile"
-		thisFileUpdated=true
-		return 0
 	# backup missing (this should not ever happen)
-	else
+    if ! backupActiveFile "$activeFile" ; then
 		setInstallFailed $EXIT_FILE_SET_ERROR "no backup for $baseName"
 		return 1
 	fi
+
+	# add file to installed files list (used for uninstallAll)
+	# do this before actually modifying things just in case there's an error
+	#	that way the uninstall is assured
+	echo "$activeFile" >> "$installedFilesList"
+
+	# update package flag to prevent overwrites by other packages
+	echo $packageName > "$activeFile.package"
+	# update the active file
+	cp "$sourceFile" "$activeFile"
+
+	updateRestartFlags "$activeFile"
+	thisFileUpdated=true
+	return 0
 }
 
 
@@ -544,23 +547,31 @@ updateActiveFile ()
 #
 # returns 0 if active file was restored, 1 if not
 # also sets thisFileUpdated for backwards compatibility with existing setup scripts
+#
+# restore only if the package that updated this file is the current package
+#	failure is indicated in the return code but does not trigger as faliure
 
 restoreActiveFile ()
 {
     thisFileUpdated=false
 
-    local baseName="$(basename $1)"
+	if [ -f "$1.package" ]; then
+		prevousPackage=$( cat "$1.package" )
+		if [ $packageName != $prevousPackage ]; then
+			return 1
+		fi
+    fi
     if [ -e "$1.orig" ]; then
         mv -f "$1.orig" "$1"
-        rm -f "$1.NO_ORIG"
         thisFileUpdated=true
     elif [ -f "$1.NO_ORIG" ]; then
         rm -f "$1"
-        rm -f "$1.NO_ORIG"
         thisFileUpdated=true
     fi
 
 	if $thisFileUpdated ; then
+        rm -f "$1.NO_ORIG"
+        rm -f "$1.package"
 		# remove file from installed file list
 		if [ -f "$installedFilesList" ]; then
 			grep -v "$1" "$installedFilesList" | tee "$installedFilesList" > /dev/null

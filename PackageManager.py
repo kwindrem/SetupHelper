@@ -1988,7 +1988,7 @@ class PackageClass:
 			except:
 				pass
 			if dependencyConflict:
-				self.SetIncompatible ("package conflict")
+				self.SetIncompatible ("package dependency error")
 				self.SetIncompatibleDetails (dependencyReason)
 				incompatible = True
 		if incompatible == False:
@@ -2729,8 +2729,7 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_PACKAGE_CONFLICT:
 			package.SetIncompatible ("package conflict")
 			package.SetIncompatibleDetails (stderr)
-			DbusIf.UpdateStatus ( message=stderr,
-											where=sendStatusTo, logLevel=ERROR )
+			DbusIf.UpdateStatus ( message="install failed: " + stderr, where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error

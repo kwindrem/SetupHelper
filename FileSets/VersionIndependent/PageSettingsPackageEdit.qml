@@ -83,16 +83,19 @@ MbPage {
     function nextIndex ()
     {
 		var lastIndex = packageIndex
+		cancelEdit ()
 		packageIndex += 1
 		if (packageIndex >= packageCount.value)
 			packageIndex = packageCount.value - 1
 		// if new package, request PackageManager to refresh GitHub version info for this package
 		if (packageIndex != lastIndex)
-			editAction.setValue ('gitHubScan' + ':' + packageName)
+
+		editAction.setValue ('gitHubScan' + ':' + packageName)
 	}
 	function previousIndex ()
     {
 		var lastIndex = packageIndex
+		cancelEdit ()
 		packageIndex -= 1
 		if (packageIndex < 0)
 			packageIndex = 0
@@ -352,7 +355,7 @@ MbPage {
         Text
         {
             id: statusMessage
-            width: 250
+            width: dismissErrorButton.show ? root.width - dismissErrorButton.width : 250
 			height: 35
             wrapMode: Text.WordWrap
             anchors { left: parent.left; leftMargin: 10; top: gitHubBranch.bottom; topMargin: 5 }

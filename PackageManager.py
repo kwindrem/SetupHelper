@@ -74,6 +74,7 @@ ONE_DOWNLOAD = 2
 #			'INITIALIZE' - install PackageManager's persistent storage (dbus Settings)
 #						so that the storage will be rebuilt when PackageManager restarts
 #						PackageManager will exit when this command is received
+#			'RESTART_PM' - restart PackageManager
 #			'gitHubScan' - trigger GitHub version update
 #						sent when entering the package edit menu or when changing packages within that menu
 #						also used to trigger a Git Hub version refresh of all packages when entering the Active packages menu
@@ -511,6 +512,12 @@ def PushAction (command=None, source=None):
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global InitializePackageManager
 		InitializePackageManager = True
+		return True
+	elif action == 'RESTART_PM':
+		logging.warning ( "received PackageManager RESTART request from " + source)
+		# set the flag - Initialize will quit the main loop, then work is done in main
+		global RestartPackageManager
+		RestartPackageManager = True
 		return True
 	elif action == 'gitHubScan':
 		UpdateGitHubVersion.SetPriorityGitHubVersion (packageName)
@@ -2620,11 +2627,15 @@ class InstallPackagesClass (threading.Thread):
 		try:
 			if packageName == "SetupHelper":
 				proc = subprocess.Popen ( [ setupFile, direction, 'auto' ],
-										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 			else:
 				proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
-										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
+										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			proc.wait()
+			# convert from binary to string
+			out, err = proc.communicate ()
+			stdout = out.decode ().strip ()
+			stderr = err.decode ().strip ()
 			returnCode = proc.returncode
 			setupRunFail = False
 		except:
@@ -3439,6 +3450,7 @@ def mainLoop():
 	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
 	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop 
 	global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
+	global RestartPackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
 
 	global noActionCount
 	global packageScanComplete
@@ -3651,6 +3663,11 @@ def mainLoop():
 			mainloop.quit()
 			return False
 		elif InitializePackageManager:
+			statusMessage = "initializing and restarting PackageManager ..."
+			# exit the main loop
+			mainloop.quit()
+			return False
+		elif RestartPackageManager:
 			statusMessage = "restarting PackageManager ..."
 			# exit the main loop
 			mainloop.quit()
@@ -3752,11 +3769,13 @@ def main():
 	global SystemReboot	# initialized/used in main, set in mainloop, PushAction, InstallPackage
 	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
 	global InitializePackageManager # initialized in main, set in PushAction, used in mainloop
+	global RestartPackageManager # initialized in main, set in PushAction, used in mainloop
 	global SetupHelperUninstall
 	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop
 	SystemReboot = False
 	GuiRestart = False
 	InitializePackageManager = False
+	RestartPackageManager = False
 	SetupHelperUninstall = False
 	WaitForGitHubVersions = True	# hold off package processing until first GitHub version refresh pass
 

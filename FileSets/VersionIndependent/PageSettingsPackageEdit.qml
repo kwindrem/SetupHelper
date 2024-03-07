@@ -336,7 +336,7 @@ MbPage {
             anchors { right: parent.right; top: statusMessage.bottom; topMargin: 5 }
             description: ""
             value: installedValid ? qsTr("Uninstall") : qsTr("Remove")
-            onClicked: uninstall ()
+            onClicked: installedValid ? uninstall () : remove ()
             opacity: navigate ? 1.0 : 0.2
             writeAccessLevel: User.AccessInstaller
         }

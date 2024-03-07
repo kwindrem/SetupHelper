@@ -8,35 +8,21 @@ MbPage {
 	id: root
 	title: pmRunning ? qsTr("Intialize Package Manager") : qsTr ("Package manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
-	VBusItem { id: pmStatus; bind: Utils.path(servicePrefix, "/PmStatus") }
-	property bool pmRunning: pmStatus.valid
+	property bool pmRunning: installStatus.valid
 
 	property bool showInProgress: false
-	property bool initialize: false
 
 	onPmRunningChanged: { showInProgress = false }
 
-    function sendCommand (command)
+    function sendInitialize ()
     {
 			// provide local confirmation of action - takes PackageManager too long
-            editAction.setValue (command)
+            editAction.setValue ("INITIALIZE")
 			showInProgress = true
-			if (command == "INITIALIZE")
-				initialize = true
-			else
-				initialize = false
     }
 
 	model: VisibleItemModel
     {
-		MbOK
-		{
-			description: qsTr("Restart")
-			value: qsTr("Press to Restart")
-			onClicked: sendCommand ("RESTART_PM")
-			writeAccessLevel: User.AccessInstaller
-			show: ! showInProgress
-		}
         MbItemText
         {
 			id: info
@@ -48,14 +34,14 @@ MbPage {
 		{
 			description: qsTr("Initialize")
 			value: qsTr("Press to Initialize")
-			onClicked: sendCommand ("INITIALIZE_PM")
+			onClicked: sendInitialize ()
             writeAccessLevel: User.AccessInstaller
             show: ! showInProgress
 		}
         MbItemText
         {
 			id: initializingMessage
-            text: initialize ? qsTr ("... initializing and restarting") : qsTr  ("... restarting")
+            text: qsTr ("... initializing and restarting")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
             show: showInProgress

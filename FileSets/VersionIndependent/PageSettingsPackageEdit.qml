@@ -282,7 +282,7 @@ MbPage {
             description: ""
             value: qsTr ("Proceed")
             onClicked: confirm ()
-            show: ! navigate && actionPending || showIncompableDetails
+            show: ! navigate && actionPending || ( showIncompableDetails && incompatibleReason == "package dependency error" )
             writeAccessLevel: User.AccessInstaller
         }
 
@@ -355,7 +355,7 @@ MbPage {
         Text
         {
             id: statusMessage
-            width: dismissErrorButton.show ? root.width - dismissErrorButton.width : 250
+            width: ( dismissErrorButton.show || ! confirmButton.show ) ? root.width - dismissErrorButton.width : 250
 			height: 35
             wrapMode: Text.WordWrap
             anchors { left: parent.left; leftMargin: 10; top: gitHubBranch.bottom; topMargin: 5 }

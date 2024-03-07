@@ -1470,6 +1470,7 @@ class PackageClass:
 		self.Incompatible = ''
 		self.RebootNeeded = ''
 		self.GuiRestartNeeded = ''
+		self.lastConflictCheck = 0
 
 		# these variables store results of an install
 		#	used only to block automatic installs after the install fails
@@ -1881,6 +1882,8 @@ class PackageClass:
 		global VenusVersionNumber
 		global Platform
 
+		####startTime = time.time()
+
 		packageName = self.PackageName
 
 		# fetch installed version
@@ -2009,6 +2012,57 @@ class PackageClass:
 				self.SetIncompatible ("package dependency error")
 				self.SetIncompatibleDetails (dependencyReason)
 				incompatible = True
+
+		# check for file conflicts with prevously installed packages
+		# each line in all file lists are checked to see if the <file>.pacage contains a different package name
+		# those that do represent a conflict between this and that other package
+		if incompatible == False:
+			conflicts = ""
+			fileLists = [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
+			for fileList in fileLists:
+				path = "/data/" + packageName + "/FileSets/" + fileList
+				if not os.path.exists (path):
+					continue
+				with open (path, 'r') as file:
+					# valid entries begin with / and everything after white space is discarded
+					# the result should be a full path to one replacment file
+					for entry in file:
+						entry = entry.strip ()
+						try:
+							if not entry.startswith ("/"):
+								continue
+							replacementFile = entry.split ()[0].strip ()
+							if not replacementFile.startswith ("/"):
+								continue
+							packageFile = replacementFile + ".package"
+							if not os.path.exists ( packageFile) :
+								continue
+							previousPackage = ""
+							try:
+								fd = open (packageFile, 'r')
+								previousPackage = fd.readline().strip()
+								fd.close ()
+								if packageName == previousPackage:
+									continue
+							except:
+								continue
+						except:
+							continue
+						# here if previously updated file was from a different package
+						baseName =  os.path.basename (replacementFile)
+						# log conflict only if this is the first time it was logged
+						if os.path.getmtime ( packageFile ) > self.lastConflictCheck:
+							logging.error ("package file conflict " + baseName + " " + packageName + " " + previousPackage)
+						if conflicts != "":
+							conflicts += "\n"
+						conflicts += previousPackage + " " + baseName
+			if conflicts != "":
+				self.SetIncompatible ("package conflict")
+				self.SetIncompatibleDetails (conflicts)
+				incompatible = True
+			# used to prevent repeaded errors to the log
+			self.lastConflictCheck = time.time ()
+
 		# no incompatibility issues found in the package - display the value from the last install operation
 		if incompatible == False:
 				self.SetIncompatible ("")
@@ -2017,6 +2071,10 @@ class PackageClass:
 		# clear GitHub version if not refreshed in 10 minutes
 		if self.GitHubVersion != "" and time.time () > self.gitHubExpireTime:
 			self.SetGitHubVersion ("")
+
+		####endTime = time.time()
+		####print ("UpdateVersionaAndFlages for %s time %3.1f mS" % ( packageName, (endTime - startTime) * 1000 ))
+
 	# end UpdateVersionsAndFlags
 # end Package
 

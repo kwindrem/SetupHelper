@@ -476,7 +476,8 @@ def PushAction (command=None, source=None):
 		if package != None:
 			package.DownloadPending = True
 			# clear any incompatible reason as download is requested
-			package.SetIncompatible ("")
+			package.InstallIncompatible = ""
+			package.InstallIncompatibleDetails = ""
 		DbusIf.UNLOCK ()
 		theQueue = DownloadGitHub.DownloadQueue
 		queueText = "Download"
@@ -1340,7 +1341,8 @@ class PackageClass:
 		# clear incompatible reason if version number changed
 		# so install can be tried again
 		if version != self.PackageVersion:
-			self.SetIncompatible ("")
+			self.InstallIncompatible = ""
+			self.InstallIncompatibleDetails = ""
 		self.PackageVersion = version
 		self.PackageVersionNumber = VersionToNumber (version)
 		if self.packageVersionPath != "":
@@ -1460,6 +1462,12 @@ class PackageClass:
 		self.Incompatible = ''
 		self.RebootNeeded = ''
 		self.GuiRestartNeeded = ''
+
+		# these variables store results of an install
+		#	used only to block automatic installs after the install fails
+		self.InstallIncompatible = ""
+		self.InstallIncompatibleDetails = ""
+
 
 		# needed because settingChangeHandler may be called as soon as SettingsDevice is called
 		#	which is before actual package name is set below
@@ -1634,8 +1642,7 @@ class PackageClass:
 				package.UpdateVersionsAndFlags ()
 			# clear incompatble reason at beginning of download
 			else:
-				logging.warning ("#### download pending True " + packageName)
-				package.SetIncompatible ("")
+				package.InstallIncompatible = ""
 		DbusIf.UNLOCK ()
 
 		
@@ -1797,7 +1804,8 @@ class PackageClass:
 				toPackage.DownloadPending = fromPackage.DownloadPending
 				toPackage.InstallPending = fromPackage.InstallPending
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
-				toPackage.FileSetOk = fromPackage.FileSetOk
+				toPackage.InstallIncompatible = fromPackage.InstallIncompatible
+				toPackage.InstallIncompatibleDetails = fromPackage.InstallIncompatibleDetails
 
 				toIndex += 1
 				fromIndex += 1
@@ -1814,6 +1822,8 @@ class PackageClass:
 			toPackage.SetRebootNeeded (False)
 			toPackage.SetGuiRestartNeeded (False)
 			toPackage.SetIncompatible ("")
+			toPackage.InstallIncompatible = ""
+			toPackage.InstallIncompatibleDetails = ""
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -1991,6 +2001,7 @@ class PackageClass:
 				self.SetIncompatible ("package dependency error")
 				self.SetIncompatibleDetails (dependencyReason)
 				incompatible = True
+		# no incompatibility issues found in the package - display the value from the last install operation
 		if incompatible == False:
 				self.SetIncompatible ("")
 				self.SetIncompatibleDetails ("")
@@ -2679,16 +2690,16 @@ class InstallPackagesClass (threading.Thread):
 											where=sendStatusTo, logLevel=WARNING )
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
-			package.SetIncompatible ("incompatible with " + str(VenusVersion))
-			package.SetIncompatibleDetails ("")
+			package.InstallIncompatible = "incompatible with " + VenusVersion
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + VenusVersion,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFORM:
 			global Platform
-			package.SetIncompatible ("incompatible with " + Platform)
-			package.SetIncompatibleDetails ("")
+			package.InstallIncompatible = "incompatible with " + Platform
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + " incompatible with " + Platform,
 											where=sendStatusTo, logLevel=WARNING )
 			if source == 'GUI':
@@ -2699,43 +2710,43 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_FILE_SET_ERROR:
-			package.SetIncompatible ("no file set for " + str(VenusVersion))
-			package.SetIncompatibleDetails ("")
+			package.InstallIncompatible = "no file set for " + str(VenusVersion)
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + " no file set for " + VenusVersion,
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_ROOT_FULL:
-			package.SetIncompatible ("no room on root partition ")
-			package.SetIncompatibleDetails ("")
+			package.InstallIncompatible = "no room on root partition "
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + " no room on root partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_DATA_FULL:
-			package.SetIncompatible ("no room on data partition ")
-			package.SetIncompatibleDetails ("")
+			package.InstallIncompatible = "no room on data partition "
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + " no room on data partition ",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_NO_GUI_V1:
-			package.SetIncompatible ("GUI v1 not installed")
-			package.SetIncompatibleDetails ("GUI v1 required but not installed")
+			package.InstallIncompatible = "GUI v1 not installed"
+			package.InstallIncompatibleDetails = ""
 			DbusIf.UpdateStatus ( message=packageName + "GUI v1 not installed",
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		elif returnCode == EXIT_PACKAGE_CONFLICT:
-			package.SetIncompatible ("package conflict")
-			package.SetIncompatibleDetails (stderr)
+			package.InstallIncompatible = "package conflict"
+			package.InstallIncompatibleDetails = stderr
 			DbusIf.UpdateStatus ( message="install failed: " + stderr, where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.SetGuiEditAction ( 'ERROR' )
 		# unknown error
 		elif returnCode != 0:
-			package.SetIncompatible ("unknown error")
-			package.SetIncompatibleDetails (str (returnCode) + " " + stderr)
+			package.InstallIncompatible = "unknown error"
+			package.InstallIncompatibleDetails = str (returnCode) + " " + stderr
 			DbusIf.UpdateStatus ( message=packageName + "unknown error " + str (returnCode),
 											where=sendStatusTo, logLevel=ERROR )
 			if source == 'GUI':
@@ -3585,7 +3596,8 @@ def mainLoop():
 		# validate package for install
 		#	ignore incompatible if running as a boot install
 		#		allows previous failures to be ignored and a fress install attempt made
-		if packageOperationOk and package.FileSetOk and ( package.Incompatible == '' or bootInstall ):
+		if packageOperationOk and package.FileSetOk and ( bootInstall
+				or ( package.Incompatible == '' and package.InstallIncompatible == '' ) ):
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
 			installOk = False
 

@@ -531,6 +531,7 @@ updateActiveFile ()
 
 	# update package flag to prevent overwrites by other packages
 	echo $packageName > "$activeFile.package"
+
 	# update the active file
 	cp "$sourceFile" "$activeFile"
 

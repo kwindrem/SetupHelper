@@ -870,7 +870,8 @@ class DbusIfClass:
 
 		# remove the dbus Settings paths - via the command line 
 		try:
-			proc = subprocess.Popen (['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen (['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ],
+						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 		except:
 			logging.error ("dbus RemoveSettings call failed")
 		else:
@@ -2320,7 +2321,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
 		try:
 			proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],\
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		except:
 			DbusIf.UpdateStatus ( message="could not access archive on GitHub " + packageName,
 										where=where, logLevel=ERROR )
@@ -2329,10 +2330,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			return
 		else:
 			proc.wait()
-			stdout, stderr = proc.communicate ()
-			# convert from binary to string
-			stdout = stdout.decode ().strip ()
-			stderr = stderr.decode ().strip ()
 			returnCode = proc.returncode
 			
 		if returnCode != 0:
@@ -2623,15 +2620,11 @@ class InstallPackagesClass (threading.Thread):
 		try:
 			if packageName == "SetupHelper":
 				proc = subprocess.Popen ( [ setupFile, direction, 'auto' ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
 			else:
 				proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
 			proc.wait()
-			stdout, stderr = proc.communicate ()
-			# convert from binary to string
-			stdout = stdout.decode ().strip ()
-			stderr = stderr.decode ().strip ()
 			returnCode = proc.returncode
 			setupRunFail = False
 		except:
@@ -3093,12 +3086,8 @@ class MediaScanClass (threading.Thread):
 					shutil.rmtree (logDestDir)
 
 				proc = subprocess.Popen ( [ 'zip', '-rq', backupPath + "/logs.zip", "/data/log" ],
-											stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+											stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
 				proc.wait()
-				stdout, stderr = proc.communicate ()
-				# convert from binary to string
-				stdout = stdout.decode ().strip ()
-				stderr = stderr.decode ().strip ()
 				returnCode = proc.returncode
 				logsWritten = "logs"
 			except:
@@ -3180,7 +3169,7 @@ class MediaScanClass (threading.Thread):
 						try:
 							proc = subprocess.Popen ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
 											path, default, typeId, min, max ], 
-											stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+											stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 							proc.wait()
 							parameterExists = True
 							logging.warning ("settingsRestore: creating " + path)
@@ -3713,13 +3702,8 @@ def	directUninstall (packageName):
 		setupFile = "/data/" + packageName + "/setup"
 		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
 			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'deferReboot', 'deferGuiRestart', 'auto' ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
 			proc.wait()
-			stdout, stderr = proc.communicate ()
-			# convert from binary to string
-			stdout = stdout.decode ().strip ()
-			stderr = stderr.decode ().strip ()
-			returnCode = proc.returncode
 	except:
 		pass
 
@@ -3985,7 +3969,7 @@ def main():
 			logging.critical (">>>> uninstalling SetupHelper and exiting")
 			# schedule reboot for 30 seconds later since this script will die during the ininstall
 			# this should give enough time for the uninstall to finish before reboot
-			subprocess.Popen ( [ 'nohup', 'bash', '-c', 'sleep 30; shutdown -r now', '&' ], stdout=subprocess.PIPE, stderr=subprocess.PIPE  )
+			subprocess.Popen ( [ 'nohup', 'bash', '-c', 'sleep 30; shutdown -r now', '&' ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL  )
 		except:
 			pass
 
@@ -4003,7 +3987,7 @@ def main():
 		# insure the package manager service doesn't restart when we exit
 		#	it will start up again after the reboot if it is still installed
 		try:
-			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		except:
 			logging.critical ("svc to shutdown PackageManager failed")
 

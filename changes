@@ -1,10 +1,14 @@
-v6.12: (pending)
+v6.13: (pending)
 	fixed: running setup script from inside the package directory fails
 		e.g., cd /data/GuiMods; ./setup
 	add package dependencies, conflict detection and management
 	
+	fixed: RemoteGPIO hangs during install
 	add RemoteGPIO to default package list
 	improved reporting of errors in Package editor
+
+v6.12: used for some betas only
+	needed to skip to 6.13 so HelperFiles selection would always work 
 
 v6.11: skipped
 

@@ -511,18 +511,6 @@ updateActiveFile ()
 			return 1
 		fi
 	fi
-	# already updated - nothing to do
-	if [ -f "$activeFile" ]; then
-		if cmp -s "$sourceFile" "$activeFile" > /dev/null ; then
-			return 1
-		fi
-	fi
-
-	# backup missing (this should not ever happen)
-    if ! backupActiveFile "$activeFile" ; then
-		setInstallFailed $EXIT_FILE_SET_ERROR "no backup for $baseName"
-		return 1
-	fi
 
 	# add file to installed files list (used for uninstallAll)
 	# do this before actually modifying things just in case there's an error
@@ -531,6 +519,15 @@ updateActiveFile ()
 
 	# update package flag to prevent overwrites by other packages
 	echo $packageName > "$activeFile.package"
+
+	# already updated - don't need to any more
+	if [ -f "$activeFile" ]; then
+		if cmp -s "$sourceFile" "$activeFile" > /dev/null ; then
+			return 1
+		fi
+	fi
+
+    backupActiveFile "$activeFile"
 
 	# update the active file
 	cp "$sourceFile" "$activeFile"

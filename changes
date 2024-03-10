@@ -1,7 +1,7 @@
 v6.13: (pending)
 	fixed: running setup script from inside the package directory fails
 		e.g., cd /data/GuiMods; ./setup
-	add package dependencies, conflict detection and management
+	add package dependencies, conflict detection and resolution
 	fixed: RemoteGPIO hangs during install
 	add RemoteGPIO to default package list
 	improved reporting of errors in Package editor

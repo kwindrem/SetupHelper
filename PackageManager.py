@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# TODO: clean up descriptions, method, parameters
 #
 #	PackageManager.py
 #	Kevin Windrem

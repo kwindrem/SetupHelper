@@ -63,7 +63,7 @@ MbPage {
 		id: hideActionNeededTimer
 		running: false
 		repeat: false
-		interval: 1000 * 5 ////////// 60 * 10
+		interval: 1000 * 60 * 10
 		triggeredOnStart: true
 	}
 

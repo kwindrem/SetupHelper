@@ -36,8 +36,8 @@ MbPage {
 	property bool installOk: packageValid && packageVersion.item.value  != "" && ! incompatible
 	property string requestedAction: ''
 	property bool actionPending: requestedAction != ''
-	property bool navigate: ! actionPending && ! waitForAction
 	property bool waitForAction: editAction.value != ''
+	property bool navigate: ! actionPending && ! waitForAction
 	property bool editError: editAction.value == 'ERROR'
 	property bool conflictsExist: packageConflicts != ""
 
@@ -130,9 +130,9 @@ MbPage {
 		}
 	}
 
-	// only the cancel edit button sets hideActionNeeded
 	function cancelEdit (hideActionNeeded)
 	{
+		// only the cancel edit button sets hideActionNeeded
 		if (hideActionNeeded)
 			hideActionNeededTimer.start ()
 		requestedAction = ''
@@ -142,7 +142,14 @@ MbPage {
 	function confirm ()
 	{
 		// provide local confirmation of action in case PackageManager doesn't act on it
-		if (showActionNeeded)
+		if (actionPending)
+		{
+			setEditStatus ( "sending " + requestedAction + packageName + " request")
+			sendCommand (requestedAction + ':' + packageName)
+			// insure restart/reboot status shows up immediately after operaiton finishes
+			hideActionNeededTimer.stop ()
+		}
+		else if (showActionNeeded)
 		{
 			if (actionNeeded == 'reboot')
 			{
@@ -154,11 +161,6 @@ MbPage {
 				setEditStatus ( "sending GUI restart request" )
 				sendCommand ( 'restartGui' )
 			}
-		}
-		else if (actionPending)
-		{
-			setEditStatus ( "sending " + requestedAction + packageName + " request")
-			sendCommand (requestedAction + ':' + packageName)
 		}
 		requestedAction = ''
 	}
@@ -255,15 +257,16 @@ MbPage {
 			overwriteMode: false
 			writeAccessLevel: User.AccessInstaller
 		}
+
 		MbOK
 		{
 			id: cancelButton
 			width: 85
 			anchors { right: parent.right; bottom: statusMessage.bottom }
 			description: ""
-			value: showActionNeeded ? qsTr("Later") : (editError ? qsTr("OK") : qsTr("Cancel"))
+			value: actionPending ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
 			onClicked: cancelEdit (showActionNeeded)
-			show: actionPending || waitForAction || editError || showActionNeeded
+			show: ( actionPending || editError || showActionNeeded ) && ! waitForAction
 		}
 		MbOK
 		{
@@ -271,10 +274,21 @@ MbPage {
 			width: 92
 			anchors { right: cancelButton.left; bottom: statusMessage.bottom }
 			description: ""
-			value: showActionNeeded ? qsTr("Now") : qsTr ("Proceed")
+			value: actionPending ? qsTr("Proceed") : qsTr ("Now")
 			onClicked: confirm ()
-			show: ( actionPending || waitForAction || showActionNeeded) && ! editError
+			show: ( actionPending || showActionNeeded ) && ! waitForAction
 			writeAccessLevel: User.AccessInstaller
+		}
+		MbOK
+		{
+			id: showConflictsButton
+			width: 150
+			anchors { right: parent.right; bottom: statusMessage.bottom}
+			description: ""
+			value: qsTr("Show Conflicts")
+			onClicked: requestedAction = 'resolveConflicts'
+			writeAccessLevel: User.AccessInstaller
+			show: navigate && conflictsExist && ! ( editError || actionPending || waitForAction || showActionNeeded)
 		}
 
 		// bottom row of buttons
@@ -331,17 +345,6 @@ MbPage {
 			opacity: navigate ? 1.0 : 0.2
 			writeAccessLevel: User.AccessInstaller
 		}
-		MbOK
-		{
-			id: showConflictsButton
-			width: 150
-			anchors { right: parent.right; bottom: statusMessage.bottom}
-			description: ""
-			value: qsTr("Show Conflicts")
-			onClicked: requestedAction = 'resolveConflicts'
-			writeAccessLevel: User.AccessInstaller
-			show: navigate && conflictsExist && ! editError
-		}
 		// at bottom so it's not in the middle of hard button cycle
 		Text
 		{
@@ -376,17 +379,17 @@ MbPage {
 				}
 				else if (editStatus.valid && editStatus.value != "")
 					return ( editStatus.value )
+					else if (showActionNeeded)
+					{
+						if (actionNeeded == 'reboot')
+							return qsTr ("Reboot now?")
+						else if (actionNeeded == 'guiRestart')
+							return qsTr ("restart GUI now ?")
+						else
+							return ( "unknown ActionNeeded " + actionNeeded ) 
+					}
 				else if (incompatible)
 					return ( incompatibleReason )
-				else if (showActionNeeded)
-				{
-					if (actionNeeded == 'reboot')
-						return qsTr ("Reboot now?")
-					else if (actionNeeded == 'guiRestart')
-						return qsTr ("restart GUI now ?")
-					else
-						return ( "unknown ActionNeeded " + actionNeeded ) 
-				}
 				else
 					return ""
 			}

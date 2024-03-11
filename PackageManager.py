@@ -2747,8 +2747,8 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_REBOOT:
 			package.SetIncompatible ("", "")	# this marks the package as compatible
 			package.SetInstallFailReason ("")
-			DbusIf.SetActionNeeded ('reboot')
-			if source != 'GUI':
+			if source == 'GUI':
+				DbusIf.SetActionNeeded ('reboot')
 				logging.warning ( packageName + " " + direction + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.SetGuiEditAction ( "" )
@@ -2760,8 +2760,8 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_RESTART_GUI:
 			package.SetIncompatible ("", "")	# this marks the package as compatible
 			package.SetInstallFailReason ("")
-			DbusIf.SetActionNeeded ('guiRestart')
 			if source == 'GUI':
+				DbusIf.SetActionNeeded ('guiRestart')
 				logging.warning ( packageName + " " + direction + " GUI restart needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.SetGuiEditAction ( "" )
@@ -3756,7 +3756,6 @@ def mainLoop():
 			GuiRestart = False
 			DbusIf.SetEditStatus ("")
 			DbusIf.SetGuiEditAction ('')
-
 			DbusIf.SetActionNeeded ('')
 
 	if statusMessage != "":

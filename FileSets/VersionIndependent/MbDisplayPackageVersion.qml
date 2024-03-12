@@ -30,7 +30,7 @@ MbItem {
     VBusItem { id: osVersionItem; bind: Utils.path("com.victronenergy.platform", "/Firmware/Installed/Version" ) }
     property string osVersion: osVersionItem.valid ? osVersionItem.value : vePlatform.version
 
-	onClicked: rootWindow.pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml", {packageIndex: packageIndex})
+	onClicked: rootWindow.pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml", {newPackageIndex: packageIndex})
 
 
 	function statusText ()

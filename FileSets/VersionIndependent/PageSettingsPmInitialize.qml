@@ -6,7 +6,7 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: pmRunning ? qsTr("Intialize Package Manager") : qsTr ("Package manager not running")
+	title: pmRunning ? qsTr("PackageManager restart/initialize") : qsTr ("Package manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
 	VBusItem { id: pmStatus; bind: Utils.path(servicePrefix, "/PmStatus") }
 	property bool pmRunning: pmStatus.valid

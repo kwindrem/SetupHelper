@@ -14,15 +14,17 @@ MbPage {
 	property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
 	property string servicePrefix: "com.victronenergy.packageManager"
 	property int packageIndex: 0
-	property int defaultIndex:0
+	property int newPackageIndex:0
 	property VBusItem packageCount: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
 	property VBusItem editAction: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
 	property VBusItem editStatus: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditStatus") }
-
-	property string packageName: packageNameBox.item.valid ? packageNameBox.item.value : ""
+	property VBusItem gitHubVersionAgeItem: VBusItem { bind: getServiceBind ( "GitHubVersionAge" ) }
+	property int gitHubVersionAge: gitHubVersionAgeItem.valid ? gitHubVersionAgeItem.value : 0
+	property VBusItem packageNameItem: VBusItem { bind: getSettingsBind ("PackageName") }
+	property string packageName: packageNameItem.valid ? packageNameItem.value : ""
 	property bool isSetupHelper: packageName == "SetupHelper"
 
-	property VBusItem incompatibleReasonItem: VBusItem { bind: getServiceBind ( "Incompatible") }
+	property VBusItem incompatibleReasonItem: VBusItem { bind: getServiceBind ( "Incompatible" ) }
 	property string incompatibleReason: incompatibleReasonItem.valid ? incompatibleReasonItem.value : ""
 	property VBusItem packageConflictsItem: VBusItem { bind: getServiceBind ( "PackageConflicts") }
 	property string packageConflicts: packageConflictsItem.valid ? packageConflictsItem.value : ""
@@ -40,10 +42,8 @@ MbPage {
 	property bool navigate: ! actionPending && ! waitForAction
 	property bool editError: editAction.value == 'ERROR'
 	property bool conflictsExist: packageConflicts != ""
+	property string localError: ""
 
-	property VBusItem defaultPackageName: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "PackageName" ) }
-	property VBusItem defaultGitHubUser: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubUser" ) }
-	property VBusItem defaultGitHubBranch: VBusItem { bind: Utils.path ( servicePrefix, "/Default/", defaultIndex, "/", "GitHubBranch" ) }
 	// version info may be in platform service or in vePlatform.version
 	VBusItem { id: osVersionItem; bind: Utils.path("com.victronenergy.platform", "/Firmware/Installed/Version" ) }
 	property string osVersion: osVersionItem.valid ? osVersionItem.value : vePlatform.version
@@ -56,31 +56,75 @@ MbPage {
 	property string actionNeeded: actionNeededItem.valid ? actionNeededItem.value : ""
 	property bool showActionNeeded: ! hideActionNeededTimer.running && actionNeeded != ''
 
-	onActionNeededChanged: hideActionNeededTimer.stop ()
+	
+	onEditActionChanged:
+	{
+		hideActionNeededTimer.stop ()
+	}
+	
+	onActiveChanged:
+	{
+		if (active)
+		{
+			hideActionNeededTimer.stop ()
+			resetPackageIndex ()
+			refreshGitHubVersions ()
+		}
+	}
+
+	onNavigateChanged: resetPackageIndex ()
 	
 	// hide action for 10 minutes
-	Timer {
+	Timer
+	{
 		id: hideActionNeededTimer
 		running: false
 		repeat: false
 		interval: 1000 * 60 * 10
-		triggeredOnStart: true
 	}
 
-	Component.onCompleted:
+	// refresh the GitHub version GitHub version age is greater than 30 seconds
+	property bool waitForIndexChange: false
+	property bool waitForNameChange: false
+	onGitHubVersionAgeChanged:
 	{
-		hideActionNeededTimer.stop ()
-		resetPackageIndex ()
-		// request PackageManager to refresh GitHub version info for this package
-		sendCommand ('gitHubScan' + ':' + packageName)
+		refreshGitHubVersions ()
+	}
+	onPackageIndexChanged:
+	{
+		waitForIndexChange = false
+	}
+	onPackageNameChanged:
+	{
+		waitForNameChange = false
+		refreshGitHubVersions ()
+	}
+
+	function refreshGitHubVersions ()
+	{
+		if ( waitForIndexChange || waitForNameChange )
+			return
+		else if (! active || gitHubVersionAge < 30 ||  editAction.value != "" )
+		{
+			return
+		}
+
+		sendCommand ( 'gitHubScan' + ':' + packageName )
 	}
 
 	function resetPackageIndex ()
 	{
-		if (packageIndex < 0)
-			packageIndex = 0
-		else if (packageIndex >= packageCount.value)
-			packageIndex = packageCount.value - 1
+		if (newPackageIndex < 0)
+			newPackageIndex = 0
+		else if (newPackageIndex >= packageCount.value)
+			newPackageIndex = packageCount.value - 1
+
+		if (navigate && newPackageIndex != packageIndex)
+		{
+			waitForIndexChange = true
+			waitForNameChange = true
+			packageIndex = newPackageIndex
+		}
 	}
 
 	function getSettingsBind(param)
@@ -94,7 +138,9 @@ MbPage {
 
 	function sendCommand (command)
 	{
-		if (packageIndex >= 0 && packageIndex < packageCount.value)
+		if (editAction.value != "")
+			localError = "command could not be sent - reboot needed ("  + command + ")"
+		else if (packageIndex >= 0 && packageIndex < packageCount.value)
 			editAction.setValue (command)
 	}
 	function setEditStatus (status)
@@ -103,31 +149,16 @@ MbPage {
 			editStatus.setValue (status)
 	}
 
+	// don't change packages if pending operation or waiting for completion
 	function nextIndex ()
 	{
-		var newIndex = packageIndex + 1
-		if (newIndex >= packageCount.value)
-			newIndex = packageCount.value - 1
-		// if new package, request PackageManager to refresh GitHub version info for this package
-		if (packageIndex != newIndex)
-		{
-			cancelEdit ()
-			packageIndex = newIndex
-			sendCommand ('gitHubScan' + ':' + packageName)
-		}
+		newPackageIndex += 1
+		resetPackageIndex ()
 	}
 	function previousIndex ()
 	{
-		var newIndex = packageIndex - 1
-		if (newIndex < 0)
-		newIndex = 0
-		// if new package, notify PackageManager to refresh GitHub version info for this package
-		if (packageIndex != newIndex)
-		{
-			cancelEdit ()
-			packageIndex = newIndex
-			sendCommand ('gitHubScan' + ':' + packageName)
-		}
+		newPackageIndex -= 1
+		resetPackageIndex ()
 	}
 
 	function cancelEdit (hideActionNeeded)
@@ -136,8 +167,6 @@ MbPage {
 		if (hideActionNeeded)
 			hideActionNeededTimer.start ()
 		requestedAction = ''
-		sendCommand ( '' )
-		setEditStatus ( '' )
 	}
 	function confirm ()
 	{
@@ -186,15 +215,10 @@ MbPage {
 
 	model: VisibleItemModel
 	{
-		MbEditBox
+		MbItemText
 		{
 			id: packageNameBox
-			description: qsTr ("Package name and versions")
-			maximumLength: 30
-			item.bind: getSettingsBind ("PackageName")
-			overwriteMode: false
-			writeAccessLevel: User.AccessInstaller
-			readonly: true
+			text: packageName + " versions"
 		}
 		MbRowSmall
 		{
@@ -300,7 +324,7 @@ MbPage {
 			description: ""
 			value: qsTr("Previous")
 			onClicked: previousIndex ()
-			opacity: packageIndex > 0 ? 1.0 : 0.2
+			opacity: newPackageIndex > 0 ? 1.0 : 0.2
 		}
 		MbOK
 		{
@@ -310,7 +334,7 @@ MbPage {
 			description: ""
 			value: qsTr("Next")
 			onClicked: nextIndex ()
-			opacity: (packageIndex < packageCount.value - 1) ? 1.0 : 0.2
+			opacity: (newPackageIndex < packageCount.value - 1) ? 1.0 : 0.2
 		}
 		MbOK
 		{
@@ -379,15 +403,15 @@ MbPage {
 				}
 				else if (editStatus.valid && editStatus.value != "")
 					return ( editStatus.value )
-					else if (showActionNeeded)
-					{
-						if (actionNeeded == 'reboot')
-							return qsTr ("Reboot now?")
-						else if (actionNeeded == 'guiRestart')
-							return qsTr ("restart GUI now ?")
-						else
-							return ( "unknown ActionNeeded " + actionNeeded ) 
-					}
+				else if (showActionNeeded)
+				{
+					if (actionNeeded == 'reboot')
+						return qsTr ("Reboot now?")
+					else if (actionNeeded == 'guiRestart')
+						return qsTr ("restart GUI now ?")
+					else
+						return ( "unknown ActionNeeded " + actionNeeded ) 
+				}
 				else if (incompatible)
 					return ( incompatibleReason )
 				else

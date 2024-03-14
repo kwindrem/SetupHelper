@@ -30,12 +30,14 @@ MbPage {
 	property string packageConflicts: packageConflictsItem.valid ? packageConflictsItem.value : ""
 	property bool incompatible: incompatibleReason != ""
 	property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
+	property VBusItem fileSetOkItem: VBusItem { bind: getServiceBind ( "FileSetOk" ) }
 
+	
 	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
 	property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
 	property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
 	property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-	property bool installOk: packageValid && packageVersion.item.value  != "" && ! incompatible
+	property bool installOk: fileSetOkItem.valid && fileSetOkItem.value == 1 ? true : false
 	property string requestedAction: ''
 	property bool actionPending: requestedAction != ''
 	property bool waitForAction: editAction.value != ''
@@ -329,7 +331,7 @@ MbPage {
 		MbOK
 		{
 			id: nextButton
-			width: 75
+			width: 70
 			anchors { left: previousButton.right; top: statusMessage.bottom; topMargin: 5 }
 			description: ""
 			value: qsTr("Next")
@@ -340,7 +342,7 @@ MbPage {
 		{
 			id: downloadButton
 			width: 110
-			anchors { left: nextButton.right; top: statusMessage.bottom; topMargin: 5 }
+			anchors { right: installButton.left; top: statusMessage.bottom; topMargin: 5 }
 			description: ""
 			value: qsTr ("Download")
 			onClicked: gitHubDownload ()
@@ -350,7 +352,7 @@ MbPage {
 		MbOK
 		{
 			id: installButton
-			width: 90
+			width: 80
 			anchors { right: uninstallButton.left; top: statusMessage.bottom; topMargin: 5 }
 			description: ""
 			value: qsTr ("Install")
@@ -361,7 +363,7 @@ MbPage {
 		MbOK
 		{
 			id: uninstallButton
-			width: 100
+			width: 105
 			anchors { right: parent.right; top: statusMessage.bottom; topMargin: 5 }
 			description: ""
 			value: installedValid ? qsTr("Uninstall") : qsTr("Remove")

@@ -1,6 +1,4 @@
 #!/usr/bin/env python
-# TODO: clean up descriptions, method, parameters
-# TODO: done to UpdateGitHubVersionClass ###############
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -46,6 +44,9 @@ ONE_DOWNLOAD = 2
 #		/Package/n/Incompatible						indicates the reason the package not compatible with the system
 #													"" if compatible
 #													any other text if not compatible
+#		/Package/n/FileSetOK						indicates if the file set for the current version is usable
+#													based on the INCOMPLETE flag in the file set
+#													the GUI uses this to enable/disable the Install button
 #		/Package/n/InstallFailReason				indicates the reason last install failed ("" if success
 #													(not currently used)
 #		/Package/n/PackageConflicts					 (\n separated) list of reasons for a package conflict (\n separated)
@@ -189,12 +190,6 @@ EXIT_ERROR =				255 # generic error
 #	GitHub version information is erased 10 minutes after it was last refreshed.
 #	Entering the Package versions menu wil trigger a fast refresh, again to insure the info is up to date.
 #
-# delay for GitHub version refreshes
-# slow refresh also controls GitHub version expiration
-
-FAST_GITHUB_REFRESH = 0.25
-SLOW_GITHUB_REFRESH = 600.0
-
 #
 # PackageManager downloads packages from GitHub based on the GitHub version and package (stored) versions:
 #	if the GitHub branch is a specific version, automatic download occurs if the versions differ
@@ -404,10 +399,16 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 
 #	PushAction
 #
-# add an action to one of three queues:
-#	InstallPackages.InstallQueue for Install and Uninstall actions
-#	Download.Download for Download actions
-# 	AddRemoveQueue
+# some actions are pushed to one of three queues:
+#	InstallPackages.InstallQueue for install, uninstall, check and resolveConflicts actions
+#	Download.Download for download actions
+# 	AddRemoveQueue for add and remove actions
+#	GitHubVersion for gitHubScan (GitHub version refresh requiests)
+#
+# other actions are handled in line since they just set a global flag
+#		(not pused on any queue)
+#		which is then handled elsewere
+#
 # commands are added to the queue from the GUI (dbus service change handler)
 #	and from the main loop (source = 'AUTO')
 # the queue isolates command triggers from processing because processing 
@@ -423,15 +424,6 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 #
 # PushAction sets the ...Pending flag to prevent duplicate operations
 #	for a given package
-#
-#	Install and Uninstall actions are processed by the InstallPackages thread
-#	Download actions are processed by the DownloadGitHub thread
-#	Add and Remove actions are processed by the AddRemove thread
-#	GitHub version refreshes are processed by the UpdateGitHubVersion thread
-#
-#	other actions are handled in line since they just set a global flag
-#		(not pused on any queue)
-#		which is then handled elsewere
 #
 # returns True if command was accepted, False if not
 
@@ -471,7 +463,7 @@ def PushAction (command=None, source=None):
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR', defer=True )
 		DbusIf.UNLOCK ()
 
-	elif action == 'install' or action == 'uninstall':
+	elif action == 'install' or action == 'uninstall' or action == 'check':
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
@@ -491,19 +483,21 @@ def PushAction (command=None, source=None):
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR', defer=True )
 		DbusIf.UNLOCK ()
 
+	elif action == 'resolveConflicts':
+		theQueue = InstallPackages.InstallQueue
+		queueText = "Install"
+		logging.warning ( "received resolve conflicts request from " + source)
+		if source == 'GUI':
+			# note this message will be overwritten by the install and uninstall actions
+			#	triggered by this action
+			DbusIf.UpdateStatus ( "resolving conflicts for " + packageName, where='Editor' )
+
 	elif action == 'add' or action == 'remove':
 		theQueue = AddRemove.AddRemoveQueue
 		queueText = "AddRemove"
 		logging.warning ( "received " + action + " " + packageName + " from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
-
-	elif action == 'resolveConflicts':
-		theQueue = InstallPackages.InstallQueue
-		queueText = "Install"
-		logging.warning ( "received PackageManager RESTART request from " + source)
-		if source == 'GUI':
-			DbusIf.UpdateStatus ( "PackageManager restart pending " + packageName, where='Editor' )
 
 	elif action == 'gitHubScan':
 		theQueue = UpdateGitHubVersion.GitHubVersionQueue
@@ -930,7 +924,6 @@ class DbusIfClass:
 		elif where == 'Media':
 			DbusIf.SetMediaStatus (message)
 
-
 	def UpdatePackageCount (self):
 		count = len(PackageClass.PackageList)
 		self.DbusSettings['packageCount'] = count
@@ -1025,14 +1018,10 @@ class DbusIfClass:
 	#	handleGuiEditAction (internal use only)
 	#
 	# the GUI uses PackageManager service /GuiEditAction
-	# to inform PackageManager of an action
-	# a command is formed as "action":"packageName"
+	# to request the PackageManager perform some action
 	#
-	#	action is a text string: install, uninstall, download, etc
-	#	packageName is the name of the package to receive the action
-	#		for some acitons this may be the null string
 	# this handler disposes of the request quickly by pushing
-	#	the command onto a queue for later processing
+	#	the command onto a queue or setting a global variable for later processing
 
 	# errors that occur from the handler thread can not set the GuiEditAction
 	#	since the parameter will be set to the value passed to the handler
@@ -1363,7 +1352,6 @@ class PackageClass:
 		else:
 			return True
 
-
 	def SetPackageName (self, newName):
 		self.DbusSettings['packageName'] = newName
 		self.PackageName = newName
@@ -1418,6 +1406,11 @@ class PackageClass:
 		if self.installFailReasonPath != "":
 			DbusIf.DbusService[self.installFailReasonPath] = value	
 
+	def SetFileSetOk (self, value):
+		self.FileSetOk = value
+		if self.fileSetOkPath != "":
+			DbusIf.DbusService[self.fileSetOkPath] = value	
+
 	def settingChangedHandler (self, name, old, new):
 		# when dbus information changes, need to refresh local mirrors
 		if name == 'packageName':
@@ -1442,6 +1435,7 @@ class PackageClass:
 			self.conflictsPath = '/Package/' + section + '/PackageConflicts'
 			self.installFailReasonPath = '/Package/' + section + '/InstallFailReason'
 			self.gitHubVersionAgePath = '/Package/' + section + '/GitHubVersionAge'
+			self.fileSetOkPath = '/Package/' + section + '/FileSetOk'
 
 			# create service paths if they don't already exist
 			try:
@@ -1472,6 +1466,10 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.gitHubVersionAgePath]
 			except:
 				DbusIf.DbusService.add_path (self.gitHubVersionAgePath, "" )
+			try:
+				foo = DbusIf.DbusService[self.fileSetOkPath]
+			except:
+				DbusIf.DbusService.add_path (self.fileSetOkPath, "" )
 
 		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
 		self.gitHubUserPath = '/Settings/PackageManager/' + section + '/GitHubUser'
@@ -1514,6 +1512,7 @@ class PackageClass:
 		# these flags are used to insure multiple actions aren't executed on top of each other
 		self.DownloadPending = False
 		self.InstallPending = False
+		self.checkFileSets = False
 
 		self.AutoInstallOk = False
 		self.FileSetOk = False
@@ -1820,12 +1819,12 @@ class PackageClass:
 				 # clear the incompatible information - it will be filled in by background tasks
 				toPackage.SetIncompatible ("", "" )
 				toPackage.SetInstallFailReason ("")
+				toPackage.SetFileSetOk (fromPackage.FileSetOk)
 
 				# package variables
 				toPackage.DownloadPending = fromPackage.DownloadPending
 				toPackage.InstallPending = fromPackage.InstallPending
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
-				toPackage.FileSetOk = fromPackage.FileSetOk
 				toPackage.Conflicts = fromPackage.Conflicts
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
 
@@ -1844,6 +1843,7 @@ class PackageClass:
 			toPackage.SetPackageVersion ("?")
 			toPackage.SetIncompatible ("", "")
 			toPackage.SetInstallFailReason ("")
+			toPackage.SetFileSetOk (False)
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -1915,7 +1915,7 @@ class PackageClass:
 		if not os.path.isdir (packageDir):
 			self.SetPackageVersion ("")
 			self.AutoInstallOk = False
-			self.FileSetOk = False
+			self.SetFileSetOk (False)
 			self.SetIncompatible ("", "")
 			return
 
@@ -1945,13 +1945,20 @@ class PackageClass:
 			self.AutoInstallOk = True
 
 		# also check to see if file set has errors
-		flagFile = packageDir + "/FileSets/" + VenusVersion + "/INCOMPLETE"
-		if os.path.exists (flagFile):
-			self.FileSetOk = False
-			self.SetIncompatible ("no file set for " + str (VenusVersion), "")
+		fileSetsDir = packageDir + "/FileSets"
+		fileSet = fileSetsDir + "/" + VenusVersion
+		self.checkFileSets = False
+		if os.path.exists (fileSet + "/INCOMPLETE"):
+			self.SetFileSetOk (False)
+			self.SetIncompatible ("incomplete file set for " + str (VenusVersion), "")
 			incompatible = True
 		else:
-			self.FileSetOk = True
+			self.SetFileSetOk (True)
+			if not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
+				self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
+				incompatible = True
+				if not self.InstallPending:
+					self.checkFileSets = True
 
 		# platform is OK, now check versions
 		if incompatible == False:
@@ -2075,17 +2082,22 @@ class PackageClass:
 # end Package
 
 
-################################################
 #	UpdateGitHubVersionClass
 #
-# downloads the GitHub version of all packages
+# downloads the GitHub versions
 # this work is done in a separate thread so network activity can be spaced out
+#	and isolated from other acvities since they may take a while on slow networks
 # 
-# a queue is used to trigger a priority update for a specific package
-#	this is used when the operator changes GitHub user/branch so the version
-#	updates rapidly
-# the queue is also used to wake the thread from a potentially long sleep period
-# to exit or speed up the refresh rate
+# a message is used to trigger a priority update for a specific package
+#		this is used when the operator changes GitHub user/branch so the version
+#			updates rapidly
+#	or speed up the refresh rate
+# a STOP message is used to wake the thread
+#	so that the tread can exit wihout waitin for a potentially long timeout
+#
+# background refreshes are triggered by a queue timeout while waiting for messages
+#	refreshes occur rapidly to refresh the GUI and minimize time waiting for the versions
+#	or are spaced out over time such that version information is refreshed every 10 seconds
 #
 #	Instances:
 #		UpdateGitHubVersion (a separate thread)
@@ -2095,6 +2107,11 @@ class PackageClass:
 #		run ()
 #		StopThread ()
 #
+# delay for GitHub version refreshes
+# slow refresh also controls GitHub version expiration
+
+FAST_GITHUB_REFRESH = 0.25
+SLOW_GITHUB_REFRESH = 600.0
 
 class UpdateGitHubVersionClass (threading.Thread):
 
@@ -2340,10 +2357,11 @@ class UpdateGitHubVersionClass (threading.Thread):
 #	DownloadGitHubPackagesClass
 #
 # downloads packages from GitHub, replacing the existing package
-# 	if versions indicate a newer version
+#
+# downloads can take significant time, so they are handled in a separate thread
 #
 # the GUI and auto download code (in main loop) push download
-#	actions onto our queue
+#	actions onto this queue
 #	the thread blocks when the queue is empty
 #
 # a STOP command is also pushed onto the queue when PackageManager
@@ -2356,13 +2374,11 @@ class UpdateGitHubVersionClass (threading.Thread):
 #	Methods:
 #		GitHubDownload
 #		DownloadVersionCheck
-#		processDownloadQueue
 #		run
 #		StopThread
 #
 # the run () thread is only responsible for pacing automatic downloads from the internet
 #	commands are pushed onto the processing queue (PushAction)
-#
 
 class DownloadGitHubPackagesClass (threading.Thread):
 
@@ -2605,12 +2621,11 @@ class DownloadGitHubPackagesClass (threading.Thread):
 #
 #	Methods:
 #		InstallPackage
+#		ResolveConflicts
 #		run (the thread)
 #		StopThread
 #		run
 #
-# install and uninstall packages
-# 	if versions indicate a newer version
 # runs as a separate thread since the operations can take a long time
 # 	and we need to space them to avoid consuming all CPU resources
 #
@@ -2632,22 +2647,27 @@ class InstallPackagesClass (threading.Thread):
 	
 	#	InstallPackage
 	#
-	# this method either installs or uninstalls a package
-	# the choice is the direction value:
-	# 		'install' or 'uninstall'
+	# this method either installs, uninstalls or checks a package
+	#	by calling the package's setup script
+	#
+	# the 'check' action runs file set checks without installing the package
+	#	this creates a missing file set then sets/clears the INCOMPLETE flag
+	#	a missing file set is reported as "no file set" but does not block installs
+	#	an INCOMPLETE file set blocks installs
+	#	therefore, check attempts to resolve a missing file set
+	#
 	# the operation can take many seconds
 	# 	i.e., the time it takes to run the package's setup script
-	#	do not call from a thread that should not block
 	#
 	# uninstalling SetupHelper is a special case since that action will end PackageManager
 	#	so it is deferred until mainLoop detects the request and exits to main
 	#	where the actual uninstall occurs
 
-	def InstallPackage ( self, packageName=None, source=None , direction='install' ):
+	def InstallPackage ( self, packageName=None, source=None , action='install' ):
 
 		global SetupHelperUninstall
 
-		if packageName == "SetupHelper" and direction == 'uninstall':
+		if packageName == "SetupHelper" and action == 'uninstall':
 			SetupHelperUninstall = True
 			return
 
@@ -2666,11 +2686,11 @@ class InstallPackagesClass (threading.Thread):
 		if source == 'GUI':
 			sendStatusTo = 'Editor'
 			# uninstall sets the uninstall flag file to prevent auto install
-			if direction == 'uninstall':
+			if action == 'uninstall':
 				package.SetAutoInstallOk (True)
 				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
-			else:
+			elif action == 'install':
 				package.SetAutoInstallOk (False)
 				logging.warning (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
@@ -2718,14 +2738,14 @@ class InstallPackagesClass (threading.Thread):
 		# SetupHelper is handled differentlly because it will restart PackageManager and will loose the
 		#	user prompt for GUI restart or reboot - so let setup script restart GUI or reboot as needed
 		#
-		DbusIf.UpdateStatus ( message=direction + "ing " + packageName,
+		DbusIf.UpdateStatus ( message=action + "ing " + packageName,
 								where=sendStatusTo, logLevel=WARNING )
 		try:
 			if packageName == "SetupHelper":
-				proc = subprocess.Popen ( [ setupFile, direction, 'auto' ],
+				proc = subprocess.Popen ( [ setupFile, action, 'auto' ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
 			else:
-				proc = subprocess.Popen ( [ setupFile, direction, 'deferReboot', 'deferGuiRestart', 'auto' ],
+				proc = subprocess.Popen ( [ setupFile, action, 'deferReboot', 'deferGuiRestart', 'auto' ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			proc.wait()
 			# convert from binary to string
@@ -2736,6 +2756,7 @@ class InstallPackagesClass (threading.Thread):
 			setupRunFail = False
 		except:
 			setupRunFail = True
+
 
 		# manage the result of the setup run while locked just in case
 		DbusIf.LOCK ()
@@ -2761,12 +2782,12 @@ class InstallPackagesClass (threading.Thread):
 			package.SetInstallFailReason ("")
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('reboot')
-				logging.warning ( packageName + " " + direction + " REBOOT needed but handled by GUI")
+				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
 			# auto install triggers a reboot by setting the global flag - reboot handled in main_loop
 			else:
-				logging.warning ( packageName + " " + direction + " REBOOT pending")
+				logging.warning ( packageName + " " + action + " REBOOT pending")
 				global SystemReboot
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
@@ -2774,12 +2795,12 @@ class InstallPackagesClass (threading.Thread):
 			package.SetInstallFailReason ("")
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('guiRestart')
-				logging.warning ( packageName + " " + direction + " GUI restart needed but handled by GUI")
+				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
 			# auto install triggers a GUI restart by setting the global flag - restart handled in main_loop
 			else:
-				logging.warning ( packageName + " " + direction + " GUI restart pending")
+				logging.warning ( packageName + " " + action + " GUI restart pending")
 				global GuiRestart
 				GuiRestart = True
 		elif returnCode == EXIT_RUN_AGAIN:
@@ -2800,7 +2821,7 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_OPTIONS_NOT_SET:
 			errorMessage = packageName + " setup must be run from the command line"
 		elif returnCode == EXIT_FILE_SET_ERROR:
-			errorMessage = packageName + " no file set for " + VenusVersion
+			errorMessage = packageName + " incomplete file set for " + VenusVersion
 		elif returnCode == EXIT_ROOT_FULL:
 			errorMessage = packageName + " no room on root partition "
 		elif returnCode == EXIT_DATA_FULL:
@@ -2819,8 +2840,8 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 
-
 		package.UpdateVersionsAndFlags ()
+
 		DbusIf.UNLOCK ()
 	# end InstallPackage ()
 
@@ -2917,13 +2938,12 @@ class InstallPackagesClass (threading.Thread):
 				logging.error ("InstallQueue - no command and/or source - discarding", command)
 				continue
 
-			if action == 'install':
-				self.InstallPackage (packageName=packageName, source=source , direction='install' )
-			elif action == 'uninstall':
-				self.InstallPackage (packageName=packageName, source=source , direction='uninstall' )
 			# resolve conflicts may cause OTHER packages to install or uninstall
-			elif action == 'resolveConflicts':
+			if action == 'resolveConflicts':
 				self.ResolveConflicts (packageName=packageName, source=source)
+			# other wise use InstallPackage to install, uninstall, or check the package
+			elif action == 'install' or action == 'uninstall' or action == 'check':
+				self.InstallPackage (packageName=packageName, source=source , action=action )
 
 			# invalid action for this queue
 			else:
@@ -2962,7 +2982,10 @@ class InstallPackagesClass (threading.Thread):
 #	of the form <packageName>-<branch or version>
 #
 #	actual installation is handled in the InstallPackages run() thread
-
+#
+# removable media is checked for several "flag files" that trigger actions elsewhere
+#	these are described in detail at the beginning of this file
+#	scans for flag files is done in run ()
 
 class MediaScanClass (threading.Thread):
 
@@ -3083,10 +3106,10 @@ class MediaScanClass (threading.Thread):
 	#	settingsRestore
 	#
 	# extracts / restores dbus settings and custom icons
-	# copies log files to the removable media
-	#	/data/log/SetupHelper
-	#	/data/log/PackageManager
-	#	/data/log/gui
+	# copies ALL log files (backup only obvously)
+	#	the files are zipped to save space
+	#
+	# backup and restore options are either to/from removable media or /data
 	#
 	# settingsList contains the list of dbus /Settings parameters to save and restore
 	#
@@ -3315,6 +3338,9 @@ class MediaScanClass (threading.Thread):
 	#	essentially taking the thread off-line
 	#	the main method should catch the tread with join ()
 	# StopThread () is called to shut down the thread
+	#
+	# a queue with set timeout is used to pace operations
+	#	 this gives other threads time away from slower media scanning operations
 
 	def StopThread (self):
 		logging.info ("attempting to stop MediaScan thread")
@@ -3513,6 +3539,91 @@ class MediaScanClass (threading.Thread):
 	# end run ()
 # end MediaScanClass
 
+
+
+# main and mainLoop
+#
+#	Methods:
+#		mainLoop
+#		main ( the entry point)
+#		directUninstall
+#		uninstallAllPackages
+#
+#	mainLoop is called each second to make background checks
+#	update global and package flags, versions, etc
+#	and schedule automatic installs, uninstalls, downloads, etc
+#
+#	operations that can not be done in line may be deferred here:
+#		GUI restarts and system reboots
+#		PackageManager restarts and INITIALIZE
+#		GUI command acknowledgement from within the thread of the command handler
+#
+#	handshakes between threads often use a global variable rather than pushing something on a queue:
+#		install/download check holdoff while waiting for GitHub version refresh
+#
+#	some operations performed in mainLoop take a while but do not need to be done every second
+#	to spread things out, and minimize impact on other tasks within Venus Os,
+#	only one package is checked each second
+# 	(it would take 10 seconds to scan 10 packages)
+#
+#	PackageManager is responsible for reinstalling packages following a firmware update
+#	reinstallMods is a script called from /data/rcS.local that installs SetupHelper
+#		including the PackageManager service
+#	to avoid conflicts, there are two flag files that handshake reinstallMods and PackageManager
+#		/etc/venus/REINSTALL_PACKAGES is set by reinstallMods
+#			to notify Package manager to reinstall all packages
+#			PackageManager clears that flag when all packages have been reinstalled
+#		/etc/venus/REINSTALL_MODS_RUNNING is set and cleared by reinstallMods
+#			PackageManager tests this flag and holds off scanning for installs while it is set
+#	boot-time reinstall is done using the normal automatic install mechanism but bypasses
+#		the test for the user selectable auto install on/off
+#
+#	mainLoop is resonsible for triggering GUI restarts and system reboots
+#	installs, uninstalls and downloads are handled by the package's setup script
+#		but the script does not initalte these options.
+#	the results of the setup script set reboot/reset flags for the package
+#	the actual restart/reboot actions are held off as long as any package operations are pending
+#		so repeaded GUI restarts or system reboots are avoided
+#	this gives all packages a chance to download and/or install automatically
+#		before the restart/reboot
+#
+#	mainLoop also handles PackageManager restart and INITIALIZE actions
+#	INITIALZE wipes out the package information in dbus /Settings then quits
+#	The package information is then rebuilt the next time PackageManager starts
+#
+#	mainLoop also provides status information to the GUI
+#
+#	GUI restarts are handled without exiting PackageManager, however
+#	system reboots and Package manager restarts and INITIALIZE actions require
+#	PackageManager to exit
+#	The actual operations are performed in main () after mainLoop quits
+#
+#	mainLoop is "scheduled" to run from GLib which is all set up in main()
+#		however, mainLoop is not a simple loop
+#		it is called once per second by GLib then exits True
+#		mainLoop exits by calling mainloop.quit() then returning False
+#
+#	main is tasks:
+#		instializing global variables that do not change over time
+#		instantiating objects
+#		retriving nonvolatile information from dbus /Settings
+#		starting all threads
+#		start mainLoop
+#
+#		the code after mainloop.run() does not execute until mainLoop exits
+#		at which time the activities necessarey for a clean exit are performed:
+#
+#		an uninstall all function triggered by a flag on removable media
+#			this allows a blind uninstall of all packages (including SetupHelper)
+#			in the event the GUI becomes unresponsive and the user has no access to the console
+#		stopping all threads
+#		PackageManager actual initialziation
+#			is done by setting the package count in dbus /Settings to 0
+#		remove dbus com.victronenergy.packageManager
+#		uninstalling SetupHelper if requested above
+#			done by trigging a nohup backround task that sleeps for 30 seconds then installs the package
+#		reboot the system
+#		exit
 
 # persistent storage for mainLoop
 packageScanComplete = False
@@ -3713,6 +3824,12 @@ def mainLoop():
 			if forceInstall or installOk:
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
+
+			# attempt to create a missing file set
+			if not package.InstallPending and package.checkFileSets:
+				actionMessage = "checking file sets for " + packageName + " ..."
+				PushAction ( command='check' + ':' + packageName, source='AUTO' )
+				package.checkFileSets = False
 
 			# package checks skipped - continue with current download update
 			if not packageOperationOk:

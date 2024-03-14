@@ -41,7 +41,9 @@ MbItem {
 			return qsTr ("GUI restart needed")
 		else if (incompatibleReason == 'PLATFORM')
 			return qsTr ( "incompatible with " + platform )
-		else if (incompatibleReason != "")
+		// don't show warning incompatibilities here - they are shown in the editor menu	
+		else if (incompatibleReason != ""
+				&& incompatibleReason.toLowerCase().indexOf ("warning") == -1 )
 			return incompatibleReason
 		else
 			return ""
@@ -101,7 +103,7 @@ MbItem {
 			{
 				id: gitHubVersion
 				item { bind: getServiceBind("GitHubVersion") }
-				height: 20; width: 102
+				height: 20; width: 99
 			}
 			Text // puts a bit of space below version boxes - only needed in one column
 			{
@@ -126,7 +128,7 @@ MbItem {
 			{
 				id: packageVersion
 				item { bind: getServiceBind("PackageVersion") }
-				height: 20; width: 102
+				height: 20; width: 99
 			}
 		}
 		Column
@@ -146,7 +148,7 @@ MbItem {
 			{
 				id: installedVersion
 				item { bind: getServiceBind("InstalledVersion") }
-				height: 20; width: 102
+				height: 20; width: 99
 			}
 		}
     }

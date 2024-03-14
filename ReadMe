@@ -5,6 +5,9 @@ The SetupHelper package provides:
 	control of the automatic download and install from the GUI
 	add and remove packages from the system
 	manual download, install, uninstall from the GUI
+	checks for package conflicts and prevents one package installing over another
+		when the same files are modified
+	provides a "conflict resolution" option when such conflicts exist
 
     a "blind" install of SetupHelper from SD/USB media
 
@@ -15,6 +18,20 @@ The SetupHelper package provides:
 			SetupHelper
 			PackageManager
 			gui
+
+	Restart or initialize PackageManager
+
+
+SetupHelper v7.0 adds a conflict resolution mechanism.
+	Packages can identify known conflicts with other packages with a "pacakgeDependencies" list
+	One package can specify that other packages must be uninstalled or installed
+		before allowing the package to be installed
+	PackageManager also checks all files that will be modified to see if another package
+		has already modified the same file.
+	NOTE: All packages should be uninstalled, then reinstalled
+		to create the necessary information	for thesefile-based conflicts to be identified.
+	If a conflict exists it is reported on in the PackageManager menus and install is blocked
+	These conflicts can be resolved from within the Package editor menu
 
 NOTE: SetupHelper v6.0 changes significantly from prevous versions
 	providing more automatic installation and installation of files, services and dBus Settings
@@ -30,11 +47,15 @@ NOTE: SetupHelper v6.0 changes significantly from prevous versions
 	
 	The new sourcing mechanism can be found in the file SetupHelper/HelperResources/forSetupScript.
 
-SetupHelper may also required for other packages
-	although packages are being rewritten to contain helper files
-	to be independent of SetupHelper.
-	SetupHelper includes utilities used by these packages
-	and must be installed BEFORE running the other package setup scripts
+Helper resources
+	Other packages use "helper hesources" provided by SetupHelper
+	Helper Resources simplify the package's setup script and include hooks
+		that PackageManager uses to control installs and uninstalls.
+	Helper resources can be included in a package making them independent of SetupHelper.
+	However, without SetupHelper:
+		a package can only be installed and uninstalled rom the command line
+		automatic reinstall after a firmware update will not occur!
+	Installing SetupHelper is highly recommended !
 
 
 More information here:
@@ -378,6 +399,12 @@ The Package Manager includes a set of menus on the GX device menu system
 				Packages that are of no interest to you may be removed from Package Manager.
 				Removed packages will no longer appear in the version list or be accessible from the Package Editor menu.
 				But you can add the package back in manually.
+
+			Show Conflicts
+				If package conflicts exist, the Show Conflicts button appears
+				Pressign that shows a list of conflicts and asks if they should be resolved
+				Pressing Proceed will trigger the necessary package installs and uninstalls
+					needed to resolve the conflicts
 
 		Add package menu:
 			Allows the package name, GitHub user and GitHub branch or tag to be entered.

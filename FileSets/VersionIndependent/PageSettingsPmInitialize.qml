@@ -12,19 +12,15 @@ MbPage {
 	property bool pmRunning: pmStatus.valid
 
 	property bool showInProgress: false
-	property bool initialize: false
+	property string initializeMessage: ""
 
 	onPmRunningChanged: { showInProgress = false }
 
-    function sendCommand (command)
+    function sendCommand (command, message)
     {
-			// provide local confirmation of action - takes PackageManager too long
-            editAction.setValue (command)
-			showInProgress = true
-			if (command == "INITIALIZE")
-				initialize = true
-			else
-				initialize = false
+		initializeMessage = message
+		showInProgress = true
+		editAction.setValue (command)
     }
 
 	model: VisibleItemModel
@@ -32,30 +28,39 @@ MbPage {
 		MbOK
 		{
 			description: qsTr("Restart")
-			value: qsTr("Press to Restart")
-			onClicked: sendCommand ("RESTART_PM")
+			value: qsTr("Press to restart Package Manager")
+			onClicked:sendCommand ("RESTART_PM", qsTr ("restarting Package Manager ..."))
+			writeAccessLevel: User.AccessInstaller
+			show: ! showInProgress
+		}
+		MbOK
+		{
+			description: qsTr("Restart GUI")
+			value: qsTr("Press to restart GUI")
+			onClicked:sendCommand ("restartGui", qsTr ("restarting GUI ..."))
 			writeAccessLevel: User.AccessInstaller
 			show: ! showInProgress
 		}
         MbItemText
         {
 			id: info
-            text: qsTr ("Initializing PackageManager will reset persistent storage\nto an empty state\nGit Hub user and branch info is lost")
+            text: qsTr ("Initializing PackageManager will\nreset persistent storage to an empty state\nGit Hub user and branch are reset to defaults\nPackages added manually must be added again")
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
+			show: ! showInProgress
         }
 		MbOK
 		{
 			description: qsTr("Initialize")
-			value: qsTr("Press to Initialize")
-			onClicked: sendCommand ("INITIALIZE_PM")
+			value: qsTr("Press to INITIALIZE Package Manager")
+			onClicked: sendCommand ("INITIALIZE_PM", qsTr ("INITIALIZING Package Manager ..."))
             writeAccessLevel: User.AccessInstaller
             show: ! showInProgress
 		}
         MbItemText
         {
 			id: initializingMessage
-            text: initialize ? qsTr ("... initializing and restarting") : qsTr  ("... restarting")
+            text: initializeMessage
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
             show: showInProgress

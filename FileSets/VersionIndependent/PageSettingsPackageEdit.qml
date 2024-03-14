@@ -31,6 +31,7 @@ MbPage {
 	property bool incompatible: incompatibleReason != ""
 	property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
 	property VBusItem fileSetOkItem: VBusItem { bind: getServiceBind ( "FileSetOk" ) }
+	property VBusItem packageConflictsResolvableItem: VBusItem { bind: getServiceBind ( "PackageConflictsResovable") }
 
 	
 	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
@@ -44,6 +45,8 @@ MbPage {
 	property bool navigate: ! actionPending && ! waitForAction
 	property bool editError: editAction.value == 'ERROR'
 	property bool conflictsExist: packageConflicts != ""
+	property bool conflictsResolvable: packageConflictsResolvableItem.valid ? packageConflictsResolvableItem.value : ""
+	property bool showProceed: ( ! conflictsExist || conflictsResolvable) && ! waitForAction
 	property string localError: ""
 
 	// version info may be in platform service or in vePlatform.version
@@ -302,7 +305,7 @@ MbPage {
 			description: ""
 			value: actionPending ? qsTr("Proceed") : qsTr ("Now")
 			onClicked: confirm ()
-			show: ( actionPending || showActionNeeded ) && ! waitForAction
+			show: ( actionPending || showActionNeeded ) && showProceed
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK
@@ -397,7 +400,10 @@ MbPage {
 				if (actionPending)
 				{
 					if (requestedAction == 'resolveConflicts')
-						return ( packageConflicts + qsTr ("\nResolve conflicts?") )
+						if (conflictsResolvable)
+							return ( packageConflicts + qsTr ("\nResolve conflicts?") )
+						else
+						return ( packageConflicts + qsTr ("\ncan not resolve !") )
 					else if (isSetupHelper && requestedAction == 'uninstall')
 						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
 					else

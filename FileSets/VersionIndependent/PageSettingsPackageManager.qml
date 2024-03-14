@@ -145,7 +145,7 @@ MbPage {
 		}
 		MbSubMenu
         {
-            description: qsTr("Restart or initialize PackageManager ...")
+            description: qsTr("Restart or initialize ...")
             subpage: Component { PageSettingsPmInitialize {} }
             show: showControls
         }

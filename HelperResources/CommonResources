@@ -1256,6 +1256,7 @@ force=false
 deferReboot=false
 deferGuiRestart=false
 userInteraction=true
+runFromPm=false
 while [ $# -gt 0 ]; do
         case $1 in
             "reinstall")
@@ -1279,6 +1280,13 @@ while [ $# -gt 0 ]; do
             "auto")
                 logToConsole=false
 				userInteraction=false
+                ;;
+            "runFromPm")
+				runFromPm=true
+                logToConsole=false
+				userInteraction=false
+                deferReboot=true
+                deferGuiRestart=true
                 ;;
             "check")
 				# if no other actions were set, set it here

@@ -1394,12 +1394,17 @@ class PackageClass:
 		self.GitHubBranch = branch
 		self.DbusSettings['gitHubBranch'] = branch
 
-	def SetIncompatible (self, value, conflicts):
+	def SetIncompatible (self, value, conflicts, resolvable=True):
 		self.Incompatible = value
 		if self.incompatiblePath != "":
 			DbusIf.DbusService[self.incompatiblePath] = value	
 		if self.conflictsPath != "":
 			DbusIf.DbusService[self.conflictsPath] = conflicts	
+		if self.conflictsResolvablePath != "":
+			if resolvable:
+				DbusIf.DbusService[self.conflictsResolvablePath] = 1
+			else:
+				DbusIf.DbusService[self.conflictsResolvablePath] = 0
 
 	def SetInstallFailReason (self, value):
 		self.InstallFailReason = value
@@ -1418,11 +1423,11 @@ class PackageClass:
 		elif name == 'gitHubBranch':
 			self.GitHubBranch = new
 			if self.PackageName != None and self.PackageName != "":
-				UpdateGitHubVersion.SetPriorityGitHubVersion ( self.PackageName )
+				UpdateGitHubVersion.SetPriorityGitHubVersion ( 'package:' + self.PackageName )
 		elif name == 'gitHubUser':
 			self.GitHubUser = new
 			if self.PackageName != None and self.PackageName != "":
-				UpdateGitHubVersion.SetPriorityGitHubVersion ( self.PackageName )
+				UpdateGitHubVersion.SetPriorityGitHubVersion ( 'package:' + self.PackageName )
 
 	def __init__( self, section, packageName = None ):
 		# add package versions if it's a real package (not Edit)
@@ -1433,6 +1438,7 @@ class PackageClass:
 			self.installedVersionPath = '/Package/' + section + '/InstalledVersion'
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
 			self.conflictsPath = '/Package/' + section + '/PackageConflicts'
+			self.conflictsResolvablePath = '/Package/' + section + '/PackageConflictsResovable'
 			self.installFailReasonPath = '/Package/' + section + '/InstallFailReason'
 			self.gitHubVersionAgePath = '/Package/' + section + '/GitHubVersionAge'
 			self.fileSetOkPath = '/Package/' + section + '/FileSetOk'
@@ -1458,6 +1464,10 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.conflictsPath]
 			except:
 				DbusIf.DbusService.add_path (self.conflictsPath, "" )
+			try:
+				foo = DbusIf.DbusService[self.conflictsResolvablePath]
+			except:
+				DbusIf.DbusService.add_path (self.conflictsResolvablePath, "" )
 			try:
 				foo = DbusIf.DbusService[self.installFailReasonPath]
 			except:
@@ -1512,12 +1522,15 @@ class PackageClass:
 		# these flags are used to insure multiple actions aren't executed on top of each other
 		self.DownloadPending = False
 		self.InstallPending = False
+		self.InstallAfterDownload = False	# used by ResolveConflicts when doing both download and install
 		self.checkFileSets = False
 
 		self.AutoInstallOk = False
 		self.FileSetOk = False
 		self.InstallFailReason = ""
 		self.Conflicts = []
+		self.ConflictsResolvable = True
+
 		self.lastConflictCheck = 0
 
 		self.lastGitHubRefresh = 0
@@ -1994,83 +2007,93 @@ class PackageClass:
 		# check for package conflicts
 		if incompatible == False:
 			conflicts = []
+			# skip checks while operations are pending
+			#	this clears the conflicts list until it is checked agaion
+			if not self.InstallPending and not self.DownloadPending:
 
-			dependencyFile = "/data/" + packageName + "/packageDependencies"
-			dependencyConflict = False
-			dependencyReason = ""
-			try:
-				with open (dependencyFile, 'r') as file:
-					for item in file:
-						parts = item.split ()
-						if len (parts) < 2:
-							logging.error ("package dependency " + item + " requires package name and requirement")
-							continue
-						dependencyPackage = parts [0]
-						dependencyRequirement = parts [1]
+				dependencyFile = "/data/" + packageName + "/packageDependencies"
+				dependencyConflict = False
+				dependencyReason = ""
+				try:
+					with open (dependencyFile, 'r') as file:
+						for item in file:
+							parts = item.split ()
+							if len (parts) < 2:
+								logging.error ("package dependency " + item + " requires package name and requirement")
+								continue
+							dependencyPackage = parts [0]
+							dependencyRequirement = parts [1]
 
-						installedFile = "/etc/venus/installedVersion-" + dependencyPackage
-						packageIsInstalled = os.path.exists (installedFile)
-						packageMustBeInstalled = dependencyRequirement == "installed"
-						if packageIsInstalled != packageMustBeInstalled:
-							conflicts.append ( (dependencyPackage, dependencyRequirement) )
-			except:
-				pass
+							installedFile = "/etc/venus/installedVersion-" + dependencyPackage
+							packageIsInstalled = os.path.exists (installedFile)
+							packageMustBeInstalled = dependencyRequirement == "installed"
+							if packageIsInstalled != packageMustBeInstalled:
+								conflicts.append ( (dependencyPackage, dependencyRequirement) )
+				except:
+					pass
 
-			# check for file conflicts with prevously installed packages
-			# each line in all file lists are checked to see if the <file>.pacage contains a different package name
-			# those that do represent a conflict between this and that other package
-			fileLists =  [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
-			for fileList in fileLists:
-				path = "/data/" + packageName + "/FileSets/" + fileList
-				if not os.path.exists (path):
-					continue
-				with open (path, 'r') as file:
-					# valid entries begin with / and everything after white space is discarded
-					# the result should be a full path to one replacment file
-					for entry in file:
-						entry = entry.strip ()
-						try:
-							if not entry.startswith ("/"):
-								continue
-							replacementFile = entry.split ()[0].strip ()
-							if not replacementFile.startswith ("/"):
-								continue
-							packageFile = replacementFile + ".package"
-							if not os.path.exists ( packageFile) :
-								continue
-							previousPackage = ""
+				# check for file conflicts with prevously installed packages
+				# each line in all file lists are checked to see if the <file>.pacage contains a different package name
+				# those that do represent a conflict between this and that other package
+				fileLists =  [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
+				for fileList in fileLists:
+					path = "/data/" + packageName + "/FileSets/" + fileList
+					if not os.path.exists (path):
+						continue
+					with open (path, 'r') as file:
+						# valid entries begin with / and everything after white space is discarded
+						# the result should be a full path to one replacment file
+						for entry in file:
+							entry = entry.strip ()
 							try:
-								fd = open (packageFile, 'r')
-								previousPackage = fd.readline().strip()
-								fd.close ()
-								if packageName == previousPackage:
+								if not entry.startswith ("/"):
+									continue
+								replacementFile = entry.split ()[0].strip ()
+								if not replacementFile.startswith ("/"):
+									continue
+								packageFile = replacementFile + ".package"
+								if not os.path.exists ( packageFile) :
+									continue
+								previousPackage = ""
+								try:
+									fd = open (packageFile, 'r')
+									previousPackage = fd.readline().strip()
+									fd.close ()
+									if packageName == previousPackage:
+										continue
+								except:
 									continue
 							except:
 								continue
-						except:
-							continue
-						# here if previously updated file was from a different package
-						baseName =  os.path.basename (replacementFile)
-						# log conflict only if this is the first time it was logged
-						if os.path.getmtime ( packageFile ) > self.lastConflictCheck:
-							logging.warning ("package file conflict " + baseName + " " + packageName + " " + previousPackage)
+							# here if previously updated file was from a different package
+							baseName =  os.path.basename (replacementFile)
+							# log conflict only if this is the first time it was logged
+							if os.path.getmtime ( packageFile ) > self.lastConflictCheck:
+								logging.warning ("package file conflict " + baseName + " " + packageName + " " + previousPackage)
 
-						conflicts.append ( (previousPackage, "uninstalled") )
+							conflicts.append ( (previousPackage, "uninstalled") )
 
-				# used to prevent repeaded errors to the log
-				self.lastConflictCheck = time.time ()
+					# used to prevent repeaded errors to the log
+					self.lastConflictCheck = time.time ()
 
 			if len (conflicts) > 0:
 				# eliminate duplicates
 				self.Conflicts = list ( set ( conflicts ) )
-				
+				resolveOk = True
 				details = ""
 				for conflict in self.Conflicts:
 					if conflict [1] == "uninstalled":
 						details += conflict [0] + " must not be installed\n"
 					else:
-						details += conflict [0] + " must be installed\n"
-				self.SetIncompatible ("package conflict", details)
+						conflictPackage = PackageClass.LocatePackage (conflict[0])
+						if conflictPackage.PackageVersion != "":
+							details += conflict [0] + " must be installed\n"
+						elif conflictPackage.GitHubVersion != "":
+							details += conflict [0] + " must be downloaded and installed\n"
+						else:
+							details += conflict [0] + " not available\n"
+							resolveOk = False
+				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
 				incompatible = True
 			else:
 				self.Conflicts = []
@@ -2296,7 +2319,6 @@ class UpdateGitHubVersionClass (threading.Thread):
 			# package priority update NOT from the GUI
 			elif source == 'local' and packageName != "":
 				packageUpdate = True
-			# package name for priority update was specified in the command
 			if packageUpdate:
 				DbusIf.LOCK ()
 				package = PackageClass.LocatePackage (packageName)
@@ -2416,6 +2438,8 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		package = PackageClass.LocatePackage (packageName)
 		gitHubUser = package.GitHubUser
 		gitHubBranch = package.GitHubBranch
+		installAfter = package.InstallAfterDownload
+		package.InstallAfterDownload = False
 		DbusIf.UNLOCK ()
 
 		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
@@ -2512,13 +2536,20 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		DbusIf.UpdateStatus ( message=message, where=where )
 		if source == 'GUI':
 			if message == "":
-				DbusIf.AcknowledgeGuiEditAction ( '' )
+				# don't ack success if there's more to do
+				if not installAfter:
+					DbusIf.AcknowledgeGuiEditAction ( '' )
 			else:
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		if os.path.exists (tempDirectory):
 			shutil.rmtree (tempDirectory)
+
+		# package should be installed after a succesful download
+		if installAfter:
+			logging.warning ("install after download requested for " + packageName)
+			PushAction ( command='install' + ':' + packageName, source=source )
 	# end GitHubDownload
 
 
@@ -2731,22 +2762,10 @@ class InstallPackagesClass (threading.Thread):
 
 		DbusIf.UNLOCK ()
 
-		# provide an innitial status message for the action since it takes a while for PackageManager
-		#	to fill in EditStatus
-		# this provides immediate user feedback that the button press was detected
-		#
-		# SetupHelper is handled differentlly because it will restart PackageManager and will loose the
-		#	user prompt for GUI restart or reboot - so let setup script restart GUI or reboot as needed
-		#
-		DbusIf.UpdateStatus ( message=action + "ing " + packageName,
-								where=sendStatusTo, logLevel=WARNING )
+		DbusIf.UpdateStatus ( message=action + "ing " + packageName, where=sendStatusTo, logLevel=WARNING )
 		try:
-			if packageName == "SetupHelper":
-				proc = subprocess.Popen ( [ setupFile, action, 'auto' ],
+			proc = subprocess.Popen ( [ setupFile, action, 'runFromPm' ],
 										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			else:
-				proc = subprocess.Popen ( [ setupFile, action, 'deferReboot', 'deferGuiRestart', 'auto' ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			proc.wait()
 			# convert from binary to string
 			out, err = proc.communicate ()
@@ -2878,16 +2897,40 @@ class InstallPackagesClass (threading.Thread):
 				logging.error ("ResolveConflicts: " + packageName + " unrecognized requirement: " + str (conflict) )
 				continue
 
-			if os.path.exists ("/etc/venus/installedVersion-" + dependencyPackage):
+			requiredPackage = PackageClass.LocatePackage (dependencyPackage)
+
+			if requiredPackage.InstalledVersion != "":
 				packageIsInstalled = True
 			else:
 				packageIsInstalled = False
+			if requiredPackage.PackageVersion != "":
+				packageIsStored = True
+			else:
+				packageIsStored = False
+			if requiredPackage.GitHubVersion != "":
+				packageIsOnGitHub = True
+			else:
+				packageIsOnGitHub = False
+			if packageIsStored or packageIsOnGitHub:
+				packageIsAvailable = True
+			else:
+				packageIsAvailable = True
 
 			if packageMustBeInstalled and not packageIsInstalled:
-				logging.warning ("installing " + dependencyPackage + " so that " + packageName + " can be installed" )
-				PushAction ( command='install' + ':' + dependencyPackage, source=source )
+				if not packageIsAvailable:
+					DbusIf.UpdateStatus ( message=dependencyPackage + " not available - can't install",
+								where='Editor', logLevel=WARNING )
+				elif not packageIsStored and packageIsOnGitHub:
+					logging.warning ("ResolveConflicts: downloading and installing" + dependencyPackage + " so that " + packageName + " can be installed" )
+					PushAction ( command='download' + ':' + dependencyPackage, source=source )
+					# download will trigger install when it finished
+					requiredPackage.InstallAfterDownload = True
+				else:
+					logging.warning ("ResolveConflicts: installing " + dependencyPackage + " so that " + packageName + " can be installed" )
+					PushAction ( command='install' + ':' + dependencyPackage, source=source )
+
 			elif not packageMustBeInstalled and packageIsInstalled:
-				logging.warning ("uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
+				logging.warning ("ResolveConflicts: uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
 				PushAction ( command='uninstall' + ':' + dependencyPackage, source=source )
 
 		DbusIf.UNLOCK ()
@@ -2941,7 +2984,7 @@ class InstallPackagesClass (threading.Thread):
 			# resolve conflicts may cause OTHER packages to install or uninstall
 			if action == 'resolveConflicts':
 				self.ResolveConflicts (packageName=packageName, source=source)
-			# other wise use InstallPackage to install, uninstall, or check the package
+			# otherwise use InstallPackage to install, uninstall, or check the package
 			elif action == 'install' or action == 'uninstall' or action == 'check':
 				self.InstallPackage (packageName=packageName, source=source , action=action )
 
@@ -3872,12 +3915,13 @@ def mainLoop():
 			return False
 		elif RestartPackageManager:
 			statusMessage = "restarting PackageManager ..."
+			RestartPackageManager = False
 			# exit the main loop
 			mainloop.quit()
 			return False
 		elif GuiRestart:
-			logging.warning ("restarting GUI")
-			statusMessage = "restarting GUI ..."
+			logging.warning ("restarting GUI and Package Manager")
+			statusMessage = "restarting GUI and Package Manager..."
 			try:
 				# with gui-v2 present, GUI v1 runs from start-gui service not gui service
 				if os.path.exists ('/service/start-gui'):
@@ -3892,6 +3936,9 @@ def mainLoop():
 			DbusIf.SetEditStatus ("")
 			DbusIf.AcknowledgeGuiEditAction ('')
 			DbusIf.SetActionNeeded ('')
+			# exit the main loop
+			mainloop.quit()
+			return False
 
 	if statusMessage != "":
 		DbusIf.UpdateStatus ( statusMessage, where='PmStatus' )
@@ -3916,7 +3963,7 @@ def	directUninstall (packageName):
 	try:
 		setupFile = "/data/" + packageName + "/setup"
 		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
-			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'deferReboot', 'deferGuiRestart', 'auto' ],
+			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'runFromPm' ],
 										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
 			proc.wait()
 	except:

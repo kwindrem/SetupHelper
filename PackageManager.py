@@ -1957,22 +1957,6 @@ class PackageClass:
 		else:
 			self.AutoInstallOk = True
 
-		# also check to see if file set has errors
-		fileSetsDir = packageDir + "/FileSets"
-		fileSet = fileSetsDir + "/" + VenusVersion
-		self.checkFileSets = False
-		if os.path.exists (fileSet + "/INCOMPLETE"):
-			self.SetFileSetOk (False)
-			self.SetIncompatible ("incomplete file set for " + str (VenusVersion), "")
-			incompatible = True
-		else:
-			self.SetFileSetOk (True)
-			if not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
-				self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
-				incompatible = True
-				if not self.InstallPending:
-					self.checkFileSets = True
-
 		# platform is OK, now check versions
 		if incompatible == False:
 			try:
@@ -1993,6 +1977,23 @@ class PackageClass:
 			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
 				self.SetIncompatible ("incompatible with " + VenusVersion, "")
 				incompatible = True
+
+		# also check to see if file set has errors
+		if incompatible == False:
+			fileSetsDir = packageDir + "/FileSets"
+			fileSet = fileSetsDir + "/" + VenusVersion
+			self.checkFileSets = False
+			if os.path.exists (fileSet + "/INCOMPLETE"):
+				self.SetFileSetOk (False)
+				self.SetIncompatible ("incomplete file set for " + str (VenusVersion), "")
+				incompatible = True
+			else:
+				self.SetFileSetOk (True)
+				if not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
+					self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
+					incompatible = True
+					if not self.InstallPending:
+						self.checkFileSets = True
 
 		# platform and versions OK, check to see if command line is needed for install
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install

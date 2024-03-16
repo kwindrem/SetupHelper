@@ -1439,8 +1439,6 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	if [ $scriptAction == 'CHECK' ]; then
 		if [ -f "$fileSet/INCOMPLETE" ]; then
 			exit $EXIT_FILE_SET_ERROR
-		else
-			exit $EXIT_SUCCESS
 		fi
 	fi
 
@@ -1455,22 +1453,10 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	# this is removed in the exit trap above
 	patchedFiles=$( mktemp -d ) 
 
-	# create patched files for files with VisibleItemModel for older Venus OS versions
-	versionStringToNumber "v3.00~14"
-	if (( $venusVersionNumber < $versionNumber )); then
-		logMessage "patching VisibleItemModel to VisualItemModel in all .qml replacements"
-		for file in ${fileListVersionIndependent[@]};  do
-			baseName=$( basename "$file" )
-			if ! [[ "$baseName" == *.qml ]]; then continue; fi
-			sourceFile="$versionIndependentFileSet/$baseName"
-			if ! [ -f "$sourceFile" ]; then continue; fi
-			if (( $(grep -c "VisibleItemModel" "$sourceFile") == 0 )); then continue; fi
-			sed -e 's/VisibleItemModel/VisualItemModel/' "$sourceFile" > "$patchedFiles/$baseName"
-		done
-	fi
-
 	# create patched files in fileListPatched
+	patchError=false
 	for file in ${fileListPatched[@]}; do
+		rm -f "$pkgFileSets/PATCH_ERROR"
 		baseName=$( basename $file )
 		patchFile="$patchSourceDir/$baseName.patch"
 		if ! [ -f "$file" ]; then
@@ -1488,13 +1474,44 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		elif [ -e "$file" ] ; then
 			cp "$file" "$patchedFiles/$baseName"
 		else
+			patchError=true
 			setInstallFailed $EXIT_FILE_SET_ERROR "no source for $baseName patch"
-			endScript
 		fi
 		if ! patch "$patchedFiles/$baseName" "$patchFile" &> /dev/null ; then
+			patchError=true
 			setInstallFailed $EXIT_FILE_SET_ERROR "could not patch $baseName"
 		fi
 	done
+
+	if $patchError ; then
+		if [ $scriptAction == 'CHECK' ]; then
+			touch "$pkgFileSets/PATCH_ERROR"
+			exit $EXIT_PATCH_ERROR
+		else
+			endScript
+		fi
+	else
+		rm -f "$pkgFileSets/PATCH_ERROR"
+	fi
+
+	# go no further if just checking
+	if [ $scriptAction == 'CHECK' ]; then
+		exit $EXIT_SUCCESS
+	fi
+
+	# create patched files for files with VisibleItemModel for older Venus OS versions
+	versionStringToNumber "v3.00~14"
+	if (( $venusVersionNumber < $versionNumber )); then
+		logMessage "patching VisibleItemModel to VisualItemModel in all .qml replacements"
+		for file in ${fileListVersionIndependent[@]};  do
+			baseName=$( basename "$file" )
+			if ! [[ "$baseName" == *.qml ]]; then continue; fi
+			sourceFile="$versionIndependentFileSet/$baseName"
+			if ! [ -f "$sourceFile" ]; then continue; fi
+			if (( $(grep -c "VisibleItemModel" "$sourceFile") == 0 )); then continue; fi
+			sed -e 's/VisibleItemModel/VisualItemModel/' "$sourceFile" > "$patchedFiles/$baseName"
+		done
+	fi
 fi # if [ $scriptAction != 'UNINSTALL' ]
 
 # make sure rootfs is mounted R/W & and resized to allow space for replacement files

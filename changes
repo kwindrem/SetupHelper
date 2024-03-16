@@ -1,3 +1,6 @@
+v7.1:
+	fixed: install failure locks up GUI
+	check for and report patching errors
 v7.0:
 	fixed: Package editor menu sometimes locks up with Download, etc grayed out
 	fixed: file set error uninstalls package without prompting for action

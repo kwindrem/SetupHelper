@@ -41,9 +41,9 @@ MbPage {
 	property bool installOk: fileSetOkItem.valid && fileSetOkItem.value == 1 ? true : false
 	property string requestedAction: ''
 	property bool actionPending: requestedAction != ''
-	property bool waitForAction: editAction.value != ''
-	property bool navigate: ! actionPending && ! waitForAction
+	property bool waitForAction: editAction.value != '' && ! editError
 	property bool editError: editAction.value == 'ERROR'
+	property bool navigate: ! actionPending && ! waitForAction
 	property bool conflictsExist: packageConflicts != ""
 	property bool conflictsResolvable: packageConflictsResolvableItem.valid ? packageConflictsResolvableItem.value : ""
 	property bool showProceed: ( ! conflictsExist || conflictsResolvable) && ! waitForAction
@@ -74,6 +74,7 @@ MbPage {
 			hideActionNeededTimer.stop ()
 			resetPackageIndex ()
 			refreshGitHubVersions ()
+			acknowledgeError ()
 		}
 	}
 
@@ -117,6 +118,18 @@ MbPage {
 		sendCommand ( 'gitHubScan' + ':' + packageName )
 	}
 
+	// acknowledge error reported from PackageManager
+	//	and erase status message
+	function acknowledgeError () /////// TODO: where ????
+	{
+		if (editError)
+		{
+			editAction.setValue ("")
+			editStatus.setValue ("")
+		}
+		
+	}
+
 	function resetPackageIndex ()
 	{
 		if (newPackageIndex < 0)
@@ -157,21 +170,29 @@ MbPage {
 	// don't change packages if pending operation or waiting for completion
 	function nextIndex ()
 	{
+		if (editError)
+			return
 		newPackageIndex += 1
 		resetPackageIndex ()
 	}
 	function previousIndex ()
 	{
+		if (editError)
+			return
 		newPackageIndex -= 1
 		resetPackageIndex ()
 	}
 
-	function cancelEdit (hideActionNeeded)
+	function cancelEdit ()
 	{
-		// only the cancel edit button sets hideActionNeeded
-		if (hideActionNeeded)
-			hideActionNeededTimer.start ()
+		// cancel any pending operation
 		requestedAction = ''
+
+		acknowledgeError ()
+
+		// if was showing action needed, hide that messge for now
+		if (showActionNeeded)
+			hideActionNeededTimer.start ()
 	}
 	function confirm ()
 	{
@@ -200,22 +221,23 @@ MbPage {
 	}
 	function install ()
 	{
-		if (navigate && installOk)
+		if (navigate && installOk && ! editError)
 			requestedAction = 'install'
 	}
 	function uninstall ()
 	{
-		if (navigate && installedValid)
+		if (navigate && installedValid && ! editError)
 			requestedAction = 'uninstall'
 	}
 	function gitHubDownload ()
 	{
-		if (navigate && downloadOk)
+		if (navigate && downloadOk && ! editError)
 			requestedAction = 'download'
 	}
 	function remove ()
 	{
-		requestedAction = 'remove'
+		id ( ! editError)
+			requestedAction = 'remove'
 	}
 
 	model: VisibleItemModel
@@ -294,7 +316,7 @@ MbPage {
 			anchors { right: parent.right; bottom: statusMessage.bottom }
 			description: ""
 			value: actionPending ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
-			onClicked: cancelEdit (showActionNeeded)
+			onClicked: cancelEdit ()
 			show: ( actionPending || editError || showActionNeeded ) && ! waitForAction
 		}
 		MbOK
@@ -329,7 +351,7 @@ MbPage {
 			description: ""
 			value: qsTr("Previous")
 			onClicked: previousIndex ()
-			opacity: newPackageIndex > 0 ? 1.0 : 0.2
+			opacity: ! editError && newPackageIndex > 0 ? 1.0 : 0.2
 		}
 		MbOK
 		{
@@ -339,7 +361,7 @@ MbPage {
 			description: ""
 			value: qsTr("Next")
 			onClicked: nextIndex ()
-			opacity: (newPackageIndex < packageCount.value - 1) ? 1.0 : 0.2
+			opacity: ! editError && (newPackageIndex < packageCount.value - 1) ? 1.0 : 0.2
 		}
 		MbOK
 		{
@@ -349,7 +371,7 @@ MbPage {
 			description: ""
 			value: qsTr ("Download")
 			onClicked: gitHubDownload ()
-			opacity: navigate && downloadOk > 0 ? 1.0 : 0.2
+			opacity: ! editError && navigate && downloadOk > 0 ? 1.0 : 0.2
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK
@@ -360,7 +382,7 @@ MbPage {
 			description: ""
 			value: qsTr ("Install")
 			onClicked: install ()
-			opacity: navigate && installOk > 0 ? 1.0 : 0.2
+			opacity: ! editError && navigate && installOk > 0 ? 1.0 : 0.2
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK
@@ -371,7 +393,7 @@ MbPage {
 			description: ""
 			value: installedValid ? qsTr("Uninstall") : qsTr("Remove")
 			onClicked: installedValid ? uninstall () : remove ()
-			opacity: navigate ? 1.0 : 0.2
+			opacity: ! editError && navigate ? 1.0 : 0.2
 			writeAccessLevel: User.AccessInstaller
 		}
 		// at bottom so it's not in the middle of hard button cycle

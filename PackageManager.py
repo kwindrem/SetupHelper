@@ -47,8 +47,6 @@ ONE_DOWNLOAD = 2
 #		/Package/n/FileSetOK						indicates if the file set for the current version is usable
 #													based on the INCOMPLETE flag in the file set
 #													the GUI uses this to enable/disable the Install button
-#		/Package/n/InstallFailReason				indicates the reason last install failed ("" if success
-#													(not currently used)
 #		/Package/n/PackageConflicts					 (\n separated) list of reasons for a package conflict (\n separated)
 #		/Package/n/GitHubVersionAge 				number of seconds since last version refresh
 #													GUI uses this to filter version refreshes
@@ -126,6 +124,7 @@ EXIT_ROOT_FULL =			249
 EXIT_DATA_FULL =			248
 EXIT_NO_GUI_V1 =			247
 EXIT_PACKAGE_CONFLICT =		246
+EXIT_PATCH_ERROR =			245
 EXIT_ERROR =				255 # generic error
 #
 #
@@ -449,7 +448,6 @@ def PushAction (command=None, source=None):
 			# clear the install failure because package contents are changing
 			#	this allows an auto install again
 			#	but will be disableed if that install fails
-			package.SetInstallFailReason ("")
 			logging.warning ( "received " + action + " " + packageName + " from " + source)
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
@@ -1406,11 +1404,6 @@ class PackageClass:
 			else:
 				DbusIf.DbusService[self.conflictsResolvablePath] = 0
 
-	def SetInstallFailReason (self, value):
-		self.InstallFailReason = value
-		if self.installFailReasonPath != "":
-			DbusIf.DbusService[self.installFailReasonPath] = value	
-
 	def SetFileSetOk (self, value):
 		self.FileSetOk = value
 		if self.fileSetOkPath != "":
@@ -1439,7 +1432,6 @@ class PackageClass:
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
 			self.conflictsPath = '/Package/' + section + '/PackageConflicts'
 			self.conflictsResolvablePath = '/Package/' + section + '/PackageConflictsResovable'
-			self.installFailReasonPath = '/Package/' + section + '/InstallFailReason'
 			self.gitHubVersionAgePath = '/Package/' + section + '/GitHubVersionAge'
 			self.fileSetOkPath = '/Package/' + section + '/FileSetOk'
 
@@ -1468,10 +1460,6 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.conflictsResolvablePath]
 			except:
 				DbusIf.DbusService.add_path (self.conflictsResolvablePath, "" )
-			try:
-				foo = DbusIf.DbusService[self.installFailReasonPath]
-			except:
-				DbusIf.DbusService.add_path (self.installFailReasonPath, "" )
 			try:
 				foo = DbusIf.DbusService[self.gitHubVersionAgePath]
 			except:
@@ -1527,7 +1515,6 @@ class PackageClass:
 
 		self.AutoInstallOk = False
 		self.FileSetOk = False
-		self.InstallFailReason = ""
 		self.Conflicts = []
 		self.ConflictsResolvable = True
 
@@ -1831,7 +1818,6 @@ class PackageClass:
 				toPackage.SetInstalledVersion (fromPackage.InstalledVersion )
 				 # clear the incompatible information - it will be filled in by background tasks
 				toPackage.SetIncompatible ("", "" )
-				toPackage.SetInstallFailReason ("")
 				toPackage.SetFileSetOk (fromPackage.FileSetOk)
 
 				# package variables
@@ -1855,7 +1841,6 @@ class PackageClass:
 			toPackage.SetInstalledVersion ("?")
 			toPackage.SetPackageVersion ("?")
 			toPackage.SetIncompatible ("", "")
-			toPackage.SetInstallFailReason ("")
 			toPackage.SetFileSetOk (False)
 
 			# remove the Settings and service paths for the package being removed
@@ -1958,7 +1943,7 @@ class PackageClass:
 			self.AutoInstallOk = True
 
 		# platform is OK, now check versions
-		if incompatible == False:
+		if not incompatible:
 			try:
 				fd = open (packageDir + "/firstCompatibleVersion", 'r')
 				firstVersion = fd.readline().strip()
@@ -1979,7 +1964,7 @@ class PackageClass:
 				incompatible = True
 
 		# also check to see if file set has errors
-		if incompatible == False:
+		if not incompatible:
 			fileSetsDir = packageDir + "/FileSets"
 			fileSet = fileSetsDir + "/" + VenusVersion
 			self.checkFileSets = False
@@ -1989,24 +1974,34 @@ class PackageClass:
 				incompatible = True
 			else:
 				self.SetFileSetOk (True)
-				if not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
-					self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
-					incompatible = True
-					if not self.InstallPending:
-						self.checkFileSets = True
+		if not incompatible and not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
+			self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
+			incompatible = True
+			if not self.InstallPending:
+				self.checkFileSets = True
+
+		if not incompatible and os.path.exists (fileSetsDir + "/PATCH_ERROR"):
+			self.SetIncompatible ("could not patch all files", "")
+			incompatible = True
+		
+		# check to see if there are any undetected patching errors
+		if not incompatible and not self.checkFileSets and os.path.exists (fileSetsDir + "/fileListPatched"):
+			self.checkFileSets = True
+			
+		
 
 		# platform and versions OK, check to see if command line is needed for install
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install
 		# the optionsSet flag indicates the options HAVE been set already
 		# so if optionsRequired == True and optionsSet == False, can't install from GUI
-		if incompatible == False:
+		if not incompatible:
 			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
 					self.SetIncompatible ("install from command line", "")
 					incompatible = True
 
 		# check for package conflicts
-		if incompatible == False:
+		if not incompatible:
 			conflicts = []
 			# skip checks while operations are pending
 			#	this clears the conflicts list until it is checked agaion
@@ -2100,7 +2095,7 @@ class PackageClass:
 				self.Conflicts = []
 
 		# no incompatibility issues found in the package - display the value from the last install operation
-		if incompatible == False:
+		if not incompatible:
 				self.SetIncompatible ("", "")
 	# end UpdateVersionsAndFlags
 # end Package
@@ -2733,7 +2728,6 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "no package directory " + packageName
 			logging.error ("InstallPackage - " + errorMessage)
 			package.InstallPending = False
-			package.SetInstallFailReason (errorMessage)
 			package.UpdateVersionsAndFlags ()
 			DbusIf.UNLOCK ()
 			if source == 'GUI':
@@ -2745,7 +2739,6 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "setup file for " + packageName + " doesn't exist"
 			DbusIf.UpdateStatus ( message=errorMessage,	where=sendStatusTo, logLevel=ERROR )
 			package.InstallPending = False
-			package.SetInstallFailReason (errorMessage)
 			package.UpdateVersionsAndFlags ()
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
@@ -2755,7 +2748,6 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "setup file for " + packageName + " not executable"
 			DbusIf.UpdateStatus ( message=errorMessage,	where=sendStatusTo, logLevel=ERROR )
 			package.InstallPending = False
-			package.SetInstallFailReason (errorMessage)
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			DbusIf.UNLOCK ()
@@ -2777,7 +2769,6 @@ class InstallPackagesClass (threading.Thread):
 		except:
 			setupRunFail = True
 
-
 		# manage the result of the setup run while locked just in case
 		DbusIf.LOCK ()
 
@@ -2786,20 +2777,14 @@ class InstallPackagesClass (threading.Thread):
 
 		errorMessage = ""
 		if setupRunFail:
-			errorMessage = "could not run setup file for " + packageName
-			DbusIf.UpdateStatus ( message=errorMessage,	where=sendStatusTo, logLevel=ERROR )
-			package.SetInstallFailReason (errorMessage)
-			if source == 'GUI':
-				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
+			errorMessage = "could not run setup"
 		elif returnCode == EXIT_SUCCESS:
 			package.SetIncompatible ("", "")	# this marks the package as compatible
-			package.SetInstallFailReason ("")
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
 			package.SetIncompatible ("", "")	# this marks the package as compatible
-			package.SetInstallFailReason ("")
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('reboot')
 				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
@@ -2812,7 +2797,6 @@ class InstallPackagesClass (threading.Thread):
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
 			package.SetIncompatible ("", "")	# this marks the package as compatible
-			package.SetInstallFailReason ("")
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('guiRestart')
 				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")
@@ -2824,7 +2808,6 @@ class InstallPackagesClass (threading.Thread):
 				global GuiRestart
 				GuiRestart = True
 		elif returnCode == EXIT_RUN_AGAIN:
-			package.SetInstallFailReason ("")
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " run install again to complete install",
 											where=sendStatusTo, logLevel=WARNING )
@@ -2834,29 +2817,35 @@ class InstallPackagesClass (threading.Thread):
 											where=sendStatusTo, logLevel=WARNING )
 		elif returnCode == EXIT_INCOMPATIBLE_VERSION:
 			global VenusVersion
-			errorMessage = packageName + " incompatible with " + VenusVersion
+			errorMessage = "incompatible with " + VenusVersion
 		elif returnCode == EXIT_INCOMPATIBLE_PLATFORM:
 			global Platform
-			errorMessage = packageName + " incompatible with " + Platform
+			errorMessage = "incompatible with " + Platform
 		elif returnCode == EXIT_OPTIONS_NOT_SET:
-			errorMessage = packageName + " setup must be run from the command line"
+			errorMessage = "setup must be run from the command line"
 		elif returnCode == EXIT_FILE_SET_ERROR:
-			errorMessage = packageName + " incomplete file set for " + VenusVersion
+			errorMessage = "incomplete file set for " + VenusVersion
 		elif returnCode == EXIT_ROOT_FULL:
-			errorMessage = packageName + " no room on root partition "
+			errorMessage = "no room on root partition "
 		elif returnCode == EXIT_DATA_FULL:
-			DerrorMessage = packageName + " no room on data partition "
+			errorMessage = "no room on data partition "
 		elif returnCode == EXIT_NO_GUI_V1:
-			errorMessage = packageName + "GUI v1 not installed"
+			errorMessage = "failed - " + "GUI v1 not installed"
 		elif returnCode == EXIT_PACKAGE_CONFLICT:
-			errorMessage = "install failed: package conflict " + stderr
+			errorMessage = "package conflict " + stderr
+		elif returnCode == EXIT_PATCH_ERROR:
+			errorMessage = "could not patch all files"
 		# unknown error
 		elif returnCode != 0:
-			errorMessage = packageName + "unknown error " + str (returnCode) + " " + stderr
+			errorMessage = "unknown error " + str (returnCode) + " " + stderr
 
 		if errorMessage != "":
-			DbusIf.UpdateStatus ( message=errorMessage, where=sendStatusTo, logLevel=WARNING )
-			package.SetInstallFailReason (errorMessage)
+			if setupRunFail:
+				logLevel = ERROR
+			else:
+				logLevel = WARNING
+			DbusIf.UpdateStatus ( message=packageName + " " + action + " failed - " + errorMessage,
+					where=sendStatusTo, logLevel=logLevel )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 
@@ -3857,8 +3846,6 @@ def mainLoop():
 
 			# block install if manually uninstalled or if versions are the same
 			if not package.AutoInstallOk or not package.InstallVersionCheck ():
-				installOk = False
-			elif package.InstallFailReason != "": 
 				installOk = False
 			# if package is incompatible block all installs
 			if package.Incompatible != "":

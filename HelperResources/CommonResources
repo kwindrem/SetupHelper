@@ -1372,6 +1372,10 @@ venusVersionNumber=$versionNumber
 
 # do pre-checks - skip if uninstalling
 if [ $scriptAction != 'UNINSTALL' ]; then
+	# flag the version that is performing these checks
+	#	this is used by PackageManager to know when to run checks
+	echo "$venusVersion" > "$scriptDir/packageCheckVersion"
+
 	# prevent installing Raspberry Pi packages on other platforms
 	if [ -f "$scriptDir/raspberryPiOnly" ]; then 
 		if [[ $machine != *"raspberrypi"* ]]; then
@@ -1454,16 +1458,16 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	patchedFiles=$( mktemp -d ) 
 
 	# create patched files in fileListPatched
-	patchError=false
+	patchErrors=()
 	for file in ${fileListPatched[@]}; do
-		rm -f "$pkgFileSets/PATCH_ERROR"
+		message=""
 		baseName=$( basename $file )
 		patchFile="$patchSourceDir/$baseName.patch"
-		if ! [ -f "$file" ]; then
-			setInstallFailed $EXIT_FILE_SET_ERROR "original file missing for $baseName"
-		fi
 		if ! [ -f "$patchFile" ]; then
-			setInstallFailed $EXIT_FILE_SET_ERROR "patch file missing for $baseName"
+			message="patch file missing for $baseName"
+			patchErrors+="$message\n"
+			setInstallFailed $EXIT_PATCH_ERROR "$message"
+			continue
 		fi
 		# BusyBox patch doesn't support the -o option so copy source to output first
 		#	then patch the output
@@ -1474,24 +1478,28 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		elif [ -e "$file" ] ; then
 			cp "$file" "$patchedFiles/$baseName"
 		else
-			patchError=true
-			setInstallFailed $EXIT_FILE_SET_ERROR "no source for $baseName patch"
+			message="no source for $baseName patch"
+			patchErrors+=( "$message" )
+			setInstallFailed $EXIT_PATCH_ERROR "$message"
+			continue
 		fi
 		if ! patch "$patchedFiles/$baseName" "$patchFile" &> /dev/null ; then
-			patchError=true
-			setInstallFailed $EXIT_FILE_SET_ERROR "could not patch $baseName"
+			message="patch unsuccesful for $baseName"
+			patchErrors+=( "$message" )
+			setInstallFailed $EXIT_PATCH_ERROR "$message"
 		fi
 	done
 
-	if $patchError ; then
+	# save any errors in PatchErrors file
+	if [ -z "$patchErrors" ] ; then
+		rm -f "$scriptDir/patchErrors"
+	else
+		printf "%s\n" "${patchErrors[@]}" > "$scriptDir/patchErrors"
 		if [ $scriptAction == 'CHECK' ]; then
-			touch "$pkgFileSets/PATCH_ERROR"
 			exit $EXIT_PATCH_ERROR
 		else
 			endScript
 		fi
-	else
-		rm -f "$pkgFileSets/PATCH_ERROR"
 	fi
 
 	# go no further if just checking

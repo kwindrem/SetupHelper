@@ -1,3 +1,7 @@
+v7.2:
+	more fixes for install failure GUI lockups
+	fixed: repeating "checking" messages (and the assocated calls to setup scripts)
+
 v7.1:
 	fixed: install failure locks up GUI
 	check for and report patching errors

@@ -18,35 +18,32 @@ MbPage {
 	property VBusItem packageCount: VBusItem { bind: Utils.path(settingsPrefix, "/Count") }
 	property VBusItem editAction: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
 	property VBusItem editStatus: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditStatus") }
-	property VBusItem gitHubVersionAgeItem: VBusItem { bind: getServiceBind ( "GitHubVersionAge" ) }
-	property int gitHubVersionAge: gitHubVersionAgeItem.valid ? gitHubVersionAgeItem.value : 0
 	property VBusItem packageNameItem: VBusItem { bind: getSettingsBind ("PackageName") }
 	property string packageName: packageNameItem.valid ? packageNameItem.value : ""
 	property bool isSetupHelper: packageName == "SetupHelper"
 
 	property VBusItem incompatibleReasonItem: VBusItem { bind: getServiceBind ( "Incompatible" ) }
 	property string incompatibleReason: incompatibleReasonItem.valid ? incompatibleReasonItem.value : ""
-	property VBusItem packageConflictsItem: VBusItem { bind: getServiceBind ( "PackageConflicts") }
-	property string packageConflicts: packageConflictsItem.valid ? packageConflictsItem.value : ""
+	property VBusItem incompatibleDetailsItem: VBusItem { bind: getServiceBind ( "IncompatibleDetails") }
+	property string incompatibleDetails: incompatibleDetailsItem.valid ? incompatibleDetailsItem.value : ""
 	property bool incompatible: incompatibleReason != ""
 	property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
-	property VBusItem fileSetOkItem: VBusItem { bind: getServiceBind ( "FileSetOk" ) }
-	property VBusItem packageConflictsResolvableItem: VBusItem { bind: getServiceBind ( "PackageConflictsResovable") }
-
+	property VBusItem installOkItem: VBusItem { bind: getServiceBind ( "InstallOk" ) }
+	property VBusItem incompatibleResolvableItem: VBusItem { bind: getServiceBind ( "IncompatibleResolvable") }
 	
 	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
 	property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
 	property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
 	property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-	property bool installOk: fileSetOkItem.valid && fileSetOkItem.value == 1 ? true : false
+	property bool installOk: (! incompatible && (installOkItem.valid && installOkItem.value == 1)) ? true : false
 	property string requestedAction: ''
 	property bool actionPending: requestedAction != ''
 	property bool waitForAction: editAction.value != '' && ! editError
 	property bool editError: editAction.value == 'ERROR'
 	property bool navigate: ! actionPending && ! waitForAction
-	property bool conflictsExist: packageConflicts != ""
-	property bool conflictsResolvable: packageConflictsResolvableItem.valid ? packageConflictsResolvableItem.value : ""
-	property bool showProceed: ( ! conflictsExist || conflictsResolvable) && ! waitForAction
+	property bool detailsExist: incompatibleDetails != ""
+	property bool detailsResolvable: incompatibleResolvableItem.valid ? incompatibleResolvableItem.value : ""
+	property bool showProceed: ( ! detailsExist || detailsResolvable) && ! waitForAction
 	property string localError: ""
 
 	// version info may be in platform service or in vePlatform.version
@@ -62,9 +59,18 @@ MbPage {
 	property bool showActionNeeded: ! hideActionNeededTimer.running && actionNeeded != ''
 
 	
-	onEditActionChanged:
+	onActionNeededChanged:
 	{
 		hideActionNeededTimer.stop ()
+	}
+	
+	onWaitForActionChanged:
+	{
+		if ( ! waitForAction )
+		{
+			hideActionNeededTimer.stop ()
+			requestedAction = ''
+		}
 	}
 	
 	onActiveChanged:
@@ -75,6 +81,7 @@ MbPage {
 			resetPackageIndex ()
 			refreshGitHubVersions ()
 			acknowledgeError ()
+			requestedAction = ''
 		}
 	}
 
@@ -92,10 +99,7 @@ MbPage {
 	// refresh the GitHub version GitHub version age is greater than 30 seconds
 	property bool waitForIndexChange: false
 	property bool waitForNameChange: false
-	onGitHubVersionAgeChanged:
-	{
-		refreshGitHubVersions ()
-	}
+
 	onPackageIndexChanged:
 	{
 		waitForIndexChange = false
@@ -110,38 +114,39 @@ MbPage {
 	{
 		if ( waitForIndexChange || waitForNameChange )
 			return
-		else if (! active || gitHubVersionAge < 30 ||  editAction.value != "" )
-		{
+		else if (! active || editAction.value != "" || actionPending)
 			return
-		}
-
-		sendCommand ( 'gitHubScan' + ':' + packageName )
+		sendCommand ( 'gitHubScan' + ':' + packageName, false )
 	}
 
 	// acknowledge error reported from PackageManager
 	//	and erase status message
-	function acknowledgeError () /////// TODO: where ????
+	function acknowledgeError ()
 	{
 		if (editError)
 		{
 			editAction.setValue ("")
 			editStatus.setValue ("")
 		}
-		
 	}
 
 	function resetPackageIndex ()
 	{
+		if (waitForAction)
+			return
+
 		if (newPackageIndex < 0)
 			newPackageIndex = 0
 		else if (newPackageIndex >= packageCount.value)
 			newPackageIndex = packageCount.value - 1
 
-		if (navigate && newPackageIndex != packageIndex)
+		if (newPackageIndex != packageIndex)
 		{
 			waitForIndexChange = true
 			waitForNameChange = true
 			packageIndex = newPackageIndex
+			requestedAction = ''
+
 		}
 	}
 
@@ -154,17 +159,16 @@ MbPage {
 		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
 
-	function sendCommand (command)
+	function sendCommand (command, updateEditStatus )
 	{
 		if (editAction.value != "")
-			localError = "command could not be sent - reboot needed ("  + command + ")"
-		else if (packageIndex >= 0 && packageIndex < packageCount.value)
+			localError = "command could not be sent ("  + command + ")"
+		else
+		{
+			if (updateEditStatus)
+				editStatus.setValue ("sending " + command)
 			editAction.setValue (command)
-	}
-	function setEditStatus (status)
-	{
-		if (packageIndex >= 0 && packageIndex < packageCount.value)
-			editStatus.setValue (status)
+		}
 	}
 
 	// don't change packages if pending operation or waiting for completion
@@ -199,22 +203,17 @@ MbPage {
 		// provide local confirmation of action in case PackageManager doesn't act on it
 		if (actionPending)
 		{
-			setEditStatus ( "sending " + requestedAction + packageName + " request")
-			sendCommand (requestedAction + ':' + packageName)
-			// insure restart/reboot status shows up immediately after operaiton finishes
-			hideActionNeededTimer.stop ()
+			sendCommand ( requestedAction + ':' + packageName, true )
 		}
 		else if (showActionNeeded)
 		{
 			if (actionNeeded == 'reboot')
 			{
-				setEditStatus ( "sending reboot request" )
-				sendCommand ( 'reboot' )
+				sendCommand ( 'reboot', true )
 			}
 			else if (actionNeeded == 'guiRestart')
 			{
-				setEditStatus ( "sending GUI restart request" )
-				sendCommand ( 'restartGui' )
+				sendCommand ( 'restartGui', true )
 			}
 		}
 		requestedAction = ''
@@ -325,7 +324,7 @@ MbPage {
 			width: 92
 			anchors { right: cancelButton.left; bottom: statusMessage.bottom }
 			description: ""
-			value: actionPending ? qsTr("Proceed") : qsTr ("Now")
+			value: actionPending ? qsTr("Proceed") : qsTr ("Now") /////////// ?????????????
 			onClicked: confirm ()
 			show: ( actionPending || showActionNeeded ) && showProceed
 			writeAccessLevel: User.AccessInstaller
@@ -336,10 +335,10 @@ MbPage {
 			width: 150
 			anchors { right: parent.right; bottom: statusMessage.bottom}
 			description: ""
-			value: qsTr("Show Conflicts")
-			onClicked: requestedAction = 'resolveConflicts'
+			value: qsTr("Show Details")
+			onClicked: requestedAction = 'showDetails'
 			writeAccessLevel: User.AccessInstaller
-			show: navigate && conflictsExist && ! ( editError || actionPending || waitForAction || showActionNeeded)
+			show: navigate && detailsExist && ! ( editError || actionPending || waitForAction || showActionNeeded)
 		}
 
 		// bottom row of buttons
@@ -416,16 +415,16 @@ MbPage {
 			horizontalAlignment: Text.AlignLeft
 			anchors { left: parent.left; leftMargin: 5; top: gitHubBranch.bottom }
 			font.pixelSize: 12
-			color: actionPending && isSetupHelper ? "red" : root.style.textColor
+			color: isSetupHelper && requestedAction == 'uninstall' ? "red" : root.style.textColor
 			text:
 			{
 				if (actionPending)
 				{
-					if (requestedAction == 'resolveConflicts')
-						if (conflictsResolvable)
-							return ( packageConflicts + qsTr ("\nResolve conflicts?") )
+					if (requestedAction == 'showDetails')
+						if (detailsResolvable)
+							return ( incompatibleDetails + qsTr ("\nResolve conflicts?") )
 						else
-						return ( packageConflicts + qsTr ("\ncan not resolve !") )
+							return ( incompatibleDetails )
 					else if (isSetupHelper && requestedAction == 'uninstall')
 						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
 					else
@@ -445,7 +444,7 @@ MbPage {
 				else if (incompatible)
 					return ( incompatibleReason )
 				else
-					return ""
+					return localError
 			}
 		}
 		// dummy item to allow scrolling to show last button line when status message has many lines

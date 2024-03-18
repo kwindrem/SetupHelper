@@ -48,8 +48,6 @@ ONE_DOWNLOAD = 2
 #													based on the INCOMPLETE flag in the file set
 #													the GUI uses this to enable/disable the Install button
 #		/Package/n/PackageConflicts					 (\n separated) list of reasons for a package conflict (\n separated)
-#		/Package/n/GitHubVersionAge 				number of seconds since last version refresh
-#													GUI uses this to filter version refreshes
 #
 #		for both Settings and the the dbus service:
 #			n is a 0-based section used to reference a specific package
@@ -448,7 +446,6 @@ def PushAction (command=None, source=None):
 			# clear the install failure because package contents are changing
 			#	this allows an auto install again
 			#	but will be disableed if that install fails
-			logging.warning ( "received " + action + " " + packageName + " from " + source)
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
 		else:
@@ -468,7 +465,6 @@ def PushAction (command=None, source=None):
 			package.InstallPending = True
 			theQueue = InstallPackages.InstallQueue
 			queueText = "Install"
-			logging.warning ( "received " + action + " " + packageName + " from " + source)
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
 		else:
@@ -484,7 +480,6 @@ def PushAction (command=None, source=None):
 	elif action == 'resolveConflicts':
 		theQueue = InstallPackages.InstallQueue
 		queueText = "Install"
-		logging.warning ( "received resolve conflicts request from " + source)
 		if source == 'GUI':
 			# note this message will be overwritten by the install and uninstall actions
 			#	triggered by this action
@@ -493,7 +488,6 @@ def PushAction (command=None, source=None):
 	elif action == 'add' or action == 'remove':
 		theQueue = AddRemove.AddRemoveQueue
 		queueText = "AddRemove"
-		logging.warning ( "received " + action + " " + packageName + " from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
 
@@ -518,7 +512,7 @@ def PushAction (command=None, source=None):
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( "GUI restart pending " + packageName, where='Editor' )
 		return True
-	elif action == 'INITIALIZE':
+	elif action == 'INITIALIZE_PM':
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global InitializePackageManager
 		InitializePackageManager = True
@@ -1375,15 +1369,6 @@ class PackageClass:
 		if self.gitHubVersionPath != "":
 			DbusIf.DbusService[self.gitHubVersionPath] = version
 
-	def UpdateGitHubVersionAge (self, reset=False ):
-		if reset:
-			self.lastGitHubRefresh = time.time ()
-			self.gitHubVersionAge = 0
-		else:
-			self.gitHubVersionAge = time.time () - self.lastGitHubRefresh
-		if self.gitHubVersionAgePath != "":
-			DbusIf.DbusService[self.gitHubVersionAgePath] = int ( self.gitHubVersionAge )
-
 	def SetGitHubUser (self, user):
 		self.GitHubUser = user
 		self.DbusSettings['gitHubUser'] = user
@@ -1392,22 +1377,24 @@ class PackageClass:
 		self.GitHubBranch = branch
 		self.DbusSettings['gitHubBranch'] = branch
 
-	def SetIncompatible (self, value, conflicts, resolvable=True):
+	def SetIncompatible (self, value, details="", resolvable=False):
 		self.Incompatible = value
+		self.IncompatibleDetails = details
+		self.IncompatibleResolvable = resolvable
 		if self.incompatiblePath != "":
 			DbusIf.DbusService[self.incompatiblePath] = value	
-		if self.conflictsPath != "":
-			DbusIf.DbusService[self.conflictsPath] = conflicts	
-		if self.conflictsResolvablePath != "":
+		if self.incompatibleDetailsPath != "":
+			DbusIf.DbusService[self.incompatibleDetailsPath] = details
+		if self.IncompatibleResolvablePath != "":
 			if resolvable:
-				DbusIf.DbusService[self.conflictsResolvablePath] = 1
+				DbusIf.DbusService[self.IncompatibleResolvablePath] = 1
 			else:
-				DbusIf.DbusService[self.conflictsResolvablePath] = 0
+				DbusIf.DbusService[self.IncompatibleResolvablePath] = 0
 
-	def SetFileSetOk (self, value):
-		self.FileSetOk = value
-		if self.fileSetOkPath != "":
-			DbusIf.DbusService[self.fileSetOkPath] = value	
+	def SetInstallOk (self, value):
+		self.InstallOk = value
+		if self.installOkPath != "":
+			DbusIf.DbusService[self.installOkPath] = value	
 
 	def settingChangedHandler (self, name, old, new):
 		# when dbus information changes, need to refresh local mirrors
@@ -1423,17 +1410,16 @@ class PackageClass:
 				UpdateGitHubVersion.SetPriorityGitHubVersion ( 'package:' + self.PackageName )
 
 	def __init__( self, section, packageName = None ):
-		# add package versions if it's a real package (not Edit)
+		# add package parameters if it's a real package (not Edit)
 		if section != 'Edit':
 			section = str (section)
 			self.gitHubVersionPath = '/Package/' + section + '/GitHubVersion'
 			self.packageVersionPath = '/Package/' + section + '/PackageVersion'
 			self.installedVersionPath = '/Package/' + section + '/InstalledVersion'
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
-			self.conflictsPath = '/Package/' + section + '/PackageConflicts'
-			self.conflictsResolvablePath = '/Package/' + section + '/PackageConflictsResovable'
-			self.gitHubVersionAgePath = '/Package/' + section + '/GitHubVersionAge'
-			self.fileSetOkPath = '/Package/' + section + '/FileSetOk'
+			self.incompatibleDetailsPath = '/Package/' + section + '/IncompatibleDetails'
+			self.IncompatibleResolvablePath = '/Package/' + section + '/IncompatibleResolvable'
+			self.installOkPath = '/Package/' + section + '/InstallOk'
 
 			# create service paths if they don't already exist
 			try:
@@ -1453,36 +1439,21 @@ class PackageClass:
 			except:
 				DbusIf.DbusService.add_path (self.incompatiblePath, "" )
 			try:
-				foo = DbusIf.DbusService[self.conflictsPath]
+				foo = DbusIf.DbusService[self.incompatibleDetailsPath]
 			except:
-				DbusIf.DbusService.add_path (self.conflictsPath, "" )
+				DbusIf.DbusService.add_path (self.incompatibleDetailsPath, "" )
 			try:
-				foo = DbusIf.DbusService[self.conflictsResolvablePath]
+				foo = DbusIf.DbusService[self.IncompatibleResolvablePath]
 			except:
-				DbusIf.DbusService.add_path (self.conflictsResolvablePath, "" )
+				DbusIf.DbusService.add_path (self.IncompatibleResolvablePath, "" )
 			try:
-				foo = DbusIf.DbusService[self.gitHubVersionAgePath]
+				foo = DbusIf.DbusService[self.installOkPath]
 			except:
-				DbusIf.DbusService.add_path (self.gitHubVersionAgePath, "" )
-			try:
-				foo = DbusIf.DbusService[self.fileSetOkPath]
-			except:
-				DbusIf.DbusService.add_path (self.fileSetOkPath, "" )
+				DbusIf.DbusService.add_path (self.installOkPath, "" )
 
 		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
 		self.gitHubUserPath = '/Settings/PackageManager/' + section + '/GitHubUser'
 		self.gitHubBranchPath = '/Settings/PackageManager/' + section + '/GitHubBranch'
-
-		# mirror of dbus parameters to speed access
-		self.InstalledVersion = ""
-		self.InstalledVersionNumber = 0
-		self.PackageVersion = ""
-		self.PackageVersionNumber = 0
-		self.GitHubVersion = ""
-		self.GitHubVersionNumber = 0
-		self.GitHubUser = "?"
-		self.GitHubBranch = "?"
-		self.Incompatible = ''
 
 		# temporarily set PackageName since settingChangeHandler may be called as soon as SettingsDevice is called
 		#	which is before actual package name is set below
@@ -1511,17 +1482,33 @@ class PackageClass:
 		self.DownloadPending = False
 		self.InstallPending = False
 		self.InstallAfterDownload = False	# used by ResolveConflicts when doing both download and install
-		self.checkFileSets = False
+		self.lastSetupCheckTime = 0
 
 		self.AutoInstallOk = False
-		self.FileSetOk = False
+		self.InstallOk = False
 		self.Conflicts = []
 		self.ConflictsResolvable = True
 
 		self.lastConflictCheck = 0
+		self.lastPatchCheck = 0
 
 		self.lastGitHubRefresh = 0
-		self.gitHubVersionAge = 0
+
+		# init dbus parameters
+		# these have local values also to speed access
+		# only create service parameters for real packages
+		if section != 'Edit':
+			self.SetInstalledVersion ("")
+			self.SetPackageVersion ("")
+			self.SetGitHubVersion ("")
+			self.SetIncompatible ("")
+			# copy dbus info to local values
+			self.GitHubUser = self.DbusSettings['gitHubUser']
+			self.GitHubBranch = self.DbusSettings['gitHubBranch']
+		# init edit GitHub info
+		else:
+			self.SetGitHubUser ("?")
+			self.SetGitHubBranch ("?")
 
 
 	# dbus Settings is the primary non-volatile storage for packageManager
@@ -1813,12 +1800,11 @@ class PackageClass:
 
 				# dbus service params
 				toPackage.SetGitHubVersion (fromPackage.GitHubVersion )
-				toPackage.UpdateGitHubVersionAge ()
 				toPackage.SetPackageVersion (fromPackage.PackageVersion )
 				toPackage.SetInstalledVersion (fromPackage.InstalledVersion )
-				 # clear the incompatible information - it will be filled in by background tasks
-				toPackage.SetIncompatible ("", "" )
-				toPackage.SetFileSetOk (fromPackage.FileSetOk)
+				toPackage.SetIncompatible (fromPackage.Incomptible, self.IncompatibleDetails,
+											self.IncompatibleResolvable )
+				toPackage.SetInstallOk (fromPackage.InstallOk)
 
 				# package variables
 				toPackage.DownloadPending = fromPackage.DownloadPending
@@ -1826,6 +1812,8 @@ class PackageClass:
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
 				toPackage.Conflicts = fromPackage.Conflicts
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
+				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
+				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 
 				toIndex += 1
 				fromIndex += 1
@@ -1837,11 +1825,10 @@ class PackageClass:
 			#	so just set contents to null/False
 			# 	they will disappear after PackageManager is started the next time
 			toPackage.SetGitHubVersion ("?")
-			toPackage.UpdateGitHubVersionAge ()
 			toPackage.SetInstalledVersion ("?")
 			toPackage.SetPackageVersion ("?")
-			toPackage.SetIncompatible ("", "")
-			toPackage.SetFileSetOk (False)
+			toPackage.SetIncompatible ("")
+			toPackage.SetInstallOk (False)
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -1913,8 +1900,8 @@ class PackageClass:
 		if not os.path.isdir (packageDir):
 			self.SetPackageVersion ("")
 			self.AutoInstallOk = False
-			self.SetFileSetOk (False)
-			self.SetIncompatible ("", "")
+			self.SetInstallOk (False)
+			self.SetIncompatible ("no package")
 			return
 
 		# fetch package version (the one in /data/packageName)
@@ -1926,14 +1913,14 @@ class PackageClass:
 			packageVersion = ""
 		self.SetPackageVersion (packageVersion)
 
-		incompatible = False
+		compatible = True
 
 		# set the incompatible parameter
 		#	to 'PLATFORM' or 'VERSION'
 		if os.path.exists (packageDir + "/raspberryPiOnly" ):
 			if Platform[0:4] != 'Rasp':
-				self.SetIncompatible ("incompatible with " + Platform, "")
-				incompatible = True
+				self.SetIncompatible ("incompatible with " + Platform)
+				compatible = False
 
 		# update local auto install flag based on DO_NOT_AUTO_INSTALL
 		flagFile = "/data/setupOptions/" + packageName + "/DO_NOT_AUTO_INSTALL"
@@ -1943,7 +1930,7 @@ class PackageClass:
 			self.AutoInstallOk = True
 
 		# platform is OK, now check versions
-		if not incompatible:
+		if compatible:
 			try:
 				fd = open (packageDir + "/firstCompatibleVersion", 'r')
 				firstVersion = fd.readline().strip()
@@ -1960,48 +1947,51 @@ class PackageClass:
 			firstVersionNumber = VersionToNumber (firstVersion)
 			obsoleteVersionNumber = VersionToNumber (obsoleteVersion)
 			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
-				self.SetIncompatible ("incompatible with " + VenusVersion, "")
-				incompatible = True
+				self.SetIncompatible ("incompatible with " + VenusVersion)
+				compatible = False
 
-		# also check to see if file set has errors
-		if not incompatible:
+		# check to see if command line is needed for install
+		# the optionsRequired flag in the package directory indicates options must be set before a blind install
+		# the optionsSet flag indicates the options HAVE been set already
+		# so if optionsRequired == True and optionsSet == False, can't install from GUI
+		elif compatible:
+			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
+				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
+					self.SetIncompatible ("install from command line" )
+					compatible = False
+
+		# check to see if file set has errors
+		if compatible:
 			fileSetsDir = packageDir + "/FileSets"
 			fileSet = fileSetsDir + "/" + VenusVersion
-			self.checkFileSets = False
 			if os.path.exists (fileSet + "/INCOMPLETE"):
-				self.SetFileSetOk (False)
-				self.SetIncompatible ("incomplete file set for " + str (VenusVersion), "")
-				incompatible = True
-			else:
-				self.SetFileSetOk (True)
-		if not incompatible and not os.path.exists (fileSet) and os.path.exists (fileSetsDir + "/fileList"):
-			self.SetIncompatible ("warning: no file set for " + str (VenusVersion), "")
-			incompatible = True
-			if not self.InstallPending:
-				self.checkFileSets = True
+				self.SetIncompatible ("incomplete file set for " + str (VenusVersion) )
+				compatible = False
 
-		if not incompatible and os.path.exists (fileSetsDir + "/PATCH_ERROR"):
-			self.SetIncompatible ("could not patch all files", "")
-			incompatible = True
-		
-		# check to see if there are any undetected patching errors
-		if not incompatible and not self.checkFileSets and os.path.exists (fileSetsDir + "/fileListPatched"):
-			self.checkFileSets = True
-			
-		
+		if compatible and os.path.exists (packageDir + "/patchErrors"):
+			if os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastPatchCheck:
+				patchFailures = ""
+				with open ( packageDir + "/patchErrors" ) as file:
+					for line in file:
+						logging.warning (packageName + " patch error " + line.strip() + " ")
+						patchFailures += line
+				self.SetIncompatible ("patch errors", patchFailures )
+				compatible = False
+				# used to prevent repeaded checks
+				self.lastPatchCheck = time.time ()
 
 		# platform and versions OK, check to see if command line is needed for install
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install
 		# the optionsSet flag indicates the options HAVE been set already
 		# so if optionsRequired == True and optionsSet == False, can't install from GUI
-		if not incompatible:
+		if compatible:
 			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
-					self.SetIncompatible ("install from command line", "")
-					incompatible = True
+					self.SetIncompatible ("install from command line" )
+					compatible = False
 
 		# check for package conflicts
-		if not incompatible:
+		if compatible:
 			conflicts = []
 			# skip checks while operations are pending
 			#	this clears the conflicts list until it is checked agaion
@@ -2090,13 +2080,35 @@ class PackageClass:
 							details += conflict [0] + " not available\n"
 							resolveOk = False
 				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
-				incompatible = True
+				compatible = False
 			else:
 				self.Conflicts = []
 
-		# no incompatibility issues found in the package - display the value from the last install operation
-		if not incompatible:
-				self.SetIncompatible ("", "")
+		# run setup script to check for errors that can't be checked here 
+		if compatible:
+			doChecks = False
+			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
+			# no checks have been done recently so do them now
+			if not os.path.exists ( packageCheckFile ) and time.time() > self.lastSetupCheckTime + 30:
+				doChecks = True
+			# check file exists - check which firmware version was checked
+			#	and if not the current version, do checks
+			else:
+				try:
+					with open ( packageCheckFile ) as file:
+						for line in file:
+							if not VenusVersion in line:
+								doChecks = True
+				# couldn't read the file, attempt check again
+				except:
+					doChecks = True
+			if doChecks:
+				# avoid starting a new check if there is something pending
+				if not self.InstallPending and not self.DownloadPending:
+					PushAction ( command='check' + ':' + packageName, source='AUTO' )
+				compatible = False
+
+		self.SetInstallOk (compatible)
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2182,7 +2194,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.SetGitHubVersion (gitHubVersion)
-			package.UpdateGitHubVersionAge (reset=True)
+			package.lastGitHubRefresh = time.time ()
 		DbusIf.UNLOCK ()
 		return gitHubVersion
 
@@ -2321,8 +2333,11 @@ class UpdateGitHubVersionClass (threading.Thread):
 				if package != None:
 					user = package.GitHubUser
 					branch = package.GitHubBranch
-					# refresh if no version or last refresh more than 10 seconds ago
-					if source != 'GUI' or package.GitHubVersion == "" or package.gitHubVersionAge > 10:
+					# always do the update for 'local' source
+					if source == 'GUI':
+						doUpdate = True
+					# for GUI - refresh if no version or last refresh more than 30 seconds ago
+					elif package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:
 						doUpdate = True
 				else:
 					logging.error ("can't fetch GitHub version - " + packageName + " not in package list")
@@ -2347,7 +2362,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 					branch = package.GitHubBranch
 					# refresh if no version or last refresh more than 30 seconds ago
 					# prevents unnecessary network traffic when navigating PackageManager menus
-					if package.GitHubVersion == "" or package.gitHubVersionAge > 30:
+					if package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:
 						doUpdate = True
 					gitHubVersionPackageIndex += 1
 				# reached end of list - all package Git Hub versions have been refreshed
@@ -2362,11 +2377,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 			# do the actual background update outsde the above LOCKED section
 			#	since the update requires internet access
 			if doUpdate:
-				if source == 'GUI':
-					DbusIf.SetEditStatus ("updating GitHub version " + packageName)
 				self.updateGitHubVersion (packageName, user, branch)
-				if source == 'GUI':
-					DbusIf.SetEditStatus ("")
 		# end while self.threadRunning
 	# end UpdateGitHubVersion run ()
 # end UpdateGitHubVersionClass
@@ -2774,17 +2785,21 @@ class InstallPackagesClass (threading.Thread):
 
 		package = PackageClass.LocatePackage (packageName)
 		package.InstallPending = False
+		# either install or check will have checked for file set or patch errors
+		# so reset the time so next check can be delayed for a while
+		if action == 'install' or action == 'check':
+			package.lastSetupCheckTime = time.time () 
 
 		errorMessage = ""
 		if setupRunFail:
 			errorMessage = "could not run setup"
 		elif returnCode == EXIT_SUCCESS:
-			package.SetIncompatible ("", "")	# this marks the package as compatible
+			package.SetIncompatible ("")	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
-			package.SetIncompatible ("", "")	# this marks the package as compatible
+			package.SetIncompatible ("")	# this marks the package as compatible
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('reboot')
 				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
@@ -2796,7 +2811,7 @@ class InstallPackagesClass (threading.Thread):
 				global SystemReboot
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
-			package.SetIncompatible ("", "")	# this marks the package as compatible
+			package.SetIncompatible ("")	# this marks the package as compatible
 			if source == 'GUI':
 				DbusIf.SetActionNeeded ('guiRestart')
 				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")
@@ -2834,7 +2849,7 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_PACKAGE_CONFLICT:
 			errorMessage = "package conflict " + stderr
 		elif returnCode == EXIT_PATCH_ERROR:
-			errorMessage = "could not patch all files"
+			errorMessage = "could not patch some files"
 		# unknown error
 		elif returnCode != 0:
 			errorMessage = "unknown error " + str (returnCode) + " " + stderr
@@ -3566,7 +3581,6 @@ class MediaScanClass (threading.Thread):
 				autoRestore = False
 				autoEject = False
 				autoRestoreComplete = False
-				InitializePackageManager = False
 
 		# end while
 	# end run ()
@@ -3828,7 +3842,7 @@ def mainLoop():
 
 		# validate package for install
 		package.UpdateVersionsAndFlags ()
-		if packageOperationOk and package.FileSetOk:
+		if packageOperationOk and package.InstallOk:
 			installOk = False
 			forceInstall = False
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
@@ -3856,22 +3870,13 @@ def mainLoop():
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
 
-			# attempt to create a missing file set
-			if not package.InstallPending and package.checkFileSets:
-				actionMessage = "checking file sets for " + packageName + " ..."
-				PushAction ( command='check' + ':' + packageName, source='AUTO' )
-				package.checkFileSets = False
-
 			# package checks skipped - continue with current download update
 			if not packageOperationOk:
 				packageChecksSkipped = True
 	
 			
-		# update GitHub version age
-		package.UpdateGitHubVersionAge ()
-
 		# clear GitHub version if not refreshed in 10 minutes
-		if package.GitHubVersion != "" and package.gitHubVersionAge > + SLOW_GITHUB_REFRESH + 10:
+		if package.GitHubVersion != "" and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
 			package.SetGitHubVersion ("")
 		DbusIf.UNLOCK ()
 	# end if not holdOffScan

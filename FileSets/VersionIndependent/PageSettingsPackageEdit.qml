@@ -330,7 +330,7 @@ MbPage {
 			width: 85
 			anchors { right: parent.right; bottom: statusMessage.bottom }
 			description: ""
-			value: actionPending ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
+			value: ( actionPending || showDetails ) ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
 			onClicked: cancelEdit ()
 			show: ( actionPending || showDetails || editError || showActionNeeded ) && ! waitForAction
 		}
@@ -340,7 +340,7 @@ MbPage {
 			width: 92
 			anchors { right: cancelButton.left; bottom: statusMessage.bottom }
 			description: ""
-			value: actionPending ? qsTr("Proceed") : qsTr ("Now")
+			value: ( actionPending || showDetails ) ? qsTr("Proceed") : qsTr ("Now")
 			onClicked: confirm ()
 			show: ( actionPending || (showDetails && detailsResolvable) || showActionNeeded ) && showProceed
 			writeAccessLevel: User.AccessInstaller

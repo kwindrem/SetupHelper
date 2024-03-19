@@ -1,3 +1,7 @@
+v7.6:
+	fixed: Package editor menus shows Now/Later in stead of Proceed / Cancel
+		for Show Details
+
 v7.5:
 	fixed: PackageManager restarts when removing package
 

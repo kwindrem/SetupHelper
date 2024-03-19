@@ -703,7 +703,7 @@ class AddRemoveClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.info ("attempting to stop AddRemove thread")
+		logging.warning ("attempting to stop AddRemove thread")
 		self.threadRunning = False
 		self.AddRemoveQueue.put ( ('STOP', ''), block=False )
 
@@ -1000,11 +1000,6 @@ class DbusIfClass:
 	def SetEditStatus (self, message):
 		self.DbusService['/GuiEditStatus'] = message
 
-	# 'reboot' can't be unset since only a reboot can satisfy the need
-	def SetActionNeeded (self, message):
-		if self.DbusService['/ActionNeeded'] != 'reboot':
-			self.DbusService['/ActionNeeded'] = message
-
 
 
 	#	handleGuiEditAction (internal use only)
@@ -1124,13 +1119,17 @@ class DbusIfClass:
 	#
 	# these protect the package list from changing while the list is being accessed
 	#
-	# lock requests that time out after 10 seconds are considered a critical error
-	#	however no attempt is made to recover
-	# TODO: maybe forcing PackageManager to restart ????
+	# locked sections of code should execute quickly to minimize impact on other threads
+	#
+	# failure to UNLOCK will result in a LOCK request from another thread timing out
+	#
+	# lock requests that time out result in PackageManager exiting immediately without cleanup
+	# supervise will then restart it
 	
 	def LOCK (self):
-		if not self.lock.acquire (blocking=True, timeout=10):
-			logging.critical ("timeout while waiting for LOCK")
+		if not self.lock.acquire (blocking=True, timeout=2.0):
+			logging.critical ("failed to aquire lock - PackageManager will restart")
+			os._exit(1)
 		
 	def UNLOCK (self):
 		try:
@@ -1489,6 +1488,8 @@ class PackageClass:
 		self.Conflicts = []
 		self.ConflictsResolvable = True
 
+		self.ActionNeeded = ''
+
 		self.lastConflictCheck = 0
 		self.lastPatchCheck = 0
 
@@ -1738,6 +1739,8 @@ class PackageClass:
 
 	@classmethod
 	def RemovePackage (cls, packageName=None, packageIndex=None ):
+		DbusIf.LOCK () #### TODO:
+		DbusIf.LOCK ()
 		# packageName specified so this is a call from the GUI
 		if packageName != None:
 			guiRequestedRemove = True
@@ -1802,7 +1805,7 @@ class PackageClass:
 				toPackage.SetGitHubVersion (fromPackage.GitHubVersion )
 				toPackage.SetPackageVersion (fromPackage.PackageVersion )
 				toPackage.SetInstalledVersion (fromPackage.InstalledVersion )
-				toPackage.SetIncompatible (fromPackage.Incomptible, self.IncompatibleDetails,
+				toPackage.SetIncompatible (fromPackage.Incompatible, self.IncompatibleDetails,
 											self.IncompatibleResolvable )
 				toPackage.SetInstallOk (fromPackage.InstallOk)
 
@@ -1814,6 +1817,7 @@ class PackageClass:
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
+				toPackage.ActionNeeded = fromPackage.ActionNeeded
 
 				toIndex += 1
 				fromIndex += 1
@@ -2248,7 +2252,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 	#	when run returns, the main method should catch the tread with join ()
 
 	def StopThread (self):
-		logging.info ("attempting to stop UpdateGitHubVersion thread")
+		logging.warning ("attempting to stop UpdateGitHubVersion thread")
 		self.threadRunning = False
 		self.SetPriorityGitHubVersion ( 'STOP' )
 
@@ -2599,7 +2603,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.info ("attempting to stop DownloadGitHub thread")
+		logging.warning ("attempting to stop DownloadGitHub thread")
 		self.threadRunning = False
 		self.DownloadQueue.put ( ('STOP', ''), block=False )
 
@@ -2712,6 +2716,7 @@ class InstallPackagesClass (threading.Thread):
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ()
 		package = PackageClass.LocatePackage (packageName)
+		package.ActionNeeded = NONE
 
 		if package == None:
 			logging.error ("InstallPackage: " + packageName + " not in package list")
@@ -2799,9 +2804,9 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
+			package.ActionNeeded = REBOOT_NEEDED
 			package.SetIncompatible ("")	# this marks the package as compatible
 			if source == 'GUI':
-				DbusIf.SetActionNeeded ('reboot')
 				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
@@ -2812,8 +2817,8 @@ class InstallPackagesClass (threading.Thread):
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
 			package.SetIncompatible ("")	# this marks the package as compatible
+			package.ActionNeeded = GUI_RESTART_NEEDED
 			if source == 'GUI':
-				DbusIf.SetActionNeeded ('guiRestart')
 				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
@@ -2953,7 +2958,7 @@ class InstallPackagesClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.info ("attempting to stop InstallPackages thread")
+		logging.warning ("attempting to stop InstallPackages thread")
 		self.threadRunning = False
 		self.InstallQueue.put ( ('STOP', ''), block=False )
 
@@ -3391,7 +3396,7 @@ class MediaScanClass (threading.Thread):
 	#	 this gives other threads time away from slower media scanning operations
 
 	def StopThread (self):
-		logging.info ("attempting to stop MediaScan thread")
+		logging.warning ("attempting to stop MediaScan thread")
 		self.threadRunning = False
 		self.MediaQueue.put  ( "STOP", block=False )
 
@@ -3682,7 +3687,13 @@ currentDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
 DeferredGuiEditAcknowledgement = None
 
-def mainLoop():
+# states for actionNeeded
+REBOOT_NEEDED = 2
+GUI_RESTART_NEEDED = 1
+NONE = 0
+
+
+def mainLoop ():
 	global mainloop
 	global PushAction
 	global MediaScan
@@ -3881,13 +3892,34 @@ def mainLoop():
 		DbusIf.UNLOCK ()
 	# end if not holdOffScan
 
-	actionsPending = False
 	DbusIf.LOCK ()
+	actionsPending = False
+	actionsNeeded = ""
+	systemAction = NONE
 	# hold off reboot or GUI restart if any package has an action pending
+	# collect actions needed to activage changes - only sent to GUI - no action taken
 	for package in PackageClass.PackageList:
 		if package.DownloadPending or package.InstallPending:
 			actionsPending = True
+
+		if package.ActionNeeded == REBOOT_NEEDED:
+			actionsNeeded += (package.PackageName + " requires REBOOT\n")
+			systemAction = REBOOT_NEEDED
+		elif package.ActionNeeded == GUI_RESTART_NEEDED:
+			actionsNeeded += (package.PackageName + " requires GUI restart\n")
+			if systemAction != REBOOT_NEEDED:
+				systemAction = GUI_RESTART_NEEDED
+
+	if systemAction == REBOOT_NEEDED:
+		actionsNeeded += "REBOOT system ?"
+	elif systemAction == GUI_RESTART_NEEDED:
+		actionsNeeded += "restart GUI ?"
+	DbusIf.DbusService['/ActionNeeded'] = actionsNeeded
+
 	DbusIf.UNLOCK ()
+
+
+
 	if actionsPending:
 		noActionCount = 0
 	else:
@@ -3928,7 +3960,6 @@ def mainLoop():
 			GuiRestart = False
 			DbusIf.SetEditStatus ("")
 			DbusIf.AcknowledgeGuiEditAction ('')
-			DbusIf.SetActionNeeded ('')
 			# exit the main loop
 			mainloop.quit()
 			return False
@@ -4002,6 +4033,7 @@ def uninstallAllPackages ():
 # responsible for initialization and starting main loop and threads
 # also deals with clean shutdown when main loop exits
 #
+
 def main():
 	global mainloop
 	global SystemReboot	# initialized/used in main, set in mainloop, PushAction, InstallPackage
@@ -4159,7 +4191,6 @@ def main():
 	DbusIf.UpdateDefaultPackages ()
 
 	#### start threads - must use LOCK / UNLOCK to protect access to DbusIf from here on
-
 	UpdateGitHubVersion.start()
 	DownloadGitHub.start()
 	InstallPackages.start()
@@ -4204,10 +4235,11 @@ def main():
 	MediaScan.StopThread ()
 
 	try:
-		UpdateGitHubVersion.join (timeout=30.0)
-		DownloadGitHub.join (timeout=30.0)
-		InstallPackages.join (timeout=10.0)
-		AddRemove.join (timeout=10.0)
+		UpdateGitHubVersion.join (timeout=5.0)
+		DownloadGitHub.join (timeout=5.0)
+		InstallPackages.join (timeout=5.0)
+		AddRemove.join (timeout=5.0)
+		MediaScan.join (timeout=5.0)
 	except:
 		logging.critical ("attempt to join threads failed - one or more threads failed to exit")
 		pass

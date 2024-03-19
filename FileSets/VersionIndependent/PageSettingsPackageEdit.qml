@@ -44,6 +44,7 @@ MbPage {
 	property bool detailsExist: incompatibleDetails != ""
 	property bool detailsResolvable: incompatibleResolvableItem.valid ? incompatibleResolvableItem.value : ""
 	property bool showProceed: ( ! detailsExist || detailsResolvable) && ! waitForAction
+	property bool showDetails: false
 	property string localError: ""
 
 	// version info may be in platform service or in vePlatform.version
@@ -146,7 +147,7 @@ MbPage {
 			waitForNameChange = true
 			packageIndex = newPackageIndex
 			requestedAction = ''
-
+			showDetails = false
 		}
 	}
 
@@ -191,6 +192,7 @@ MbPage {
 	{
 		// cancel any pending operation
 		requestedAction = ''
+		showDetails = false
 
 		acknowledgeError ()
 
@@ -200,18 +202,20 @@ MbPage {
 	}
 	function confirm ()
 	{
-		// provide local confirmation of action in case PackageManager doesn't act on it
-		if (actionPending)
+		if (showDetails)
 		{
-			sendCommand ( requestedAction + ':' + packageName, true )
+			sendCommand ( 'resolveConflicts:' + packageName, true )
+			showDetails = false
 		}
+		else if (actionPending)
+			sendCommand ( requestedAction + ':' + packageName, true )
 		else if (showActionNeeded)
 		{
-			if (actionNeeded == 'reboot')
+			if (actionNeeded.indexOf ( "REBOOT" ) != -1 )
 			{
 				sendCommand ( 'reboot', true )
 			}
-			else if (actionNeeded == 'guiRestart')
+			else if (actionNeeded.indexOf ( "restart" ) != -1 )
 			{
 				sendCommand ( 'restartGui', true )
 			}
@@ -221,22 +225,34 @@ MbPage {
 	function install ()
 	{
 		if (navigate && installOk && ! editError)
+		{
 			requestedAction = 'install'
+			showDetails = false
+		}
 	}
 	function uninstall ()
 	{
 		if (navigate && installedValid && ! editError)
+		{
 			requestedAction = 'uninstall'
+			showDetails = false
+		}
 	}
 	function gitHubDownload ()
 	{
 		if (navigate && downloadOk && ! editError)
+		{
 			requestedAction = 'download'
+			showDetails = false
+		}
 	}
 	function remove ()
 	{
-		id ( ! editError)
+		if ( ! editError)
+		{
 			requestedAction = 'remove'
+			showDetails = false
+		}
 	}
 
 	model: VisibleItemModel
@@ -316,7 +332,7 @@ MbPage {
 			description: ""
 			value: actionPending ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
 			onClicked: cancelEdit ()
-			show: ( actionPending || editError || showActionNeeded ) && ! waitForAction
+			show: ( actionPending || showDetails || editError || showActionNeeded ) && ! waitForAction
 		}
 		MbOK
 		{
@@ -324,21 +340,21 @@ MbPage {
 			width: 92
 			anchors { right: cancelButton.left; bottom: statusMessage.bottom }
 			description: ""
-			value: actionPending ? qsTr("Proceed") : qsTr ("Now") /////////// ?????????????
+			value: actionPending ? qsTr("Proceed") : qsTr ("Now")
 			onClicked: confirm ()
-			show: ( actionPending || showActionNeeded ) && showProceed
+			show: ( actionPending || (showDetails && detailsResolvable) || showActionNeeded ) && showProceed
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK
 		{
-			id: showConflictsButton
+			id: showDetailsButton
 			width: 150
 			anchors { right: parent.right; bottom: statusMessage.bottom}
 			description: ""
 			value: qsTr("Show Details")
-			onClicked: requestedAction = 'showDetails'
+			onClicked: showDetails = true
 			writeAccessLevel: User.AccessInstaller
-			show: navigate && detailsExist && ! ( editError || actionPending || waitForAction || showActionNeeded)
+			show: navigate && detailsExist && ! ( editError || actionPending || waitForAction || showActionNeeded || showDetails)
 		}
 
 		// bottom row of buttons
@@ -406,8 +422,8 @@ MbPage {
 					smWidth -= cancelButton.width
 				if (confirmButton.show)
 					smWidth -= confirmButton.width
-				if (showConflictsButton.show)
-					smWidth -= showConflictsButton.width
+				if (showDetailsButton.show)
+					smWidth -= showDetailsButton.width
 				return smWidth
 			}
 			height: Math.max (paintedHeight, 35)
@@ -418,14 +434,16 @@ MbPage {
 			color: isSetupHelper && requestedAction == 'uninstall' ? "red" : root.style.textColor
 			text:
 			{
-				if (actionPending)
+				if (showDetails)
 				{
-					if (requestedAction == 'showDetails')
-						if (detailsResolvable)
-							return ( incompatibleDetails + qsTr ("\nResolve conflicts?") )
-						else
-							return ( incompatibleDetails )
-					else if (isSetupHelper && requestedAction == 'uninstall')
+					if (detailsResolvable)
+						return ( incompatibleDetails + qsTr ("\nResolve conflicts?") )
+					else
+						return ( incompatibleDetails )
+				}
+				else if (actionPending)
+				{
+					if (isSetupHelper && requestedAction == 'uninstall')
 						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
 					else
 						return (requestedAction + " " + packageName + " ?")
@@ -433,14 +451,7 @@ MbPage {
 				else if (editStatus.valid && editStatus.value != "")
 					return ( editStatus.value )
 				else if (showActionNeeded)
-				{
-					if (actionNeeded == 'reboot')
-						return qsTr ("Reboot now?")
-					else if (actionNeeded == 'guiRestart')
-						return qsTr ("restart GUI now ?")
-					else
-						return ( "unknown ActionNeeded " + actionNeeded ) 
-				}
+					return ( actionNeeded ) 
 				else if (incompatible)
 					return ( incompatibleReason )
 				else

@@ -13,19 +13,15 @@ MbPage {
 	// use DefaultCount as an indication that PackageManager is running
     property VBusItem defaultCount: VBusItem { bind: Utils.path(servicePrefix, "/DefaultCount") }
 	property VBusItem editAction: VBusItem { bind: Utils.path(servicePrefix, "/GuiEditAction") }
-	property VBusItem gitHubVersionAge: VBusItem { bind: Utils.path(servicePrefix, "/Package/0/GitHubVersionAge") }
 
 	// notify PackageManager to refresh GitHub versions for all packages
 	// when this menu goes active (entering from parent or returning from child)
 	// or if first package's GitHub version age is greater than 60 seconds
 	onActiveChanged: refreshGitHubVersions ()
-	onGitHubVersionAgeChanged:  refreshGitHubVersions ()
 
 	function refreshGitHubVersions ()
 	{
 		if (! active)
-			return
-		else if (! gitHubVersionAge.valid || gitHubVersionAge.value < 60 )
 			return
 		else if ( editAction.value != "" )
 			return

@@ -711,6 +711,8 @@ class AddRemoveClass (threading.Thread):
 	#
 	# process package Add/Remove actions
 	def run (self):
+		global RestartPackageManager
+
 		changes = False
 		while self.threadRunning:
 			# if package was added or removed, don't wait for queue empty
@@ -728,7 +730,28 @@ class AddRemoveClass (threading.Thread):
 				# no changes so do idle processing:
 				#	add packages in /data that aren't included in package list
 				else:
+					# restart package manager if a duplice name found in PackageList
+					#	or if name is not valid
+					DbusIf.LOCK ()
+					existingPackages = []
+					duplicateFound = False
+					for (index, package) in enumerate (PackageClass.PackageList):
+						packageName = package.PackageName
+						if packageName in existingPackages or not PackageClass.PackageNameValid (packageName):
+							duplicateFound = True
+							break
+						existingPackages.append (packageName)
+					del existingPackages
+					DbusIf.UNLOCK ()
+					# exit this thread so no more package adds/removes are possible
+					#	PackageManager will eventually reset
+					if duplicateFound:
+						logging.critical ("duplicate " + packageName + " found in package list - restarting PackageManager")
+						RestartPackageManager = True
+						return
+
 					PackageClass.AddStoredPackages ()
+
 				changes = False
 				continue
 			except:
@@ -1738,7 +1761,7 @@ class PackageClass:
 	#	this is all done while the package list is locked !!!!
 
 	@classmethod
-	def RemovePackage (cls, packageName=None, packageIndex=None ):
+	def RemovePackage (cls, packageName=None, packageIndex=None, isDuplicate=False ):
 		# packageName specified so this is a call from the GUI
 		if packageName != None:
 			guiRequestedRemove = True
@@ -1785,8 +1808,10 @@ class PackageClass:
 		
 		# if package is installed, don't remove it
 		if matchFound and not packageIsInstalled:
+			# if not just removing a duplicate
 			# block future automatic adds since the package is being removed
-			PackageClass.SetAutoAddOk (packageName, False)
+			if not isDuplicate:
+				PackageClass.SetAutoAddOk (packageName, False)
 
 			# move packages after the one to be remove down one slot (copy info)
 			# each copy overwrites the lower numbered package
@@ -1803,8 +1828,8 @@ class PackageClass:
 				toPackage.SetGitHubVersion (fromPackage.GitHubVersion )
 				toPackage.SetPackageVersion (fromPackage.PackageVersion )
 				toPackage.SetInstalledVersion (fromPackage.InstalledVersion )
-				toPackage.SetIncompatible (fromPackage.Incompatible, self.IncompatibleDetails,
-											self.IncompatibleResolvable )
+				toPackage.SetIncompatible (fromPackage.Incompatible, fromPackage.IncompatibleDetails,
+															fromPackage.IncompatibleResolvable )
 				toPackage.SetInstallOk (fromPackage.InstallOk)
 
 				# package variables
@@ -4157,34 +4182,54 @@ def main():
 	# 	remove any packages with their forced removal flag is set
 	#		package conflicts are sometimes resolved by uninstalling a package
 	#			(done in their setup script eg GuiMods force removes GeneratorConnector)
+	#	remove duplicate packages
 	# could be time-consuming (uninstall, removal and checking all packages)
 	# lock is really unecessary since threads aren't running yet
+	#
+	# if a package is removed, start at the beginning of the list again
 
-	DbusIf.LOCK ()
-	for (index, package) in enumerate (PackageClass.PackageList):
-		packageName = package.PackageName
-		# valid package name
-		if PackageClass.PackageNameValid (packageName):
+	while True:
+		DbusIf.LOCK ()
+		runAgain = False
+		existingPackages = []
+		for (index, package) in enumerate (PackageClass.PackageList):
+			packageName = package.PackageName
+			# valid package name
+			if PackageClass.PackageNameValid (packageName):
 
-			package.UpdateVersionsAndFlags ()
+				flagFile = "/data/setupOptions/" + packageName + "/FORCE_REMOVE" 
+				# forced removal flag
+				if os.path.exists (flagFile):
+					os.remove (flagFile)
+					forcedRemove = True
+					if os.path.exists ("/etc/venus/nstalledVersion-" + packageName):
+						logging.warning ( "uninstalling " + packageName + " prior to forced remove" )
+						directUninstall (packageName)
+					# now remove the package
+					logging.warning ( "forced remove of " + packageName )
+					PackageClass.RemovePackage (packageIndex=index)
+					runAgain = True
+					break
+				elif packageName in existingPackages:
+					logging.warning ( "removing duplicate " + packageName )
+					PackageClass.RemovePackage (packageIndex=index, isDuplicate=True)
+					runAgain = True
+					break
 
-			# do not force remove SetupHelper !!!!!
-			if packageName != "SetupHelper":
-				continue
-			flagFile = "/data/setupOptions/" + packageName + "/FORCE_REMOVE" 
-			# no forced removal flag
-			if not os.path.exists (flagFile):
-				continue
-			# need to force remove but package is installed so uninstall first
-			if package.InstalledVersion != "":
-				directUninstall (packageName)
-			# now remove the package
-			PackageClass.RemovePackage (packageIndex=index)
-			os.remove (flagFile)
-		# invalid package name (including a null string) so remove the package from the list
-		else:
-			PackageClass.RemovePackage (packageIndex=index)
-	DbusIf.UNLOCK ()
+			# invalid package name (including a null string) so remove the package from the list
+			else:
+				logging.warning ( "removing package with invalid name " + packageName )
+				PackageClass.RemovePackage (packageIndex=index)
+				runAgain = True
+				break
+
+			# package not removed above - add its name to list that will be checked for duplicates
+			existingPackages.append (packageName)
+
+		DbusIf.UNLOCK ()
+		if not runAgain:
+			break
+	del existingPackages
 
 	DbusIf.UpdateDefaultPackages ()
 

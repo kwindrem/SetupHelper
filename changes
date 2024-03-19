@@ -1,3 +1,6 @@
+v7.7:
+	fixed: remove duplicates a package in Active packages
+
 v7.6:
 	fixed: Package editor menus shows Now / Later in stead of Proceed / Cancel
 		for Show Details

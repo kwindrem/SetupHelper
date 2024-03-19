@@ -1739,8 +1739,6 @@ class PackageClass:
 
 	@classmethod
 	def RemovePackage (cls, packageName=None, packageIndex=None ):
-		DbusIf.LOCK () #### TODO:
-		DbusIf.LOCK ()
 		# packageName specified so this is a call from the GUI
 		if packageName != None:
 			guiRequestedRemove = True

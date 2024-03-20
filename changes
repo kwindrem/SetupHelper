@@ -1,3 +1,7 @@
+v7.8:
+	fixed: packages getting downloaded when not needed + PackageManger crash
+		results in corrupted pacakges
+
 v7.7:
 	fixed: remove duplicates a package in Active packages
 

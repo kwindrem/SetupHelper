@@ -437,7 +437,7 @@ def PushAction (command=None, source=None):
 		packageName = ""
 
 	if action == 'download':
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("PushAction 1")
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.DownloadPending = True
@@ -456,10 +456,10 @@ def PushAction (command=None, source=None):
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=errorMessage, where='Editor' )
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR', defer=True )
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("PushAction 1")
 
 	elif action == 'install' or action == 'uninstall' or action == 'check':
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("PushAction 2")
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.InstallPending = True
@@ -475,7 +475,7 @@ def PushAction (command=None, source=None):
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=errorMessage, where='Editor' )
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR', defer=True )
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("PushAction 2")
 
 	elif action == 'resolveConflicts':
 		theQueue = InstallPackages.InstallQueue
@@ -732,7 +732,7 @@ class AddRemoveClass (threading.Thread):
 				else:
 					# restart package manager if a duplice name found in PackageList
 					#	or if name is not valid
-					DbusIf.LOCK ()
+					DbusIf.LOCK ("AddRemove run")
 					existingPackages = []
 					duplicateFound = False
 					for (index, package) in enumerate (PackageClass.PackageList):
@@ -742,7 +742,7 @@ class AddRemoveClass (threading.Thread):
 							break
 						existingPackages.append (packageName)
 					del existingPackages
-					DbusIf.UNLOCK ()
+					DbusIf.UNLOCK ("AddRemove run")
 					# exit this thread so no more package adds/removes are possible
 					#	PackageManager will eventually reset
 					if duplicateFound:
@@ -1075,7 +1075,7 @@ class DbusIfClass:
 	# this also updates the dbus default packages used by the GUI Add Package menu
 
 	def UpdateDefaultPackages (self):
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("UpdateDefaultPackages")
 		# don't touch "new" entry (index 0)
 		index = 1
 		oldDefaultCount = len (self.defaultPackageList)
@@ -1114,7 +1114,7 @@ class DbusIfClass:
 			self.DbusService[prefix + 'GitHubBranch'] = ""
 			index += 1
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("UpdateDefaultPackages")
 
 
 	#	ReadDefaultPackagelist
@@ -1149,21 +1149,35 @@ class DbusIfClass:
 	# lock requests that time out result in PackageManager exiting immediately without cleanup
 	# supervise will then restart it
 	
-	def LOCK (self):
-		if not self.lock.acquire (blocking=True, timeout=2.0):
-			logging.critical ("failed to aquire lock - PackageManager will restart")
-			os._exit(1)
+	def LOCK (self, name):
+		requestTime = time.time()
+		reportTime = requestTime
+		while True:
+			if self.lock.acquire (blocking=False):
+				# here if lock was acquired
+				return
+			else:
+				time.sleep (0.1)
+				currentTime = time.time()
+				# waiting for 5 seconds - timeout
+				if currentTime - requestTime > 5.0:
+					logging.CRITICAL ("timeout waiting for lock " + name + " - restarting PackageManager")
+					os._exit(1)		
+				# report waiting every 1 second
+				elif currentTime - reportTime > 0.5:
+					logging.warning ("waiting to aquire lock " + name)
+					reportTime = currentTime
+
 		
-	def UNLOCK (self):
+	def UNLOCK (self, name):
 		try:
 			self.lock.release ()
 		except RuntimeError:
-			logging.error ("UNLOCK when not locked - continuing")
-
+			logging.error ("UNLOCK when not locked - continuing " + name)
+			
 
 	def __init__(self):
 		self.lock = threading.RLock()
-
 		settingsList = {'packageCount': [ '/Settings/PackageManager/Count', 0, 0, 0 ],
 						'autoDownload': [ '/Settings/PackageManager/GitHubAutoDownload', 0, 0, 0 ],
 						'autoInstall': [ '/Settings/PackageManager/AutoInstall', 0, 0, 0 ],
@@ -1625,9 +1639,9 @@ class PackageClass:
 			if not PackageClass.PackageNameValid (packageName):
 				continue
 			# if package is already in the active list - skip it
-			DbusIf.LOCK ()
+			DbusIf.LOCK ("AddStoredPackages")
 			package = PackageClass.LocatePackage (packageName)
-			DbusIf.UNLOCK ()			
+			DbusIf.UNLOCK ("AddStoredPackages")			
 			if package != None:
 				continue
 
@@ -1654,7 +1668,7 @@ class PackageClass:
 			if not PackageClass.GetAutoAddOk (packageName):
 				continue
 			# package is unique and passed all tests - schedule the package addition
-			PushAction (command='add:' + packageName, source='AUTO')
+			PushAction ( command='add:' + packageName, source='AUTO')
 
 	
 	# the DownloadPending and InstallPending flags prevent duplicate actions for the same package
@@ -1666,14 +1680,14 @@ class PackageClass:
 	
 	@classmethod
 	def UpdateDownloadPending (self, packageName, state):
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("UpdateDownloadPending")
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.DownloadPending = state
 			# update package versions at end of download
 			if state == False:
 				package.UpdateVersionsAndFlags ()
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("UpdateDownloadPending")
 
 		
 
@@ -1700,7 +1714,7 @@ class PackageClass:
 
 		# insure packageName is unique before adding this new package
 		success = False
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("AddPackage")
 		package = PackageClass.LocatePackage (packageName)
 
 		# new packageName is unique, OK to add it
@@ -1737,7 +1751,7 @@ class PackageClass:
 			else:
 				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=WARNING )
 		
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("AddPackage")
 		return success
 	# end AddPackage
 
@@ -1782,11 +1796,11 @@ class PackageClass:
 			logging.error ( "RemovePackage: no package info passed - nothing done" )
 			return
 
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("RemovePackage")
 		packages = PackageClass.PackageList
 		listLength = len (packages)
 		if listLength == 0:
-			DbusIf.UNLOCK ()
+			DbusIf.UNLOCK ("RemovePackage")
 			return
 
 		# locate index of packageName
@@ -1863,7 +1877,7 @@ class PackageClass:
 			# remove entry from package list
 			packages.pop (toIndex)
 			DbusIf.UpdatePackageCount ()
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("RemovePackage")
 		# this package was manually removed so block automatic adds
 		#	in the package directory
 		if guiRequestedRemove:
@@ -2217,12 +2231,12 @@ class UpdateGitHubVersionClass (threading.Thread):
 
 		# locate the package with this name and update it's GitHubVersion
 		# if not in the list discard the information
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("updateGitHubVersion")
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
 			package.SetGitHubVersion (gitHubVersion)
 			package.lastGitHubRefresh = time.time ()
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("updateGitHubVersion")
 		return gitHubVersion
 
 
@@ -2355,7 +2369,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 			elif source == 'local' and packageName != "":
 				packageUpdate = True
 			if packageUpdate:
-				DbusIf.LOCK ()
+				DbusIf.LOCK ("UpdateGitHubVersion run 1")
 				package = PackageClass.LocatePackage (packageName)
 				if package != None:
 					user = package.GitHubUser
@@ -2368,7 +2382,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 						doUpdate = True
 				else:
 					logging.error ("can't fetch GitHub version - " + packageName + " not in package list")
-				DbusIf.UNLOCK ()
+				DbusIf.UNLOCK ("UpdateGitHubVersion run 1")
 
 			doBackground = forcedRefresh or DbusIf.GetAutoDownloadMode () != AUTO_DOWNLOADS_OFF
 			# insure background updates will begin with fisrt package when they start again
@@ -2376,7 +2390,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 				gitHubVersionPackageIndex = 0
 			# no priority update - do background update
 			elif not doUpdate:
-				DbusIf.LOCK ()
+				DbusIf.LOCK ("UpdateGitHubVersion run 2")
 				packageListLength = len (PackageClass.PackageList)
 				# empty package list - no refreshes possible
 				if packageListLength == 0:
@@ -2399,7 +2413,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 					# download modes can now be changed if appropriate
 					WaitForGitHubVersions = False
 					forcedRefresh = False
-				DbusIf.UNLOCK ()
+				DbusIf.UNLOCK ("UpdateGitHubVersion run 2")
 
 			# do the actual background update outsde the above LOCKED section
 			#	since the update requires internet access
@@ -2460,23 +2474,19 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		else:
 			where = None
 
-		# to avoid confilcts, create a temp directory that
-		# is unque to this program and this method
-		# and make sure it is empty
-		tempDirectory = "/var/run/packageManager" + str(os.getpid ()) + "GitHubDownload"
-		if os.path.exists (tempDirectory):
-			shutil.rmtree (tempDirectory)
-		os.mkdir (tempDirectory)
-
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("GitHubDownload 1")
 		package = PackageClass.LocatePackage (packageName)
 		gitHubUser = package.GitHubUser
 		gitHubBranch = package.GitHubBranch
 		installAfter = package.InstallAfterDownload
 		package.InstallAfterDownload = False
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("GitHubDownload 1")
 
 		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
+
+		tempDirectory = "/data/PmDownloadTemp"
+		if not os.path.exists (tempDirectory):
+			os.mkdir (tempDirectory)
 
 		# create temp directory specific to this thread
 		tempArchiveFile = tempDirectory + "/temp.tar.gz"
@@ -2554,18 +2564,23 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		#	from accessing the directory while it's being updated
 		packagePath = "/data/" + packageName
 		tempPackagePath = packagePath + "-temp"
+		try:
+			if os.path.exists (tempPackagePath):
+				shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
+		except:
+			pass
+
 		message = ""
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("GitHubDownload 2")
 		try:
 			if os.path.exists (packagePath):
-				if os.path.exists (tempPackagePath):
-					shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 				os.rename (packagePath, tempPackagePath)
 			shutil.move (unpackedPath, packagePath)
 		except:
 			message = "GitHubDownload: couldn't update " + packageName
 			logging.error ( message )
-		DbusIf.UNLOCK ()
+
+		DbusIf.UNLOCK ("GitHubDownload 2")
 		PackageClass.UpdateDownloadPending (packageName, False)
 		DbusIf.UpdateStatus ( message=message, where=where )
 		if source == 'GUI':
@@ -2737,7 +2752,7 @@ class InstallPackagesClass (threading.Thread):
 			return
 
 		# refresh versions, then check to see if an install is possible
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("InstallPackage")
 		package = PackageClass.LocatePackage (packageName)
 		package.ActionNeeded = NONE
 
@@ -2746,7 +2761,7 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " not in package list", where='Editor' )
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-				DbusIf.UNLOCK ()
+			DbusIf.UNLOCK ("InstallPackage error 1")
 			return
 
 		if source == 'GUI':
@@ -2768,9 +2783,9 @@ class InstallPackagesClass (threading.Thread):
 			logging.error ("InstallPackage - " + errorMessage)
 			package.InstallPending = False
 			package.UpdateVersionsAndFlags ()
-			DbusIf.UNLOCK ()
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
+			DbusIf.UNLOCK ("InstallPackage error 2")
 			return
 			
 		setupFile = packageDir + "/setup"
@@ -2781,7 +2796,7 @@ class InstallPackagesClass (threading.Thread):
 			package.UpdateVersionsAndFlags ()
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			DbusIf.UNLOCK ()
+			DbusIf.UNLOCK ("InstallPackage error 3")
 			return
 		elif os.access(setupFile, os.X_OK) == False:
 			errorMessage = "setup file for " + packageName + " not executable"
@@ -2789,10 +2804,10 @@ class InstallPackagesClass (threading.Thread):
 			package.InstallPending = False
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			DbusIf.UNLOCK ()
+			DbusIf.UNLOCK ("InstallPackage error 4")
 			return
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("InstallPackage normal")
 
 		DbusIf.UpdateStatus ( message=action + "ing " + packageName, where=sendStatusTo, logLevel=WARNING )
 		try:
@@ -2809,7 +2824,7 @@ class InstallPackagesClass (threading.Thread):
 			setupRunFail = True
 
 		# manage the result of the setup run while locked just in case
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("InstallPackage 2")
 
 		package = PackageClass.LocatePackage (packageName)
 		package.InstallPending = False
@@ -2894,7 +2909,7 @@ class InstallPackagesClass (threading.Thread):
 
 		package.UpdateVersionsAndFlags ()
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("InstallPackage 2")
 	# end InstallPackage ()
 
 
@@ -2910,7 +2925,7 @@ class InstallPackagesClass (threading.Thread):
 			logging.error ("ResolveConflicts - no package name specified")
 			return
 
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("ResolveConflicts")
 	
 		package = PackageClass.LocatePackage (packageName)
 		if package == None:
@@ -2966,7 +2981,7 @@ class InstallPackagesClass (threading.Thread):
 				logging.warning ("ResolveConflicts: uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
 				PushAction ( command='uninstall' + ':' + dependencyPackage, source=source )
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("ResolveConflicts")
 
 
 	#	InstallPackage run (the thread)
@@ -3146,7 +3161,7 @@ class MediaScanClass (threading.Thread):
 		#	from accessing the directory while it's being updated
 		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=WARNING )
 		tempPackagePath = packagePath + "-temp"
-		DbusIf.LOCK () 
+		DbusIf.LOCK ("transferPackage") 
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		if os.path.exists (packagePath):
@@ -3163,7 +3178,7 @@ class MediaScanClass (threading.Thread):
 			logging.warning ("Auto Install - setting ONE_TIME_INSTALL for " + packageName )
 			open ( packagePath + "/ONE_TIME_INSTALL", 'a').close()
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("transferPackage")
 		shutil.rmtree (tempDirectory, ignore_errors=True)
 		time.sleep (5.0)
 		DbusIf.UpdateStatus ( message="", where='Media')
@@ -3844,7 +3859,7 @@ def mainLoop ():
 		packageIndex = 0
 	# process one package per pass of mainloop
 	else:
-		DbusIf.LOCK ()	
+		DbusIf.LOCK ("mainLoop 1")	
 		packageListLength = len (PackageClass.PackageList)
 		if packageIndex >= packageListLength:
 			packageIndex = 0
@@ -3864,8 +3879,8 @@ def mainLoop ():
 				UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
 		# disallow operations on this package if anything is pending
+		package.UpdateVersionsAndFlags ()
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
-
 		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
 					and DownloadGitHub.DownloadVersionCheck (package):
 			# don't allow install if download is needed - even if it has not started yet
@@ -3875,7 +3890,6 @@ def mainLoop ():
 			PushAction ( command='download' + ':' + packageName, source='AUTO' )
 
 		# validate package for install
-		package.UpdateVersionsAndFlags ()
 		if packageOperationOk and package.InstallOk:
 			installOk = False
 			forceInstall = False
@@ -3912,10 +3926,10 @@ def mainLoop ():
 		# clear GitHub version if not refreshed in 10 minutes
 		if package.GitHubVersion != "" and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
 			package.SetGitHubVersion ("")
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("mainLoop 1")
 	# end if not holdOffScan
 
-	DbusIf.LOCK ()
+	DbusIf.LOCK ("mainLoop 2")
 	actionsPending = False
 	actionsNeeded = ""
 	systemAction = NONE
@@ -3939,7 +3953,7 @@ def mainLoop ():
 		actionsNeeded += "restart GUI ?"
 	DbusIf.DbusService['/ActionNeeded'] = actionsNeeded
 
-	DbusIf.UNLOCK ()
+	DbusIf.UNLOCK ("mainLoop 2")
 
 
 
@@ -4189,7 +4203,7 @@ def main():
 	# if a package is removed, start at the beginning of the list again
 
 	while True:
-		DbusIf.LOCK ()
+		DbusIf.LOCK ("main")
 		runAgain = False
 		existingPackages = []
 		for (index, package) in enumerate (PackageClass.PackageList):
@@ -4226,7 +4240,7 @@ def main():
 			# package not removed above - add its name to list that will be checked for duplicates
 			existingPackages.append (packageName)
 
-		DbusIf.UNLOCK ()
+		DbusIf.UNLOCK ("main")
 		if not runAgain:
 			break
 	del existingPackages

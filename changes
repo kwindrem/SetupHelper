@@ -1,3 +1,6 @@
+v7.9:
+	added blind install .tgz files
+
 v7.8:
 	fixed: packages getting downloaded when not needed + PackageManger crash
 		results in corrupted pacakges

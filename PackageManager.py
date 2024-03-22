@@ -3924,7 +3924,7 @@ def mainLoop ():
 	
 			
 		# clear GitHub version if not refreshed in 10 minutes
-		if package.GitHubVersion != "" and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
+		if package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
 			package.SetGitHubVersion ("")
 		DbusIf.UNLOCK ("mainLoop 1")
 	# end if not holdOffScan

@@ -1,3 +1,6 @@
+v7.10:
+	fixed: services with dash in the name do not install/uninstall
+
 v7.9:
 	added blind install .tgz files
 

@@ -206,6 +206,7 @@ function getFileLists ()
 {
 	local verListFile="$1/fileList"
 	local indListFile="$1/fileListVersionIndependent"
+	local patchListFile="$1/fileListPatched"
 	local tempListVer=()
 	local tempListInd=()
 	local tempListPatched=()
@@ -1150,21 +1151,27 @@ for package in $packageList; do
 
     done # for i1 (final checks)
 
-	# create and test patch files
+	# create and test patch files based on the provided .source and .edited files
+	# the option to skip creation exists in case the .patch file needs to be hand edited.
+	logMessage "patch file checks"
+
 	for file in ${fileListPatched[@]} ; do
+		outputProgressTick "."
 		baseName=$( basename $file )
 		patchSourceDir="$workingFiles/PatchSource"
 		patchSource="$patchSourceDir/$baseName.source"
 		patchEdited="$patchSourceDir/$baseName.edited"
 		patchFile="$patchSourceDir/$baseName.patch"
-		
+		patchResultFile="$patchSourceDir/$baseName.patchResult"
+		reversePatchResultFile="$patchSourceDir/$baseName.reversePatchResult"
+
 		createPatch=true
 		if ! [ -f "$patchEdited" ]; then
-			logMessage "ERROR $package: no edited file for $baseName - can't create patch file"
+			logMessage "ERROR $package: no edited file for $baseName patch"
 			createPatch=false
 		fi
 		if ! [ -f "$patchSource" ]; then
-			logMessage "ERROR $package: no source file for $baseName - can't create patch file"
+			logMessage "ERROR $package: no source file for $baseName patch"
 			createPatch=false
 		fi
 		if $createPatch && [ -f "$patchFile" ]; then
@@ -1174,20 +1181,40 @@ for package in $packageList; do
 			fi
 		fi
 		if $createPatch ; then
+			logMessage "$package: creating patch file for $baseName"
 			diff -u "$patchSource" "$patchEdited" > "$patchFile"
 		fi
+
+		if ! $createPatch ; then
+			logMessage "$package: no patch file for $baseName - skipping version checks"
+		fi
+		
 	
 		# test patch on all versions
+		#	patch each version, then referse patch it and comare with the stock file
 		for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 			IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"
+			stockFile1="$stockFiles/$version1/$file"
 			origFile1="$workingFiles/$version1/$baseName"
-			if ! [ -f "$origFile1" ]; then
+			if ! [ -f "$stockFile1" ]; then
 				continue
-			elif ! patch -o --dry-run "$origFile1" "$patchFile" &> /dev/null ; then
-				logMessage "ERROR $package: patch failed $baseName $version1"
 			fi
+			if ! patch -o "$patchResultFile" "$stockFile1" "$patchFile" &> /dev/null ; then
+				logMessage "ERROR $package: patch failed $baseName $version1"
+				continue
+			fi
+			if ! patch -R -o "$reversePatchResultFile" "$patchResultFile" "$patchFile" &> /dev/null ; then
+				logMessage "ERROR $package: reverse patch failed $baseName $version1"
+				continue 
+			fi
+			if ! cmp -s "$stockFile1" "$reversePatchResultFile" > /dev/null ; then
+				logMessage "ERROR $package: stock and reverse patched result differ $baseName $version1"
+				continue
+			fi
+			rm -f "$patchResultFile" "$reversePatchResultFile"
 		done
 	done
+
 	# update the package's copy of helper resources
 	updateHelperResources=false
 	if [ -f "$workingDirectory/HelperResources/version" ]; then

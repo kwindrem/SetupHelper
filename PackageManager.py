@@ -2062,7 +2062,14 @@ class PackageClass:
 				# check for file conflicts with prevously installed packages
 				# each line in all file lists are checked to see if the <file>.pacage contains a different package name
 				# those that do represent a conflict between this and that other package
-				fileLists =  [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
+				fileLists =  [ "fileList", "fileListVersionIndependent" ]
+				patchFiles = fileSetsDir + "/PatchSource"
+				# ignore patch files if flag allows attempts to patch in place
+				#	so that multiple packages can patch the same file
+				if os.path.exists (patchFiles + "/ALLOW_MULTIPLE_MODIFICATIONS"):
+					logging.warning ("skipping patch files in compatibllity checks")
+				else:
+					fileLists +=  [ "fileListPatched" ]
 				for fileList in fileLists:
 					path = "/data/" + packageName + "/FileSets/" + fileList
 					if not os.path.exists (path):
@@ -2078,6 +2085,7 @@ class PackageClass:
 								replacementFile = entry.split ()[0].strip ()
 								if not replacementFile.startswith ("/"):
 									continue
+	#### TODO: add .patchPackages
 								packageFile = replacementFile + ".package"
 								if not os.path.exists ( packageFile) :
 									continue
@@ -2127,6 +2135,8 @@ class PackageClass:
 
 		# run setup script to check for errors that can't be checked here 
 		if compatible:
+			self.SetIncompatible ( "" )
+
 			doChecks = False
 			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
 			# no checks have been done recently so do them now
@@ -2147,7 +2157,7 @@ class PackageClass:
 				# avoid starting a new check if there is something pending
 				if not self.InstallPending and not self.DownloadPending:
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
-				compatible = False
+					self.lastSetupCheckTime = time.time()
 
 		self.SetInstallOk (compatible)
 	# end UpdateVersionsAndFlags
@@ -2828,22 +2838,16 @@ class InstallPackagesClass (threading.Thread):
 
 		package = PackageClass.LocatePackage (packageName)
 		package.InstallPending = False
-		# either install or check will have checked for file set or patch errors
-		# so reset the time so next check can be delayed for a while
-		if action == 'install' or action == 'check':
-			package.lastSetupCheckTime = time.time () 
 
 		errorMessage = ""
 		if setupRunFail:
 			errorMessage = "could not run setup"
 		elif returnCode == EXIT_SUCCESS:
-			package.SetIncompatible ("")	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
 			package.ActionNeeded = REBOOT_NEEDED
-			package.SetIncompatible ("")	# this marks the package as compatible
 			if source == 'GUI':
 				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
@@ -2854,7 +2858,6 @@ class InstallPackagesClass (threading.Thread):
 				global SystemReboot
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
-			package.SetIncompatible ("")	# this marks the package as compatible
 			package.ActionNeeded = GUI_RESTART_NEEDED
 			if source == 'GUI':
 				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")

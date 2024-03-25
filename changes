@@ -1,3 +1,6 @@
+v7.1l: (pending)
+	patches can now allow modifications from multiple packages
+
 v7.10:
 	fixed: services with dash in the name do not install/uninstall
 

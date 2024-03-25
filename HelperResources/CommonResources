@@ -80,6 +80,9 @@ installFailMessage=""
 installPreChecks=true
 installFailCount=0
 
+# if enabled by this flag, patch (do not replace active file)
+patchActiveFile=[ -e "$patchSourceDir/ALLOW_MULTIPLE_MODIFICATIONS" ]
+
 # cleanup on any exit
 
 exitCleanup ()
@@ -523,6 +526,7 @@ updateActiveFile ()
 
 	# replacement files are not needed for some versions
 	# if so marked, leave original untouched
+	checkForConflict=true
 	if [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
 		return 1
 	# source file not specified separately - look for it in expected places
@@ -530,6 +534,7 @@ updateActiveFile ()
 		# first in patched files
         if [ -f "$patchedFiles/$baseName" ]; then
             sourceFile="$patchedFiles/$baseName"
+            if $patchActiveFile ; then checkForConflict=false; fi
 		# then in version-specific FileSet
         elif [ -f "$fileSet/$baseName" ]; then
             sourceFile="$fileSet/$baseName"
@@ -562,6 +567,7 @@ updateActiveFile ()
 	fi
 
 	# check for package conflicts
+	#### TODO: add .patchPackages checks
 	if [ -f "$activeFile.package" ]; then
 		prevousPackage=$( cat "$activeFile.package" )
 		if [ $packageName != $prevousPackage ]; then
@@ -570,13 +576,17 @@ updateActiveFile ()
 		fi
 	fi
 
+
 	# add file to installed files list (used for uninstallAll)
 	# do this before actually modifying things just in case there's an error
 	#	that way the uninstall is assured
 	echo "$activeFile" >> "$installedFilesList"
 
 	# update package flag to prevent overwrites by other packages
-	echo $packageName > "$activeFile.package"
+	if patchActiveFile:
+		echo $packageName >> "$activeFile.patchPackages"
+	else:
+		echo $packageName > "$activeFile.package"
 
 	# already updated - don't need to any more
 	if [ -f "$activeFile" ]; then
@@ -588,6 +598,8 @@ updateActiveFile ()
     backupActiveFile "$activeFile"
 
 	# update the active file
+	# patched files have already incorporated current active file content
+	# so nothing diffrerent here
 	cp "$sourceFile" "$activeFile"
 
 	updateRestartFlags "$activeFile"
@@ -610,6 +622,7 @@ updateActiveFile ()
 restoreActiveFile ()
 {
     thisFileUpdated=false
+	#### TODO: how to handle patchActiveFile .patchPackages 
 
 	if [ -f "$1.package" ]; then
 		prevousPackage=$( cat "$1.package" )
@@ -617,6 +630,8 @@ restoreActiveFile ()
 			return 1
 		fi
     fi
+	#### TODO: only do this if no other packages have modified this file
+	#### TODO: reverse patch if in .patchPackages list
     if [ -e "$1.orig" ]; then
         mv -f "$1.orig" "$1"
         thisFileUpdated=true
@@ -625,9 +640,15 @@ restoreActiveFile ()
         thisFileUpdated=true
     fi
 
+#### TODO: move this before the restore happens so it can be prevented if this package isn't involved
 	if $thisFileUpdated ; then
         rm -f "$1.NO_ORIG"
-        rm -f "$1.package"
+		if $patchActivePackage && [ -f "$1.patchPackages" ]; then #### TODO: check to see if it's in there first  !
+			grep -v $( basename $1 ) "$1.patchPackages" | tee "$1.patchPackages" > /dev/null
+		#### TODO: make sure the package owns the replacement first
+		else
+			rm -f "$1.package"
+		fi
 		# remove file from installed file list
 		if [ -f "$installedFilesList" ]; then
 			grep -v "$1" "$installedFilesList" | tee "$installedFilesList" > /dev/null
@@ -1370,11 +1391,18 @@ fi
 versionStringToNumber $venusVersion
 venusVersionNumber=$versionNumber
 
-# do pre-checks - skip if uninstalling
+# flag the version that is performing these checks
+#	this is used by PackageManager to know when to run checks
+echo "$venusVersion" > "$scriptDir/packageCheckVersion"
+
+getFileLists "$pkgFileSets"
+
+# create place for patch output (unique temp directory in volatile storage)
+# this is removed in the exit trap above
+patchedFiles=$( mktemp -d ) 
+
+# do install pre-checks - skip if uninstalling
 if [ $scriptAction != 'UNINSTALL' ]; then
-	# flag the version that is performing these checks
-	#	this is used by PackageManager to know when to run checks
-	echo "$venusVersion" > "$scriptDir/packageCheckVersion"
 
 	# prevent installing Raspberry Pi packages on other platforms
 	if [ -f "$scriptDir/raspberryPiOnly" ]; then 
@@ -1434,8 +1462,6 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		fi
 	fi
 
-	getFileLists "$pkgFileSets"
-
 	checkFileSets
 
 	# checkFileSets created a missing file set and set the INCOMPLETE flag if needed
@@ -1448,66 +1474,8 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 
 	checkPackageDependencies
 
-	# create installed files (and services) directory
-	if [ ! -d "$installedFilesDir" ]; then
-		mkdir "$installedFilesDir"
-	fi
-
-	# create place for patch output (unique temp directory in volatile storage)
-	# this is removed in the exit trap above
-	patchedFiles=$( mktemp -d ) 
-
-	# create patched files in fileListPatched
-	patchErrors=()
-	for file in ${fileListPatched[@]}; do
-		message=""
-		baseName=$( basename $file )
-		patchFile="$patchSourceDir/$baseName.patch"
-		if ! [ -f "$patchFile" ]; then
-			message="patch file missing for $baseName"
-			patchErrors+="$message\n"
-			setInstallFailed $EXIT_PATCH_ERROR "$message"
-			continue
-		fi
-		# BusyBox patch doesn't support the -o option so copy source to output first
-		#	then patch the output
-		# if package already installed, patch .orig
-		if [ -e "$file.orig" ]; then
-			cp "$file.orig" "$patchedFiles/$baseName"
-		# if package probably not installed, patch the active file
-		elif [ -e "$file" ] ; then
-			cp "$file" "$patchedFiles/$baseName"
-		else
-			message="no source for $baseName patch"
-			patchErrors+=( "$message" )
-			setInstallFailed $EXIT_PATCH_ERROR "$message"
-			continue
-		fi
-		if ! patch "$patchedFiles/$baseName" "$patchFile" &> /dev/null ; then
-			message="patch unsuccesful for $baseName"
-			patchErrors+=( "$message" )
-			setInstallFailed $EXIT_PATCH_ERROR "$message"
-		fi
-	done
-
-	# save any errors in PatchErrors file
-	if [ -z "$patchErrors" ] ; then
-		rm -f "$scriptDir/patchErrors"
-	else
-		printf "%s\n" "${patchErrors[@]}" > "$scriptDir/patchErrors"
-		if [ $scriptAction == 'CHECK' ]; then
-			exit $EXIT_PATCH_ERROR
-		else
-			endScript
-		fi
-	fi
-
-	# go no further if just checking
-	if [ $scriptAction == 'CHECK' ]; then
-		exit $EXIT_SUCCESS
-	fi
-
 	# create patched files for files with VisibleItemModel for older Venus OS versions
+	#### TODO: check that this works with patchActiveFile !!!!!!!!!!!!!!
 	versionStringToNumber "v3.00~14"
 	if (( $venusVersionNumber < $versionNumber )); then
 		logMessage "patching VisibleItemModel to VisualItemModel in all .qml replacements"
@@ -1521,6 +1489,69 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		done
 	fi
 fi # if [ $scriptAction != 'UNINSTALL' ]
+
+# create the forward and reverse patched files
+# used during the actual install and uninstall
+# done here so PackageManager knows if this will be possible
+#### TODO: add alternate patch files (.patch-alt or .patch-1, .patch-2 ????)
+patchErrors=()
+for file in ${fileListPatched[@]}; do
+	message=""
+	baseName=$( basename $file )
+	patchFile="$patchSourceDir/$baseName.patch"
+	if ! [ -f "$patchFile" ]; then
+		message="patch file missing for $baseName"
+		patchErrors+="$message\n"
+		setInstallFailed $EXIT_PATCH_ERROR "$message"
+		continue
+	fi
+	# BusyBox patch doesn't support the -o option so copy source to output first
+	#	then patch the output
+	# if patch allows patching by multiple packages always patch active file
+	# 	otherwise use .orig if package already installed
+	if $patchActiveFile && [ -e "$file.orig" ]; then
+		cp "$file.orig" "$patchedFiles/$baseName"
+	# patch the active file
+	elif [ -e "$file" ] ; then
+		cp "$file" "$patchedFiles/$baseName"
+	else
+		message="no source for $baseName patch"
+		patchErrors+=( "$message" )
+		setInstallFailed $EXIT_PATCH_ERROR "$message"
+		continue
+	fi
+	if ! patch "$patchedFiles/$baseName" "$patchFile" &> /dev/null ; then
+		message="patch unsuccesful for $baseName"
+		patchErrors+=( "$message" )
+		setInstallFailed $EXIT_PATCH_ERROR "$message"
+	fi
+	# create reverse patch for use with uninstall
+	if $patchActiveFile ; then
+		cp "$patchedFiles/$baseName" "$patchedFiles/$baseName".reversePatched
+		if ! patch -R "$patchedFiles/$baseName".reversePatched "$patchFile" &> /dev/null ; then
+			message="reverse patch unsuccesful for $baseName"
+			patchErrors+=( "$message" )
+			setInstallFailed $EXIT_PATCH_ERROR "$message"
+	fi
+done
+
+# save any errors in patchErrors file
+if [ -z "$patchErrors" ] ; then
+	rm -f "$scriptDir/patchErrors"
+else
+	logMessage " patch error details were saved in $scriptDir/patchErrors"
+	printf "%s\n" "${patchErrors[@]}" > "$scriptDir/patchErrors"
+	if [ $scriptAction == 'CHECK' ]; then
+		exit $EXIT_PATCH_ERROR
+	else
+		endScript
+	fi
+fi
+
+# go no further if just checking
+if [ $scriptAction == 'CHECK' ]; then
+	exit $EXIT_SUCCESS
+fi
 
 # make sure rootfs is mounted R/W & and resized to allow space for replacement files
 #	arbitrary minimum size of 3 MB
@@ -1566,6 +1597,7 @@ if ! $installFailed; then
 	fi
 fi
 
+
 # done with pre checks
 #	prior to this no system mofications have been made
 #	after this system modifications may occur
@@ -1584,6 +1616,11 @@ if $installFailed ; then
 		logMessage "ERROR: install failed during pre-checks - select another action"
 		scriptAction='NONE'
 	fi
+fi
+
+# create installed files (and services) directory
+if [ ! -d "$installedFilesDir" ]; then
+	mkdir "$installedFilesDir"
 fi
 
 installPreChecks=false

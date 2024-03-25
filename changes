@@ -1,3 +1,6 @@
+v7.11:
+	fixed: conflicts not cleared when they have been resolved
+
 v7.10:
 	fixed: services with dash in the name do not install/uninstall
 

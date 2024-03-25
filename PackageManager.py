@@ -2125,8 +2125,10 @@ class PackageClass:
 			else:
 				self.Conflicts = []
 
-		# run setup script to check for errors that can't be checked here 
 		if compatible:
+			self.SetIncompatible ( "" )
+
+			# run setup script to check for errors that can't be checked here 
 			doChecks = False
 			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
 			# no checks have been done recently so do them now
@@ -2147,6 +2149,7 @@ class PackageClass:
 				# avoid starting a new check if there is something pending
 				if not self.InstallPending and not self.DownloadPending:
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
+					self.lastSetupCheckTime = time.time ()
 				compatible = False
 
 		self.SetInstallOk (compatible)
@@ -2828,22 +2831,16 @@ class InstallPackagesClass (threading.Thread):
 
 		package = PackageClass.LocatePackage (packageName)
 		package.InstallPending = False
-		# either install or check will have checked for file set or patch errors
-		# so reset the time so next check can be delayed for a while
-		if action == 'install' or action == 'check':
-			package.lastSetupCheckTime = time.time () 
 
 		errorMessage = ""
 		if setupRunFail:
 			errorMessage = "could not run setup"
 		elif returnCode == EXIT_SUCCESS:
-			package.SetIncompatible ("")	# this marks the package as compatible
 			DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( '' )
 		elif returnCode == EXIT_REBOOT:
 			package.ActionNeeded = REBOOT_NEEDED
-			package.SetIncompatible ("")	# this marks the package as compatible
 			if source == 'GUI':
 				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
@@ -2854,7 +2851,6 @@ class InstallPackagesClass (threading.Thread):
 				global SystemReboot
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
-			package.SetIncompatible ("")	# this marks the package as compatible
 			package.ActionNeeded = GUI_RESTART_NEEDED
 			if source == 'GUI':
 				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")

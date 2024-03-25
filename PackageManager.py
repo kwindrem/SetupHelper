@@ -2062,14 +2062,7 @@ class PackageClass:
 				# check for file conflicts with prevously installed packages
 				# each line in all file lists are checked to see if the <file>.pacage contains a different package name
 				# those that do represent a conflict between this and that other package
-				fileLists =  [ "fileList", "fileListVersionIndependent" ]
-				patchFiles = fileSetsDir + "/PatchSource"
-				# ignore patch files if flag allows attempts to patch in place
-				#	so that multiple packages can patch the same file
-				if os.path.exists (patchFiles + "/ALLOW_MULTIPLE_MODIFICATIONS"):
-					logging.warning ("skipping patch files in compatibllity checks")
-				else:
-					fileLists +=  [ "fileListPatched" ]
+				fileLists =  [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
 				for fileList in fileLists:
 					path = "/data/" + packageName + "/FileSets/" + fileList
 					if not os.path.exists (path):
@@ -2085,7 +2078,6 @@ class PackageClass:
 								replacementFile = entry.split ()[0].strip ()
 								if not replacementFile.startswith ("/"):
 									continue
-	#### TODO: add .patchPackages
 								packageFile = replacementFile + ".package"
 								if not os.path.exists ( packageFile) :
 									continue
@@ -2133,10 +2125,10 @@ class PackageClass:
 			else:
 				self.Conflicts = []
 
-		# run setup script to check for errors that can't be checked here 
 		if compatible:
 			self.SetIncompatible ( "" )
 
+			# run setup script to check for errors that can't be checked here 
 			doChecks = False
 			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
 			# no checks have been done recently so do them now
@@ -2157,7 +2149,8 @@ class PackageClass:
 				# avoid starting a new check if there is something pending
 				if not self.InstallPending and not self.DownloadPending:
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
-					self.lastSetupCheckTime = time.time()
+					self.lastSetupCheckTime = time.time ()
+				compatible = False
 
 		self.SetInstallOk (compatible)
 	# end UpdateVersionsAndFlags

@@ -2060,9 +2060,12 @@ class PackageClass:
 					pass
 
 				# check for file conflicts with prevously installed packages
-				# each line in all file lists are checked to see if the <file>.pacage contains a different package name
+				# each line in all file lists are checked to see if the <file>.package contains a different package name
 				# those that do represent a conflict between this and that other package
-				fileLists =  [ "fileList", "fileListVersionIndependent", "fileListPatched" ]
+				# patched files are NOT checked because they patch the active file in place
+				# the checkes performed in the setup script with the 'check' option will test the patch files
+				# and those results will be evaluated above.
+				fileLists =  [ "fileList", "fileListVersionIndependent" ]
 				for fileList in fileLists:
 					path = "/data/" + packageName + "/FileSets/" + fileList
 					if not os.path.exists (path):

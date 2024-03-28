@@ -1151,47 +1151,76 @@ for package in $packageList; do
 
     done # for i1 (final checks)
 
-	# create and test patch files based on the provided .source and .edited files
-	# the option to skip creation exists in case the .patch file needs to be hand edited.
-	logMessage "patch file checks"
+	# create and test patch files
+	# the option to skip creation exists in case the patch file needs to be hand edited
+	#
+	# in order to create a patch file, both an unmodified file without the changes
+	#	and an 'result' file WITH the desired changes are required
+	#
+	# multiple sets can exist and are of the form
+	#	result	$baseName*			eg PageSettings.qml-1
+	#	orig	$baseName*.orig		eg PageSettings.qml-1.orig
+	#	patch	$baseName*.patch	eg PageSettings.qml-1.patch
+	#
+	# legacy .edited and .source, will be converted to the new format
+	echo "#### $PWD"
+	patchSourceDir="$workingFiles/PatchSource"
+	logMessage "create patch files"
+	for file in ${fileListPatched[@]} ; do
+		baseName=$( basename $file )
+		# convert old name formats
+		oldPath="$patchSourceDir/$baseName"
+		newPath="$oldPath-1"
+		if [ -e "$oldPath.source" ] || [ -e "$oldPath.edited" ] || [ -e "$oldPath.patch" ]; then
+			if [ -e "$newPath*" ]; then
+				logMessage "can't move .source and .edited patch files - ...-1... already exists"
+			else
+				if [ -e "$oldPath.source" ]; then
+					logMessage " renaming $baseName.source to $baseName-1.orig"
+					mv "$oldPath.source" "$newPath.orig"
+				fi
+				if [ -e "$oldPath.edited" ]; then
+					logMessage " renaming $baseName.edited to $baseName-1"
+					mv "$oldPath.edited" "$newPath"
+				fi
+				if [ -e "$oldPath.patch" ]; then
+					logMessage " renaming $baseName.patch to $baseName-1.patch"
+					mv "$oldPath.patch" "$newPath.patch"
+				fi
+			fi
+		fi
+		
+		patchOrigFiles=( $( ls "$patchSourceDir/$baseName"*.orig ) )
+		for patchOrig in ${patchOrigFiles[@]}; do
+			patchResult="${patchOrig/.orig/}"
+			patchFile="${patchOrig/.orig/.patch}"
+			createPatch=true
 
+			if ! [ -f "$patchResult" ]; then
+				continue
+			fi
+			if $createPatch && [ -f "$patchFile" ]; then
+				logMessage "$package $( basename $patchFile ) already exists"
+				if ! yesNoPrompt "recreate it (y/n}? " ;then
+					createPatch=false
+				fi
+			fi
+			if $createPatch ; then
+				logMessage "$package: creating $( basename $patchFile )"
+				diff -u "$patchOrig" "$patchResult" > "$patchFile"
+			fi
+		done
+	done
+		
+	beginProgress "check patch files"
 	for file in ${fileListPatched[@]} ; do
 		outputProgressTick "."
 		baseName=$( basename $file )
-		patchSourceDir="$workingFiles/PatchSource"
-		patchSource="$patchSourceDir/$baseName.source"
-		patchEdited="$patchSourceDir/$baseName.edited"
-		patchFile="$patchSourceDir/$baseName.patch"
-		patchResultFile="$patchSourceDir/$baseName.patchResult"
-		reversePatchResultFile="$patchSourceDir/$baseName.reversePatchResult"
 
-		createPatch=true
-		if ! [ -f "$patchEdited" ]; then
-			logMessage "ERROR $package: no edited file for $baseName patch"
-			createPatch=false
-		fi
-		if ! [ -f "$patchSource" ]; then
-			logMessage "ERROR $package: no source file for $baseName patch"
-			createPatch=false
-		fi
-		if $createPatch && [ -f "$patchFile" ]; then
-			logMessage "$package $baseName patch file already exists"
-			if ! yesNoPrompt "recreate it (y/n}? " ;then
-				createPatch=false
-			fi
-		fi
-		if $createPatch ; then
-			logMessage "$package: creating patch file for $baseName"
-			diff -u "$patchSource" "$patchEdited" > "$patchFile"
-		fi
-
-		if ! $createPatch ; then
-			logMessage "$package: no patch file for $baseName - skipping version checks"
-		fi
-		
-	
-		# test patch on all versions
-		#	patch each version, then referse patch it and comare with the stock file
+		# test each patch on all versions - need one to succeed for each version
+		#	both foward and reverse patchs must succeed
+		# 	and reverse patch result must match stock file
+		patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
 		for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 			IFS=':' read version1 version1number <<< "${allFileSets[$i1]}"
 			stockFile1="$stockFiles/$version1/$file"
@@ -1199,19 +1228,33 @@ for package in $packageList; do
 			if ! [ -f "$stockFile1" ]; then
 				continue
 			fi
-			if ! patch -o "$patchResultFile" "$stockFile1" "$patchFile" &> /dev/null ; then
-				logMessage "ERROR $package: patch failed $baseName $version1"
-				continue
+			foundPatch=false
+
+			for patchFile in ${patchFiles[@]}; do
+				message=""
+				patchResultFile="$patchSourceDir/$baseName.patchResult"
+				reversePatchResultFile="$patchSourceDir/$baseName.reversePatchResult"
+				patchOk=true
+
+				if ! yes 'no' | patch -N -o "$patchResultFile" "$stockFile1" "$patchFile" > /dev/null ; then
+					patchOk=false
+				fi
+				if $patchOK && ! yes 'no' | patch -R -o "$reversePatchResultFile" "$patchResultFile" "$patchFile" > /dev/null ; then
+					patchOk=false
+				fi
+				if $patchOK && ! cmp -s "$stockFile1" "$reversePatchResultFile" > /dev/null ; then
+					patchOk=false
+				fi
+				rm -f "$patchResultFile" "$reversePatchResultFile"
+				# found a patch that works - stop looking
+				if $patchOk ; then
+					foundPatch=true
+					break
+				fi
+			done
+			if ! $foundPatch; then
+				logMessage "ERROR: $packageName no patch file for $baseName $version1"
 			fi
-			if ! patch -R -o "$reversePatchResultFile" "$patchResultFile" "$patchFile" &> /dev/null ; then
-				logMessage "ERROR $package: reverse patch failed $baseName $version1"
-				continue 
-			fi
-			if ! cmp -s "$stockFile1" "$reversePatchResultFile" > /dev/null ; then
-				logMessage "ERROR $package: stock and reverse patched result differ $baseName $version1"
-				continue
-			fi
-			rm -f "$patchResultFile" "$reversePatchResultFile"
 		done
 	done
 
@@ -1274,6 +1317,7 @@ for package in $packageList; do
 			endAction='preserve'
 		fi
 	fi
+
 	if [ -z "$endAction" ]; then
 		echo
 		echo "select to finish:"

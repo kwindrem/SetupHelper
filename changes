@@ -1,4 +1,6 @@
-v8.0~1
+v8.0~1:
+	allow multiple packages to modify the same file
+		multiple patch files for each active file are permitted
 
 v7.11:
 	fixed: conflicts not cleared when they have been resolved

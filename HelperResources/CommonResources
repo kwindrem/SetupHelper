@@ -672,32 +672,27 @@ restoreActiveFile ()
 	if ! $matchFound ; then
 		return 1
     fi
-	restoreOriginal=false
-	if ! [ -z "$remainingPackages" ] ; then
+	restoreOriginal=true
+	unpatchError=false
+	# no other packages in .package so remove it
+	#	and restore the original
+	if [ -z "$remainingPackages" ] ; then
+		rm -f "$packageList"
+	else
 		# eliminate this package from .package list if there are others
 		grep -v "$packageName" "$packageList" | tee "$packageList" > /dev/null
 
 		# attempt to reverse patch the active file
+		#	if success, don't restore original
 		previousPatchFile="$previousPatchesDir/$baseName.patch"
-		if [ -e "$previousPatchFile" ]; then
-			if yes 'no' | patch -R "$activeFile" "$previousPatchFile" > /dev/null ; then
-			else
-				#### TODO: TERRIBLE but can't think of a way around this
-				logMessage "CRITICAL: $package $baseName could not be uninstalled"
-				logMessage "  $remainingPackages moodificataions were lost and must be reinstalled"
-				echo "CRITICAL: $package $baseName could not be uninstalled" >> "$scriptDir/patchErrors"
-				echo "  $remainingPackages moodificataions were lost and must be reinstalled" >> "$scriptDir/patchErrors"
-
-				setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
-
-				restoreOriginal=true
-			fi
+		if [ -e "$previousPatchFile" ] && 
+			yes 'no' | patch -R "$activeFile" "$previousPatchFile" > /dev/null ; then
+				restoreOriginal=false
+		# no previous patch file or reverse patch failed
+		#	original will be restored
 		else
+			unpatchError=true
 		fi
-	# no other packages in .package so remove it
-	else
-		rm -f "$packageList"
-		restoreOriginal=true
 	fi
 	# restore original if no other packages have modified this active file
 	#	or if reverse patch failed
@@ -710,6 +705,18 @@ restoreActiveFile ()
 			thisFileUpdated=true
 		fi
     fi
+
+	if $unpatchError ; then
+		#### TODO: DRASTIC but can't think of a way around this
+		message="CRITICAL: $package $baseName could not be uninstalled"
+		logMessage "message"
+		echo "message" >> "$scriptDir/patchErrors"
+		message="  moodificataions by $remainingPackages were lost and must be reinstalled"
+		logMessage "message"
+		echo "message" >> "$scriptDir/patchErrors"
+
+		setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
+	fi
 
 	rm -f "$previousPatchFile"
 

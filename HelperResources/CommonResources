@@ -3,7 +3,7 @@
 
 # CommonResources for SetupHelper
 # contains a functions and variables necessary for a setup script to interface with reinstallMods
-#patch file missing for
+#
 # Refer to the SetupHelper ReadMe file for details on how to use these resources.
 
 # what action the script should take:

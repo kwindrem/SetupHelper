@@ -444,12 +444,12 @@ fi
 
 # get helper resources version for later
 if [ -f "$packageRoot/SetupHelper/HelperResources/version" ]; then
-	shVersion=$( cat "$packageRoot/SetupHelper/HelperResources/version" )
-	versionStringToNumber $shVersion
-	shVersionNumber=$versionNumber
+	shHelperVersion=$( cat "$packageRoot/SetupHelper/HelperResources/version" )
+	versionStringToNumber $shHelperVersion
+	shHelperVersionNumber=$versionNumber
 else
-	shVersion=""
-	shVersionNumber=0
+	shHelperVersion=""
+	shHelperVersionNumber=0
 fi
 
 if [ -f "$packageRoot/HelperResources/version" ]; then
@@ -461,17 +461,17 @@ else
 	helperVersionNumber=0
 fi
 # update HelperResources main copy from SetuHelper if newer than existing copy used for all packages
-if (( shVersionNumber > helperVersionNumber )); then
-	logMessage "SetupHelper version $shVersion is newer than HelperResources $helperVersion"
-	if [[ $shVersion == *~* ]]; then
+if (( shHelperVersionNumber > helperVersionNumber )); then
+	logMessage "SetupHelper version $shHelperVersion is newer than HelperResources $helperVersion"
+	if [[ $shHelperVersion == *~* ]]; then
 		logMessage "WARNING: SetupHelper is not a released version"
 	fi
 	if yesNoPrompt "update main copy of HelperResources (y/n)? " ; then
 		rm -rf "$packageRoot/HelperResources"
 		cp -r "$packageRoot/SetupHelper/HelperResources" "$packageRoot"
 		cp "$packageRoot/SetupHelper/version" "$packageRoot/HelperResources"
-		helperVersion=$shVersion
-		helperVersionNumber=shVersionNumber
+		helperVersion=$shHelperVersion
+		helperVersionNumber=shHelperVersionNumber
 	fi
 fi
 
@@ -1163,7 +1163,6 @@ for package in $packageList; do
 	#	patch	$baseName*.patch	eg PageSettings.qml-1.patch
 	#
 	# legacy .edited and .source, will be converted to the new format
-	echo "#### $PWD"
 	patchSourceDir="$workingFiles/PatchSource"
 	logMessage "create patch files"
 	for file in ${fileListPatched[@]} ; do
@@ -1260,6 +1259,7 @@ for package in $packageList; do
 
 	# update the package's copy of helper resources
 	updateHelperResources=false
+	helperResourcesUpdated=false
 	if [ -f "$workingDirectory/HelperResources/version" ]; then
 		pkgHelperVersion=$( cat "$workingDirectory/HelperResources/version" )
 		versionStringToNumber $pkgHelperVersion
@@ -1268,29 +1268,41 @@ for package in $packageList; do
 		pkgHelperVersion=""
 		pkgHelperVersionNumber=0
 	fi
-	if (( helperVersionNumber > pkgHelperVersionNumber )); then
-		updateHelperResources=true
-	# if versions are the same, compare file mod dates
-	elif (( helperVersionNumber == pkgHelperVersionNumber )); then
-		for file in $( ls "$packageRoot/HelperResources" ); do
-			baseName=$( basename $file )
-			if [[ "$packageRoot/HelperResources/$baseName" -nt "$workingDirectory/HelperResources/$baseName" ]]; then
-				updateHelperResources=true
-				break
-			fi
-		done
-	fi
-	# prompt if new helper is beta but package has released version
-	pkgVersion=$( cat "$sourceDirectory/version" )
-	if $updateHelperResources && [[ "$helperVersion" == *~* ]] && ! [[ "$pkgVersion" == *~* ]]; then
-		logMessage "WARNING: $package $pkgVersion is released but new helper resources are $helperVersion (not released)"
-		if ! yesNoPrompt "update anyway (y/n)? " ;then
-			updateHelperResources=false
+
+	if (( shHelperVersionNumber > pkgHelperVersionNumber )) \
+			&& (( shHelperVersionNumber > helperVersionNumber )); then
+		logMessage "SetupHelper heler files newer than $package"
+		if yesNoPrompt "update $package Helper resoures from $pkgHelperVersion to $shHelperVersion (y/n)? " ; then
+			logMessage "$package: updating helper resources to $shHelperVersion"
+			cp -r "$packageRoot/SetupHelper/HelperResources" "$workingDirectory"
+			helperResourcesUpdated=true
 		fi
 	fi
-	if $updateHelperResources ; then
-		logMessage "$package: updating helper resources to $helperVersion"
-		cp -r "$packageRoot/HelperResources" "$workingDirectory"
+	if ! $helperResourcesUpdated; then
+		if (( helperVersionNumber > pkgHelperVersionNumber )); then
+			updateHelperResources=true
+		# if versions are the same, compare file mod dates
+		elif (( helperVersionNumber == pkgHelperVersionNumber )); then
+			for file in $( ls "$packageRoot/HelperResources" ); do
+				baseName=$( basename $file )
+				if [[ "$packageRoot/HelperResources/$baseName" -nt "$workingDirectory/HelperResources/$baseName" ]]; then
+					updateHelperResources=true
+					break
+				fi
+			done
+		fi
+		# prompt if new helper is beta but package has released version
+		pkgVersion=$( cat "$sourceDirectory/version" )
+		if $updateHelperResources && [[ "$helperVersion" == *~* ]] && ! [[ "$pkgVersion" == *~* ]]; then
+			logMessage "WARNING: $package $pkgVersion is released but new helper resources are $helperVersion (not released)"
+			if ! yesNoPrompt "update anyway (y/n)? " ;then
+				updateHelperResources=false
+			fi
+		fi
+		if $updateHelperResources ; then
+			logMessage "$package: updating helper resources to $helperVersion"
+			cp -r "$packageRoot/HelperResources" "$workingDirectory"
+		fi
 	fi
 
 

@@ -15,6 +15,7 @@ ShutdownMonitor       kwindrem      latest
 VeCanSetup            kwindrem      latest
 RpiDisplaySetup       kwindrem      latest
 RpiGpioSetup          kwindrem      latest
+TailscaleGX           kwindrem      latest
 
 123SmartBMS-Venus     123electric   latest
 RpiTemperature        TimD1981      latest

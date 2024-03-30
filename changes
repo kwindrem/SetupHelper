@@ -1,6 +1,7 @@
-v8.0~2:
+v8.0~3:
 	allow multiple packages to modify the same file
 		multiple patch files for each active file are permitted
+	add TailscaleGX to default package list
 
 v7.11:
 	fixed: conflicts not cleared when they have been resolved

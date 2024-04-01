@@ -1913,7 +1913,7 @@ class PackageClass:
 	#
 	# must be called while LOCKED !!
 
-	def UpdateVersionsAndFlags (self):
+	def UpdateVersionsAndFlags (self, doConflictChecks=True):
 		global VersionToNumber
 		global VenusVersion
 		global VenusVersionNumber
@@ -2032,7 +2032,8 @@ class PackageClass:
 					compatible = False
 
 		# check for package conflicts
-		if compatible:
+		# skip checks if caller disabled them
+		if compatible and doConflictChecks:
 			conflicts = []
 			# skip checks while operations are pending
 			#	this clears the conflicts list until it is checked agaion
@@ -2125,29 +2126,32 @@ class PackageClass:
 			else:
 				self.Conflicts = []
 
-		if compatible:
-			self.SetIncompatible ( "" )
+		# skip checks if caller disabled them
+		if compatible and doConflictChecks:
 
 			# run setup script to check for errors that can't be checked here 
 			doChecks = False
 			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
 			# no checks have been done recently so do them now
-			if not os.path.exists ( packageCheckFile ) and time.time() > self.lastSetupCheckTime + 30:
-				doChecks = True
-			# check file exists - check which firmware version was checked
-			#	and if not the current version, do checks
-			else:
-				try:
-					with open ( packageCheckFile ) as file:
-						for line in file:
-							if not VenusVersion in line:
-								doChecks = True
-				# couldn't read the file, attempt check again
-				except:
+			if time.time() > self.lastSetupCheckTime + 30:
+				# no check file exists, do checks
+				if not os.path.exists ( packageCheckFile ):
 					doChecks = True
+				# check file exists - check which firmware version was checked
+				#	and if not the current version, do checks
+				else:
+					try:
+						with open ( packageCheckFile ) as file:
+							for line in file:
+								if not VenusVersion in line:
+									doChecks = True
+					# couldn't read the file, attempt check again
+					except:
+						doChecks = True
 			if doChecks:
 				# avoid starting a new check if there is something pending
-				if not self.InstallPending and not self.DownloadPending:
+				if not self.InstallPending and not self.DownloadPending \
+						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 					self.lastSetupCheckTime = time.time ()
 				compatible = False
@@ -2785,7 +2789,7 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "no package directory " + packageName
 			logging.error ("InstallPackage - " + errorMessage)
 			package.InstallPending = False
-			package.UpdateVersionsAndFlags ()
+			package.UpdateVersionsAndFlags (doConflictChecks=False)
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			DbusIf.UNLOCK ("InstallPackage error 2")
@@ -2796,7 +2800,7 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "setup file for " + packageName + " doesn't exist"
 			DbusIf.UpdateStatus ( message=errorMessage,	where=sendStatusTo, logLevel=ERROR )
 			package.InstallPending = False
-			package.UpdateVersionsAndFlags ()
+			package.UpdateVersionsAndFlags (doConflictChecks=False)
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			DbusIf.UNLOCK ("InstallPackage error 3")

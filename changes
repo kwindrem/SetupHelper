@@ -1,3 +1,6 @@
+v7.12:
+	fixed: PackageManager hangs if there is no setup script in package directory
+
 v7.11:
 	fixed: conflicts not cleared when they have been resolved
 

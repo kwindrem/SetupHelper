@@ -2153,7 +2153,7 @@ class PackageClass:
 						doChecks = True
 			if doChecks:
 				# avoid starting a new check if there is something pending
-				if not self.InstallPending and not self.DownloadPending
+				if not self.InstallPending and not self.DownloadPending \
 						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 					self.lastSetupCheckTime = time.time ()

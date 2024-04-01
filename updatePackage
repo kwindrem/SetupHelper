@@ -464,9 +464,8 @@ fi
 if (( shHelperVersionNumber > helperVersionNumber )); then
 	logMessage "SetupHelper version $shHelperVersion is newer than HelperResources $helperVersion"
 	if [[ $shHelperVersion == *~* ]]; then
-		logMessage "WARNING: SetupHelper is not a released version"
-	fi
-	if yesNoPrompt "update main copy of HelperResources (y/n)? " ; then
+		logMessage "WARNING: SetupHelper is not a released version - main copy NOT UPDATED"
+	elif yesNoPrompt "update main copy of HelperResources (y/n)? " ; then
 		rm -rf "$packageRoot/HelperResources"
 		cp -r "$packageRoot/SetupHelper/HelperResources" "$packageRoot"
 		cp "$packageRoot/SetupHelper/version" "$packageRoot/HelperResources"

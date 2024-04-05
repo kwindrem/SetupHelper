@@ -1245,13 +1245,12 @@ class DbusIfClass:
 #		GetAutoAddOk (class method)
 #		SetAutoAddOk (class method)
 #		SetAutoInstallOk ()
-#		InstallVersionCheck ()
 #		settingChangedHandler ()
 #		various Gets and Sets
 #		AddPackagesFromDbus (class method)
 #		PackageNameValid (class method)
 #		AddStoredPackages (class method)
-#		UpdateDownloadPending () (class method)
+#		ClearDownloadPending () (class method)
 #		AddPackage (class method)
 #		RemovePackage (class method)
 #		UpdateVersionsAndFlags ()
@@ -1358,28 +1357,6 @@ class PackageClass:
 					open (flagFile, 'a').close()
 
 
-	#	InstallVersionCheck
-	#
-	# compares versions to determine if an install is needed
-	#	returns True if an update is needed, False of not
-	#
-	# called from main loop
-	
-	def InstallVersionCheck (self):
-
-		if self.Incompatible != "":
-			return False
-
-		packageVersion = self.PackageVersion
-		# skip further checks if package version string isn't filled in
-		if packageVersion == "" or self.PackageVersionNumber == 0:
-			return False
-		# skip install if versions are the same
-		elif self.PackageVersionNumber == self.InstalledVersionNumber:
-			return False
-		else:
-			return True
-
 	def SetPackageName (self, newName):
 		self.DbusSettings['packageName'] = newName
 		self.PackageName = newName
@@ -1427,11 +1404,6 @@ class PackageClass:
 			else:
 				DbusIf.DbusService[self.IncompatibleResolvablePath] = 0
 
-	def SetInstallOk (self, value):
-		self.InstallOk = value
-		if self.installOkPath != "":
-			DbusIf.DbusService[self.installOkPath] = value	
-
 	def settingChangedHandler (self, name, old, new):
 		# when dbus information changes, need to refresh local mirrors
 		if name == 'packageName':
@@ -1455,7 +1427,6 @@ class PackageClass:
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
 			self.incompatibleDetailsPath = '/Package/' + section + '/IncompatibleDetails'
 			self.IncompatibleResolvablePath = '/Package/' + section + '/IncompatibleResolvable'
-			self.installOkPath = '/Package/' + section + '/InstallOk'
 
 			# create service paths if they don't already exist
 			try:
@@ -1482,10 +1453,6 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.IncompatibleResolvablePath]
 			except:
 				DbusIf.DbusService.add_path (self.IncompatibleResolvablePath, "" )
-			try:
-				foo = DbusIf.DbusService[self.installOkPath]
-			except:
-				DbusIf.DbusService.add_path (self.installOkPath, "" )
 
 		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
 		self.gitHubUserPath = '/Settings/PackageManager/' + section + '/GitHubUser'
@@ -1518,10 +1485,8 @@ class PackageClass:
 		self.DownloadPending = False
 		self.InstallPending = False
 		self.InstallAfterDownload = False	# used by ResolveConflicts when doing both download and install
-		self.lastSetupCheckTime = 0
 
 		self.AutoInstallOk = False
-		self.InstallOk = False
 		self.Conflicts = []
 		self.ConflictsResolvable = True
 
@@ -1529,6 +1494,7 @@ class PackageClass:
 
 		self.lastConflictCheck = 0
 		self.lastPatchCheck = 0
+		self.lastSetupCheckTime = 0
 
 		self.lastGitHubRefresh = 0
 
@@ -1679,15 +1645,13 @@ class PackageClass:
 	# if you have a package pointer, set the parameter directly to save time
 	
 	@classmethod
-	def UpdateDownloadPending (self, packageName, state):
-		DbusIf.LOCK ("UpdateDownloadPending")
+	def ClearDownloadPending (self, packageName):
+		DbusIf.LOCK ("ClearDownloadPending")
 		package = PackageClass.LocatePackage (packageName)
 		if package != None:
-			package.DownloadPending = state
-			# update package versions at end of download
-			if state == False:
-				package.UpdateVersionsAndFlags ()
-		DbusIf.UNLOCK ("UpdateDownloadPending")
+			package.DownloadPending = False
+			package.UpdateVersionsAndFlags (doConflictChecks=True)
+		DbusIf.UNLOCK ("ClearDownloadPending")
 
 		
 
@@ -1844,7 +1808,6 @@ class PackageClass:
 				toPackage.SetInstalledVersion (fromPackage.InstalledVersion )
 				toPackage.SetIncompatible (fromPackage.Incompatible, fromPackage.IncompatibleDetails,
 															fromPackage.IncompatibleResolvable )
-				toPackage.SetInstallOk (fromPackage.InstallOk)
 
 				# package variables
 				toPackage.DownloadPending = fromPackage.DownloadPending
@@ -1852,7 +1815,8 @@ class PackageClass:
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
 				toPackage.Conflicts = fromPackage.Conflicts
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
-				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
+				toPackage.lastPatchCheck = fromPackage.lastPatchCheck
+				toPackage.lastSetupCheckTime = fromPackage.lastSetupCheckTime
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
 
@@ -1869,7 +1833,6 @@ class PackageClass:
 			toPackage.SetInstalledVersion ("?")
 			toPackage.SetPackageVersion ("?")
 			toPackage.SetIncompatible ("")
-			toPackage.SetInstallOk (False)
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -1913,7 +1876,7 @@ class PackageClass:
 	#
 	# must be called while LOCKED !!
 
-	def UpdateVersionsAndFlags (self, doConflictChecks=True):
+	def UpdateVersionsAndFlags (self, doConflictChecks=False):
 		global VersionToNumber
 		global VenusVersion
 		global VenusVersionNumber
@@ -1941,7 +1904,6 @@ class PackageClass:
 		if not os.path.isdir (packageDir):
 			self.SetPackageVersion ("")
 			self.AutoInstallOk = False
-			self.SetInstallOk (False)
 			self.SetIncompatible ("no package")
 			return
 
@@ -1995,7 +1957,7 @@ class PackageClass:
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install
 		# the optionsSet flag indicates the options HAVE been set already
 		# so if optionsRequired == True and optionsSet == False, can't install from GUI
-		elif compatible:
+		if compatible:
 			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
 					self.SetIncompatible ("install from command line" )
@@ -2021,27 +1983,13 @@ class PackageClass:
 				# used to prevent repeaded checks
 				self.lastPatchCheck = time.time ()
 
-		# platform and versions OK, check to see if command line is needed for install
-		# the optionsRequired flag in the package directory indicates options must be set before a blind install
-		# the optionsSet flag indicates the options HAVE been set already
-		# so if optionsRequired == True and optionsSet == False, can't install from GUI
-		if compatible:
-			if os.path.exists ("/data/" + packageName + "/optionsRequired" ):
-				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
-					self.SetIncompatible ("install from command line" )
-					compatible = False
-
 		# check for package conflicts
-		# skip checks if caller disabled them
 		if compatible and doConflictChecks:
 			conflicts = []
 			# skip checks while operations are pending
-			#	this clears the conflicts list until it is checked agaion
 			if not self.InstallPending and not self.DownloadPending:
 
 				dependencyFile = "/data/" + packageName + "/packageDependencies"
-				dependencyConflict = False
-				dependencyReason = ""
 				try:
 					with open (dependencyFile, 'r') as file:
 						for item in file:
@@ -2126,10 +2074,9 @@ class PackageClass:
 			else:
 				self.Conflicts = []
 
-		# skip checks if caller disabled them
+		# run setup script to check for errors that can't be checked here
+		# the packageCheckVersion file is updated by CommonResources during its prechecks
 		if compatible and doConflictChecks:
-
-			# run setup script to check for errors that can't be checked here 
 			doChecks = False
 			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
 			# no checks have been done recently so do them now
@@ -2153,10 +2100,7 @@ class PackageClass:
 				if not self.InstallPending and not self.DownloadPending \
 						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
-					self.lastSetupCheckTime = time.time ()
-				compatible = False
 
-		self.SetInstallOk (compatible)
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2521,7 +2465,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			logging.error ("returnCode" + str (returnCode) +  "stderr" + stderr)
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.UpdateDownloadPending (packageName, False)
+			PackageClass.ClearDownloadPending (packageName)
 			if os.path.exists (tempDirectory):
 				shutil.rmtree (tempDirectory)
 			return
@@ -2533,7 +2477,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 										where=where, logLevel=ERROR )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.UpdateDownloadPending (packageName, False)
+			PackageClass.ClearDownloadPending (packageName)
 			if os.path.exists (tempDirectory):
 				shutil.rmtree (tempDirectory)
 			return
@@ -2551,7 +2495,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			logging.error ("stderr: " + stderr)
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.UpdateDownloadPending (packageName, False)
+			PackageClass.ClearDownloadPending (packageName)
 			if os.path.exists (tempDirectory):
 				shutil.rmtree (tempDirectory)
 			return
@@ -2560,7 +2504,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		# the first directory in the tree starting with tempDirectory is returned
 		unpackedPath = LocatePackagePath (tempDirectory)
 		if unpackedPath == None:
-			PackageClass.UpdateDownloadPending (packageName, False)
+			PackageClass.ClearDownloadPending (packageName)
 			if os.path.exists (tempDirectory):
 				shutil.rmtree (tempDirectory)
 			logging.error ( "GitHubDownload: no archive path for " + packageName )
@@ -2588,7 +2532,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			logging.error ( message )
 
 		DbusIf.UNLOCK ("GitHubDownload 2")
-		PackageClass.UpdateDownloadPending (packageName, False)
+		PackageClass.ClearDownloadPending (packageName)
 		DbusIf.UpdateStatus ( message=message, where=where )
 		if source == 'GUI':
 			if message == "":
@@ -2775,11 +2719,11 @@ class InstallPackagesClass (threading.Thread):
 			sendStatusTo = 'Editor'
 			# uninstall sets the uninstall flag file to prevent auto install
 			if action == 'uninstall':
-				package.SetAutoInstallOk (True)
+				package.SetAutoInstallOk (False)
 				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
 			elif action == 'install':
-				package.SetAutoInstallOk (False)
+				package.SetAutoInstallOk (True)
 				logging.warning (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
 			sendStatusTo = 'PmStatus'
@@ -2789,7 +2733,7 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "no package directory " + packageName
 			logging.error ("InstallPackage - " + errorMessage)
 			package.InstallPending = False
-			package.UpdateVersionsAndFlags (doConflictChecks=False)
+			package.UpdateVersionsAndFlags ()
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			DbusIf.UNLOCK ("InstallPackage error 2")
@@ -2800,7 +2744,7 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "setup file for " + packageName + " doesn't exist"
 			DbusIf.UpdateStatus ( message=errorMessage,	where=sendStatusTo, logLevel=ERROR )
 			package.InstallPending = False
-			package.UpdateVersionsAndFlags (doConflictChecks=False)
+			package.UpdateVersionsAndFlags ()
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			DbusIf.UNLOCK ("InstallPackage error 3")
@@ -2907,7 +2851,10 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 
-		package.UpdateVersionsAndFlags ()
+		# conflict report will be generated but setting lastSetupCheckTime
+		#	will prevent setup script checks again since they were just run !
+		package.lastSetupCheckTime = time.time ()
+		package.UpdateVersionsAndFlags (doConflictChecks=True)
 
 		DbusIf.UNLOCK ("InstallPackage 2")
 	# end InstallPackage ()
@@ -3716,8 +3663,6 @@ class MediaScanClass (threading.Thread):
 #		exit
 
 # persistent storage for mainLoop
-packageScanComplete = False
-packageChecksSkipped = False
 packageIndex = 0
 noActionCount = 0
 lastDownloadMode = AUTO_DOWNLOADS_OFF
@@ -3743,8 +3688,6 @@ def mainLoop ():
 	global DeferredGuiEditAcknowledgement # set in the handleGuiEditAction thread becasue the dbus paramter can't be set there
 
 	global noActionCount
-	global packageScanComplete
-	global packageChecksSkipped
 	global packageIndex
 	global noActionCount
 	global lastDownloadMode
@@ -3778,13 +3721,12 @@ def mainLoop ():
 	if os.path.exists (bootReinstallFile):
 		# beginning of boot install - reset package index to insure a complete scan
 		if not bootInstall:
-			packageScanComplete = False
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
 		bootInstall = True
 		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		lastDownloadMode = AUTO_DOWNLOADS_OFF
-		autoInstall = True
+		autoInstall = False
 	# not doing boot install - use dbus values
 	else:
 		# save mode before chaning so changes can be detected below
@@ -3795,9 +3737,9 @@ def mainLoop ():
 	# hold off processing if reinstallMods is running to prevent conflicts
 	#	probalby never happen but just in case
 	if os.path.exists ("/etc/venus/REINSTALL_MODS_RUNNING"):
-		waitForReinstall = True
+		reinstallModsRunning = True
 	else:
-		waitForReinstall = False
+		reinstallModsRunning = False
 
 
 	# hold off all package processing if package list is empty
@@ -3808,7 +3750,7 @@ def mainLoop ():
 		emptyPackageList = True
 	else:
 		emptyPackageList = False
-		holdOffScan = waitForReinstall or ( WaitForGitHubVersions and not bootInstall )
+		holdOffScan = reinstallModsRunning or ( WaitForGitHubVersions and not bootInstall )
 
 	# setup idle messages
 	if emptyPackageList:
@@ -3821,7 +3763,7 @@ def mainLoop ():
 	# hold-off of processing has next highest priority
 	elif WaitForGitHubVersions:
 		idleMessage = "refreshing GitHub version information"
-	elif waitForReinstall:
+	elif reinstallModsRunning:
 		idleMessage = "waiting for boot reinstall to complete"
 	# finally, set idleMessage based on download and install states
 	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and autoInstall:
@@ -3831,31 +3773,8 @@ def mainLoop ():
 	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and not autoInstall:
 		idleMessage = "checking for downloads"
 
-	# hold off other processing until boot package reinstall and Git Hub version refresh is complete
-	# this insures download checks are based on up to date Git Hub versions
-	# installs are also held off to prevent install of older version,
-	#	then another install of the more recent version
-
-	# after a complete scan, change modes if appropirate
-	# packageScanComplete is true only if all needed operations have been queued
-	if packageScanComplete:
-		packageScanComplete = False
-		if not packageChecksSkipped:
-			if currentDownloadMode == ONE_DOWNLOAD:
-				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
-
-			# end of boot install
-			if bootInstall:
-				logging.warning ("boot-time reinstall complete")
-				bootInstall = False
-				if os.path.exists (bootReinstallFile):
-					os.remove (bootReinstallFile)
-		packageChecksSkipped = False
-		
-
 	# don't do anything yet but make sure new scan starts at beginning
 	if holdOffScan:
-		packageScanComplete = False
 		packageIndex = 0
 	# process one package per pass of mainloop
 	else:
@@ -3863,40 +3782,36 @@ def mainLoop ():
 		packageListLength = len (PackageClass.PackageList)
 		if packageIndex >= packageListLength:
 			packageIndex = 0
-			packageScanComplete = True
 
 		package = PackageClass.PackageList [packageIndex]
 		packageName = package.PackageName
 		packageIndex += 1
-
 		if currentDownloadMode != lastDownloadMode:
 			# signal mode change to the GitHub threads
 			if currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF:
 				# reset index to start of package list when mode changes
 				packageIndex = 0
-				packageScanComplete = False
 				WaitForGitHubVersions = True
 				UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
 		# disallow operations on this package if anything is pending
-		package.UpdateVersionsAndFlags ()
+		package.UpdateVersionsAndFlags (doConflictChecks=True)
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
 		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
 					and DownloadGitHub.DownloadVersionCheck (package):
 			# don't allow install if download is needed - even if it has not started yet
 			packageOperationOk = False
-
 			actionMessage = "downloading " + packageName + " ..."
 			PushAction ( command='download' + ':' + packageName, source='AUTO' )
 
 		# validate package for install
-		if packageOperationOk and package.InstallOk:
+		if packageOperationOk and package.Incompatible == "" :
 			installOk = False
-			forceInstall = False
+			oneTimeInstall = False
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
 			if os.path.exists (oneTimeInstallFile):
 				os.remove (oneTimeInstallFile)
-				forceInstall = True
+				oneTimeInstall = True
 			elif bootInstall:
 				installOk = True
 			elif autoInstall:
@@ -3907,25 +3822,16 @@ def mainLoop ():
 					installOk = True
 
 			# block install if manually uninstalled or if versions are the same
-			if not package.AutoInstallOk or not package.InstallVersionCheck ():
+			if not package.AutoInstallOk:
 				installOk = False
-			# if package is incompatible block all installs
-			if package.Incompatible != "":
+			# block install if versions are the same
+			elif package.PackageVersionNumber == package.InstalledVersionNumber:
 				installOk = False
-				forceInstall = False
 
-			if forceInstall or installOk:
+			if installOk or oneTimeInstall:
+				packageOperationOk = False
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
-
-			# package checks skipped - continue with current download update
-			if not packageOperationOk:
-				packageChecksSkipped = True
-	
-			
-		# clear GitHub version if not refreshed in 10 minutes
-		if package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
-			package.SetGitHubVersion ("")
 		DbusIf.UNLOCK ("mainLoop 1")
 	# end if not holdOffScan
 
@@ -3938,6 +3844,10 @@ def mainLoop ():
 	for package in PackageClass.PackageList:
 		if package.DownloadPending or package.InstallPending:
 			actionsPending = True
+			
+		# clear GitHub version if not refreshed in 10 minutes
+		elif package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
+			package.SetGitHubVersion ("")
 
 		if package.ActionNeeded == REBOOT_NEEDED:
 			actionsNeeded += (package.PackageName + " requires REBOOT\n")
@@ -3955,8 +3865,6 @@ def mainLoop ():
 
 	DbusIf.UNLOCK ("mainLoop 2")
 
-
-
 	if actionsPending:
 		noActionCount = 0
 	else:
@@ -3965,6 +3873,18 @@ def mainLoop ():
 	# wait for two complete passes with nothing happening
 	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
 	if noActionCount >= 2:
+		# if no actions are pending, switch download modes if appropriate
+		#	and flag boot-time reinstall is complete
+		if not holdOffScan:
+			if currentDownloadMode == ONE_DOWNLOAD:
+				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
+			# end of boot install
+			if bootInstall:
+				logging.warning ("boot-time reinstall complete")
+				bootInstall = False
+				if os.path.exists (bootReinstallFile):
+					os.remove (bootReinstallFile)
+
 		if SystemReboot:
 			statusMessage = "rebooting ..."
 			# exit the main loop

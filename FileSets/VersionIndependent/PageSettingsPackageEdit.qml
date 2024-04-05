@@ -28,14 +28,13 @@ MbPage {
 	property string incompatibleDetails: incompatibleDetailsItem.valid ? incompatibleDetailsItem.value : ""
 	property bool incompatible: incompatibleReason != ""
 	property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
-	property VBusItem installOkItem: VBusItem { bind: getServiceBind ( "InstallOk" ) }
 	property VBusItem incompatibleResolvableItem: VBusItem { bind: getServiceBind ( "IncompatibleResolvable") }
 	
 	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
 	property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
 	property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
 	property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
-	property bool installOk: (! incompatible && (installOkItem.valid && installOkItem.value == 1)) ? true : false
+	property bool installOk: ! incompatible
 	property string requestedAction: ''
 	property bool actionPending: requestedAction != ''
 	property bool waitForAction: editAction.value != '' && ! editError

@@ -1,3 +1,6 @@
+v7.13:
+	fixed: PackageManager doesn't always install packages after firmware update
+
 v7.12:
 	fixed: PackageManager hangs if there is no setup script in package directory
 

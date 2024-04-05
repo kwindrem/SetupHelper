@@ -1427,7 +1427,6 @@ class PackageClass:
 			self.incompatiblePath = '/Package/' + section + '/Incompatible'
 			self.incompatibleDetailsPath = '/Package/' + section + '/IncompatibleDetails'
 			self.IncompatibleResolvablePath = '/Package/' + section + '/IncompatibleResolvable'
-			self.installOkPath = '/Package/' + section + '/InstallOk'
 
 			# create service paths if they don't already exist
 			try:
@@ -1454,10 +1453,6 @@ class PackageClass:
 				foo = DbusIf.DbusService[self.IncompatibleResolvablePath]
 			except:
 				DbusIf.DbusService.add_path (self.IncompatibleResolvablePath, "" )
-			try:
-				foo = DbusIf.DbusService[self.installOkPath]
-			except:
-				DbusIf.DbusService.add_path (self.installOkPath, "" )
 
 		self.packageNamePath = '/Settings/PackageManager/' + section + '/PackageName'
 		self.gitHubUserPath = '/Settings/PackageManager/' + section + '/GitHubUser'

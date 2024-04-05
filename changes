@@ -4,6 +4,12 @@ v8.0: (beta)
 	add TailscaleGX to default package list
 	fixed: PackageManager hangs if there is no setup script in package directory
 
+v7.13:
+	fixed: PackageManager doesn't install packages after firmware update
+
+v7.12:
+	fixed: PackageManager hangs if there is no setup script in package directory
+
 v7.11:
 	fixed: conflicts not cleared when they have been resolved
 

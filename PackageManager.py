@@ -2104,6 +2104,9 @@ class PackageClass:
 						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 
+		# if no incompatibilities found, clear incompatible reason
+		if compatible:
+			self.SetIncompatible ("")
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2329,7 +2332,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 					user = package.GitHubUser
 					branch = package.GitHubBranch
 					# always do the update for 'local' source
-					if source == 'GUI':
+					if source != 'GUI':
 						doUpdate = True
 					# for GUI - refresh if no version or last refresh more than 30 seconds ago
 					elif package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:

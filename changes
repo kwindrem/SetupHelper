@@ -4,6 +4,13 @@ v8.0: (beta)
 	add TailscaleGX to default package list
 	fixed: PackageManager hangs if there is no setup script in package directory
 
+v7.15:
+	fixed: GitHub version not refreshed when user/branch change
+	fixed: old blind install
+
+v7.14:
+	fixed: incompatible message not cleared when package no longer incompatible
+
 v7.13:
 	fixed: PackageManager doesn't install packages after firmware update
 

@@ -1,3 +1,7 @@
+v7.15:
+	fixed: GitHub version not refreshed when user/branch change
+	fixed: old blind install
+
 v7.14:
 	fixed: incompatible message not cleared when package no longer incompatible
 

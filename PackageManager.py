@@ -2329,7 +2329,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 					user = package.GitHubUser
 					branch = package.GitHubBranch
 					# always do the update for 'local' source
-					if source == 'GUI':
+					if source != 'GUI':
 						doUpdate = True
 					# for GUI - refresh if no version or last refresh more than 30 seconds ago
 					elif package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:

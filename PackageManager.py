@@ -2101,6 +2101,9 @@ class PackageClass:
 						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 
+		# if no incompatibilities found, clear incompatible reason
+		if compatible:
+			self.SetIncompatible ("")
 	# end UpdateVersionsAndFlags
 # end Package
 

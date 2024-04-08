@@ -1250,7 +1250,6 @@ class DbusIfClass:
 #		AddPackagesFromDbus (class method)
 #		PackageNameValid (class method)
 #		AddStoredPackages (class method)
-#		ClearDownloadPending () (class method)
 #		AddPackage (class method)
 #		RemovePackage (class method)
 #		UpdateVersionsAndFlags ()
@@ -1636,24 +1635,6 @@ class PackageClass:
 			# package is unique and passed all tests - schedule the package addition
 			PushAction ( command='add:' + packageName, source='AUTO')
 
-	
-	# the DownloadPending and InstallPending flags prevent duplicate actions for the same package
-	#	and holds off reboots and GUI resets until all actions are complete
-	#
-	# packageName rather than a package list reference (index)
-	# 	is used because the latter can change when packages are removed
-	# if you have a package pointer, set the parameter directly to save time
-	
-	@classmethod
-	def ClearDownloadPending (self, packageName):
-		DbusIf.LOCK ("ClearDownloadPending")
-		package = PackageClass.LocatePackage (packageName)
-		if package != None:
-			package.DownloadPending = False
-			package.UpdateVersionsAndFlags (doConflictChecks=True)
-		DbusIf.UNLOCK ("ClearDownloadPending")
-
-		
 
 	# AddPackage adds one package to the package list
 	# packageName must be specified
@@ -1995,7 +1976,7 @@ class PackageClass:
 						for item in file:
 							parts = item.split ()
 							if len (parts) < 2:
-								logging.error ("package dependency " + item + " requires package name and requirement")
+								logging.error ("package dependency " + item + " requires a package name and a requirement")
 								continue
 							dependencyPackage = parts [0]
 							dependencyRequirement = parts [1]
@@ -2009,11 +1990,14 @@ class PackageClass:
 					pass
 
 				# check for file conflicts with prevously installed packages
-				# each line in all file lists are checked to see if the <file>.package contains a different package name
-				# those that do represent a conflict between this and that other package
-				# patched files are NOT checked because they patch the active file in place
-				# the checkes performed in the setup script with the 'check' option will test the patch files
-				# and those results will be evaluated above.
+				# each line in all file lists are checked to see if the <active file>.package contains a different package name
+				# if they differ, a conflict between this and the other package exists
+				#	requiring one or the other package to be uninstalled
+				#
+				# patched files are NOT checked because they patch the active file
+				# the setup script with the 'check' option will test the patch file
+				#	and report any patch failures
+				# those results will be added to the conflicts list above
 				fileLists =  [ "fileList", "fileListVersionIndependent" ]
 				for fileList in fileLists:
 					path = "/data/" + packageName + "/FileSets/" + fileList
@@ -2104,7 +2088,8 @@ class PackageClass:
 						and os.path.exists ("/data/" + packageName + "/setup"):
 					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 
-		# if no incompatibilities found, clear incompatible reason
+		# if no incompatibilities found, clear incompatible dbus parameters
+		#	so the GUI will allow installs
 		if compatible:
 			self.SetIncompatible ("")
 	# end UpdateVersionsAndFlags
@@ -2431,15 +2416,17 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		else:
 			where = None
 
-		DbusIf.LOCK ("GitHubDownload 1")
+		errorMessage = None
+		errorDetails = None
+
+		DbusIf.LOCK ("GitHubDownload - get GitHub user/branch")
 		package = PackageClass.LocatePackage (packageName)
 		gitHubUser = package.GitHubUser
 		gitHubBranch = package.GitHubBranch
-		installAfter = package.InstallAfterDownload
-		package.InstallAfterDownload = False
-		DbusIf.UNLOCK ("GitHubDownload 1")
+		DbusIf.UNLOCK ("GitHubDownload - get GitHub user/branch")
 
 		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
+		downloadError = False
 
 		tempDirectory = "/data/PmDownloadTemp"
 		if not os.path.exists (tempDirectory):
@@ -2456,106 +2443,101 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],\
 										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 		except:
-			DbusIf.UpdateStatus ( message="could not access archive on GitHub " + packageName,
-										where=where, logLevel=ERROR )
-			if source == 'GUI':
-				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			return
+			errorMessage = "could not access archive on GitHub " + packageName
+			downloadError = True
 		else:
 			proc.wait()
 			returnCode = proc.returncode
-			
-		if returnCode != 0:
-			DbusIf.UpdateStatus ( message="could not access " + packageName + ' ' + gitHubUser + ' '\
-										+ gitHubBranch + " on GitHub", where=where, logLevel=WARNING )
-			logging.error ("returnCode" + str (returnCode) +  "stderr" + stderr)
-			if source == 'GUI':
-				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.ClearDownloadPending (packageName)
-			if os.path.exists (tempDirectory):
-				shutil.rmtree (tempDirectory)
-			return
-		try:
-			proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-		except:
-			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
-										where=where, logLevel=ERROR )
-			if source == 'GUI':
-				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.ClearDownloadPending (packageName)
-			if os.path.exists (tempDirectory):
-				shutil.rmtree (tempDirectory)
-			return
-
-		proc.wait()
-		stdout, stderr = proc.communicate ()
-		# convert from binary to string
-		stdout = stdout.decode ().strip ()
-		stderr = stderr.decode ().strip ()
-		returnCode = proc.returncode
-
-		if returnCode != 0:
-			DbusIf.UpdateStatus ( message="could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch,
-										where=where, logLevel=ERROR )
-			logging.error ("stderr: " + stderr)
-			if source == 'GUI':
-				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
-			PackageClass.ClearDownloadPending (packageName)
-			if os.path.exists (tempDirectory):
-				shutil.rmtree (tempDirectory)
-			return
-
-		# attempt to locate a directory that contains a version file
-		# the first directory in the tree starting with tempDirectory is returned
-		unpackedPath = LocatePackagePath (tempDirectory)
-		if unpackedPath == None:
-			PackageClass.ClearDownloadPending (packageName)
-			if os.path.exists (tempDirectory):
-				shutil.rmtree (tempDirectory)
-			logging.error ( "GitHubDownload: no archive path for " + packageName )
-			return
-
-		# move unpacked archive to package location
-		# LOCK this section of code to prevent others
-		#	from accessing the directory while it's being updated
-		packagePath = "/data/" + packageName
-		tempPackagePath = packagePath + "-temp"
-		try:
-			if os.path.exists (tempPackagePath):
-				shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
-		except:
-			pass
-
-		message = ""
-		DbusIf.LOCK ("GitHubDownload 2")
-		try:
-			if os.path.exists (packagePath):
-				os.rename (packagePath, tempPackagePath)
-			shutil.move (unpackedPath, packagePath)
-		except:
-			message = "GitHubDownload: couldn't update " + packageName
-			logging.error ( message )
-
-		DbusIf.UNLOCK ("GitHubDownload 2")
-		PackageClass.ClearDownloadPending (packageName)
-		DbusIf.UpdateStatus ( message=message, where=where )
-		if source == 'GUI':
-			if message == "":
-				# don't ack success if there's more to do
-				if not installAfter:
-					DbusIf.AcknowledgeGuiEditAction ( '' )
+			if returnCode != 0:
+				errorMessage = "could not access " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub"
+				errorDetails = "returnCode" + str (returnCode) +  "stderr" + stderr
+				downloadError = True
+		if not downloadError:
+			try:
+				proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
+											stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			except:
+				errorMessage = "could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch
+				downloadError = True
 			else:
+				proc.wait()
+				stdout, stderr = proc.communicate ()
+				# convert from binary to string
+				stdout = stdout.decode ().strip ()
+				stderr = stderr.decode ().strip ()
+				returnCode = proc.returncode
+				if returnCode != 0:
+					errorMessage = "unpack failed " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch
+					errorDetails = "stderr: " + stderr
+					downloadError = True
+
+		if not downloadError:
+			# attempt to locate a directory that contains a version file
+			# the first directory in the tree starting with tempDirectory is returned
+			unpackedPath = LocatePackagePath (tempDirectory)
+			if unpackedPath == None:
+				errorMessage = "no archive path for " + packageName
+				downloadError = True
+
+		if not downloadError:
+			# move unpacked archive to package location
+			# LOCK this section of code to prevent others
+			#	from accessing the directory while it's being updated
+			packagePath = "/data/" + packageName
+			tempPackagePath = packagePath + "-temp"
+			try:
+				if os.path.exists (tempPackagePath):
+					shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
+			except:
+				pass
+
+			DbusIf.LOCK ("GitHubDownload - move package")
+			try:
+				if os.path.exists (packagePath):
+					os.rename (packagePath, tempPackagePath)
+				shutil.move (unpackedPath, packagePath)
+				
+			except:
+				errorMessage = "couldn't update " + packageName
+				logging.error ( errorMessage )
+				downloadError = True
+			DbusIf.UNLOCK ("GitHubDownload - move package")
+
+		DbusIf.LOCK ("GitHubDownload - update status")
+		package = PackageClass.LocatePackage (packageName)
+		if package != None:
+			installAfter = package.InstallAfterDownload	# save install after flag for later, then clear it
+			package.InstallAfterDownload = False
+			package.DownloadPending = False
+			if not downloadError:
+				# update basic flags then request install
+				if installAfter:
+					package.UpdateVersionsAndFlags ()
+					logging.warning ("install after download requested for " + packageName)
+					PushAction ( command='install' + ':' + packageName, source=source )
+				# no install after, do full version/flag update
+				else:
+					package.UpdateVersionsAndFlags (doConflictChecks=True)
+		DbusIf.UNLOCK ("GitHubDownload - update status")
+
+		# report errors / success
+		if errorMessage != None:
+			logging.error (errorMessage)
+		if errorDetails != None:
+			logging.error (errorDetails)
+		DbusIf.UpdateStatus ( message=errorMessage, where=where )
+		if source == 'GUI':
+			if errorMessage != None:
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
+			# don't ack success if there's more to do
+			elif not installAfter:
+				DbusIf.AcknowledgeGuiEditAction ( '' )
+
+		# remove any remaining temp directories
 		if os.path.exists (tempPackagePath):
 			shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
 		if os.path.exists (tempDirectory):
-			shutil.rmtree (tempDirectory)
-
-		# package should be installed after a succesful download
-		if installAfter:
-			logging.warning ("install after download requested for " + packageName)
-			PushAction ( command='install' + ':' + packageName, source=source )
+			shutil.rmtree (tempDirectory, ignore_errors=True)
 	# end GitHubDownload
 
 
@@ -2781,7 +2763,7 @@ class InstallPackagesClass (threading.Thread):
 			setupRunFail = True
 
 		# manage the result of the setup run while locked just in case
-		DbusIf.LOCK ("InstallPackage 2")
+		DbusIf.LOCK ("InstallPackage - update status")
 
 		package = PackageClass.LocatePackage (packageName)
 		package.InstallPending = False
@@ -2862,7 +2844,7 @@ class InstallPackagesClass (threading.Thread):
 		package.lastSetupCheckTime = time.time ()
 		package.UpdateVersionsAndFlags (doConflictChecks=True)
 
-		DbusIf.UNLOCK ("InstallPackage 2")
+		DbusIf.UNLOCK ("InstallPackage - update status")
 	# end InstallPackage ()
 
 
@@ -3800,8 +3782,9 @@ def mainLoop ():
 				WaitForGitHubVersions = True
 				UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
-		# disallow operations on this package if anything is pending
 		package.UpdateVersionsAndFlags (doConflictChecks=True)
+
+		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
 		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
 					and DownloadGitHub.DownloadVersionCheck (package):

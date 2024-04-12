@@ -1161,7 +1161,7 @@ class DbusIfClass:
 				currentTime = time.time()
 				# waiting for 5 seconds - timeout
 				if currentTime - requestTime > 5.0:
-					logging.CRITICAL ("timeout waiting for lock " + name + " - restarting PackageManager")
+					logging.critical ("timeout waiting for lock " + name + " - restarting PackageManager")
 					os._exit(1)		
 				# report waiting every 1 second
 				elif currentTime - reportTime > 0.5:
@@ -2062,13 +2062,15 @@ class PackageClass:
 						details += conflict [0] + " must not be installed\n"
 					else:
 						conflictPackage = PackageClass.LocatePackage (conflict[0])
-						if conflictPackage.PackageVersion != "":
+						if conflictPackage == None:
+							details += conflict [0] + " not available\n"
+							resolveOk = False
+						elif conflictPackage.PackageVersion != "":
 							details += conflict [0] + " must be installed\n"
 						elif conflictPackage.GitHubVersion != "":
 							details += conflict [0] + " must be downloaded and installed\n"
 						else:
-							details += conflict [0] + " not available\n"
-							resolveOk = False
+							details += conflict [0] + " unknown\n"
 				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
 				compatible = False
 			else:

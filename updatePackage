@@ -88,7 +88,7 @@
 #	for this reason, preserving the working copy is recommended if errors are expected
 
 # set allPackages to all packages this script should evalueate if no options are included
-allPackages="SetupHelper GuiMods ShutdownMonitor VeCanSetup RpiDisplaySetup RpiGpioSetup"
+allPackages="SetupHelper TailScale ShutdownMonitor VeCanSetup RpiDisplaySetup RpiGpioSetup GuiMods"
 ## ExtTransferSwitch GeneratorConnector TankRepeater are obsolete and file sets should not be updated.
 
 

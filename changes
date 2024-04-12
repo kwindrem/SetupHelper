@@ -1,3 +1,6 @@
+v7.16:
+	fixed: PackageManager hangs with package add
+
 v7.15:
 	fixed: GitHub version not refreshed when user/branch change
 	fixed: old blind install

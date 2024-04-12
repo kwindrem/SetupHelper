@@ -3,6 +3,8 @@ v8.0: (beta)
 		multiple patch files for each active file are permitted
 	add TailscaleGX to default package list
 	fixed: PackageManager hangs if there is no setup script in package directory
+
+v7.16:
 	fixed: PackageManager hangs with package add
 
 v7.15:

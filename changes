@@ -1,3 +1,6 @@
+v7.17:
+	fixed: services not always uninstalled
+
 v7.16:
 	fixed: PackageManager hangs with package add
 

@@ -42,7 +42,7 @@ MbPage {
 	property bool navigate: ! actionPending && ! waitForAction
 	property bool detailsExist: incompatibleDetails != ""
 	property bool detailsResolvable: incompatibleResolvableItem.valid ? incompatibleResolvableItem.value : ""
-	property bool showProceed: ( ! detailsExist || detailsResolvable) && ! waitForAction
+	property bool showProceed: ( ! detailsExist || detailsResolvable || actionPending ) && ! waitForAction
 	property bool showDetails: false
 	property string localError: ""
 

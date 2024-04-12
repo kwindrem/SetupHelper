@@ -1493,7 +1493,6 @@ class PackageClass:
 
 		self.lastConflictCheck = 0
 		self.lastPatchCheck = 0
-		self.lastSetupCheckTime = 0
 
 		self.lastGitHubRefresh = 0
 
@@ -1797,7 +1796,6 @@ class PackageClass:
 				toPackage.Conflicts = fromPackage.Conflicts
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
 				toPackage.lastPatchCheck = fromPackage.lastPatchCheck
-				toPackage.lastSetupCheckTime = fromPackage.lastSetupCheckTime
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
 
@@ -1905,6 +1903,7 @@ class PackageClass:
 			if Platform[0:4] != 'Rasp':
 				self.SetIncompatible ("incompatible with " + Platform)
 				compatible = False
+				doConflictChecks = False
 
 		# update local auto install flag based on DO_NOT_AUTO_INSTALL
 		flagFile = "/data/setupOptions/" + packageName + "/DO_NOT_AUTO_INSTALL"
@@ -1933,6 +1932,7 @@ class PackageClass:
 			if VenusVersionNumber < firstVersionNumber or VenusVersionNumber >= obsoleteVersionNumber:
 				self.SetIncompatible ("incompatible with " + VenusVersion)
 				compatible = False
+				doConflictChecks = False
 
 		# check to see if command line is needed for install
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install
@@ -1943,6 +1943,7 @@ class PackageClass:
 				if not os.path.exists ( "/data/setupOptions/" + packageName + "/optionsSet"):
 					self.SetIncompatible ("install from command line" )
 					compatible = False
+					doConflictChecks = False
 
 		# check to see if file set has errors
 		if compatible:
@@ -1951,21 +1952,24 @@ class PackageClass:
 			if os.path.exists (fileSet + "/INCOMPLETE"):
 				self.SetIncompatible ("incomplete file set for " + str (VenusVersion) )
 				compatible = False
+				doConflictChecks = False
 
 		if compatible and os.path.exists (packageDir + "/patchErrors"):
-			if os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastPatchCheck:
-				patchFailures = ""
-				with open ( packageDir + "/patchErrors" ) as file:
-					for line in file:
-						logging.warning (packageName + " patch error " + line.strip() + " ")
-						patchFailures += line
-				self.SetIncompatible ("patch errors", patchFailures )
-				compatible = False
-				# used to prevent repeaded checks
-				self.lastPatchCheck = time.time ()
+			patchFailures = ""
+			logErrors = os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastPatchCheck
+			with open ( packageDir + "/patchErrors" ) as file:
+				for line in file:
+					patchFailures += line
+					if logErrors:
+						logging.warning (packageName + " patch error: " + line.strip() + " ")
+			self.SetIncompatible ("patch errors", patchFailures )
+			compatible = False
+
+			# used to prevent repeaded log entries
+			self.lastPatchCheck = time.time ()
 
 		# check for package conflicts
-		if compatible and doConflictChecks:
+		if doConflictChecks:
 			conflicts = []
 			# skip checks while operations are pending
 			if not self.InstallPending and not self.DownloadPending:
@@ -2030,7 +2034,7 @@ class PackageClass:
 								continue
 							# here if previously updated file was from a different package
 							baseName =  os.path.basename (replacementFile)
-							# log conflict only if this is the first time it was logged
+							# log conflict only if this is the first time it was discovered
 							if os.path.getmtime ( packageFile ) > self.lastConflictCheck:
 								logging.warning ("package file conflict " + baseName + " " + packageName + " " + previousPackage)
 
@@ -2063,37 +2067,36 @@ class PackageClass:
 			else:
 				self.Conflicts = []
 
-		# run setup script to check for errors that can't be checked here
-		# the packageCheckVersion file is updated by CommonResources during its prechecks
-		if compatible and doConflictChecks:
-			doChecks = False
-			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
-			# no checks have been done recently so do them now
-			if time.time() > self.lastSetupCheckTime + 30:
-				# no check file exists, do checks
-				if not os.path.exists ( packageCheckFile ):
-					doChecks = True
-				# check file exists - check which firmware version was checked
-				#	and if not the current version, do checks
-				else:
-					try:
-						with open ( packageCheckFile ) as file:
-							for line in file:
-								if not VenusVersion in line:
-									doChecks = True
-					# couldn't read the file, attempt check again
-					except:
-						doChecks = True
-			if doChecks:
-				# avoid starting a new check if there is something pending
-				if not self.InstallPending and not self.DownloadPending \
-						and os.path.exists ("/data/" + packageName + "/setup"):
-					PushAction ( command='check' + ':' + packageName, source='AUTO' )
-
 		# if no incompatibilities found, clear incompatible dbus parameters
 		#	so the GUI will allow installs
 		if compatible:
 			self.SetIncompatible ("")
+
+		# run setup script to check for errors that can't be checked here
+		# the packageCheckVersion file is updated by CommonResources during its prechecks
+		# only do checks every 30 seconds
+		doCheck = False
+		if doConflictChecks:
+			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
+			
+			# no check file exists, do checks
+			if not os.path.exists ( packageCheckFile ):
+				doCheck = True
+			# check file exists - check which firmware version was checked
+			#	and if not the current version, do checks
+			else:
+				try:
+					with open ( packageCheckFile ) as file:
+						for line in file:
+							if not VenusVersion in line:
+								doCheck = True
+				# couldn't read the file, attempt check again
+				except:
+					doCheck = True
+		# don't start a new check if there is something pending
+		if doCheck and not self.InstallPending and not self.DownloadPending \
+			and os.path.exists ("/data/" + packageName + "/setup"):
+				PushAction ( command='check' + ':' + packageName, source='AUTO' )
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2841,9 +2844,6 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 
-		# conflict report will be generated but setting lastSetupCheckTime
-		#	will prevent setup script checks again since they were just run !
-		package.lastSetupCheckTime = time.time ()
 		package.UpdateVersionsAndFlags (doConflictChecks=True)
 
 		DbusIf.UNLOCK ("InstallPackage - update status")

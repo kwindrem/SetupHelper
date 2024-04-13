@@ -1,3 +1,6 @@
+v7.18:
+	fixed: only first service is uninstalled
+
 v7.17:
 	fixed: services not always uninstalled
 

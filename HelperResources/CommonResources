@@ -1012,10 +1012,10 @@ installAllServices ()
 	local service
 	# get list of services in the package's service directory
 	if [ -d "$servicesDir" ]; then
-		servicesList=$( cd "$servicesDir"; ls -d * 2> /dev/null )
+		servicesList=( $( cd "$servicesDir"; ls -d * 2> /dev/null ) )
 		if [ ! -z "$servicesList" ]; then
 			logMessage "installing services"
-			for service in $servicesList ; do
+			for service in ${servicesList[@]} ; do
 				if $installFailed; then break; fi
 				installService $service
 			done
@@ -1048,7 +1048,7 @@ uninstallAllServices ()
 	# uninstall services
 	if [ ! -z "$servicesList" ]; then
 		logMessage "uninstalling services"
-		for service in $servicesList ; do
+		for service in ${servicesList[@]} ; do
 			if [ -z "$service" ]; then
 				removeService $packageName
 			else

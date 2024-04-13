@@ -1169,21 +1169,17 @@ for package in $packageList; do
 		# convert old name formats
 		oldPath="$patchSourceDir/$baseName"
 		newPath="$oldPath-1"
-		if [ -e "$oldPath.source" ] || [ -e "$oldPath.edited" ] || [ -e "$oldPath.patch" ]; then
+		if [ -e "$oldPath.source" ] || [ -e "$oldPath.edited" ]; then
 			if [ -e "$newPath*" ]; then
 				logMessage "can't move .source and .edited patch files - ...-1... already exists"
 			else
 				if [ -e "$oldPath.source" ]; then
-					logMessage " renaming $baseName.source to $baseName-1.orig"
+					logMessage " renaming $baseName.source to $baseName.orig"
 					mv "$oldPath.source" "$newPath.orig"
 				fi
 				if [ -e "$oldPath.edited" ]; then
-					logMessage " renaming $baseName.edited to $baseName-1"
+					logMessage " renaming $baseName.edited to $baseName"
 					mv "$oldPath.edited" "$newPath"
-				fi
-				if [ -e "$oldPath.patch" ]; then
-					logMessage " renaming $baseName.patch to $baseName-1.patch"
-					mv "$oldPath.patch" "$newPath.patch"
 				fi
 			fi
 		fi

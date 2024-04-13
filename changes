@@ -4,6 +4,7 @@ v8.0: (beta)
 	add TailscaleGX to default package list
 	fixed: PackageManager hangs if there is no setup script in package directory
 	fixed: package conflict message disappears
+	fixed: only first service is uninstalled
 
 v7.17:
 	services not always uninstalled

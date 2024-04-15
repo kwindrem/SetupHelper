@@ -2015,7 +2015,8 @@ class PackageClass:
 							packagesList = replacementFile + ".package"
 							if not os.path.exists ( packagesList ) :
 								continue
-							if os.path.getmtime ( packagesList ) > self.lastConflictCheck:
+							modTime = os.path.getmtime ( packagesList )
+							if modTime > self.lastConflictCheck:
 								activeFileHasChanged = True
 								logConflict = True
 							else:
@@ -2085,7 +2086,7 @@ class PackageClass:
 				self.SetIncompatible ("patch error", details,)
 				compatible = False
 
-			# used to prevent repeaded errors to the log
+			# used to prevent repeated checks
 			self.lastConflictCheck = time.time ()
 		# end if doConflictChecks
 
@@ -2841,7 +2842,7 @@ class InstallPackagesClass (threading.Thread):
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 
-		package.UpdateVersionsAndFlags (doConflictChecks=True)
+		package.UpdateVersionsAndFlags ()
 
 		DbusIf.UNLOCK ("InstallPackage - update status")
 	# end InstallPackage ()
@@ -3656,12 +3657,12 @@ lastDownloadMode = AUTO_DOWNLOADS_OFF
 currentDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
 DeferredGuiEditAcknowledgement = None
+lastTimeSync = 0
 
 # states for actionNeeded
 REBOOT_NEEDED = 2
 GUI_RESTART_NEEDED = 1
 NONE = 0
-
 
 def mainLoop ():
 	global mainloop
@@ -3680,8 +3681,19 @@ def mainLoop ():
 	global lastDownloadMode
 	global currentDownloadMode
 	global bootInstall
+	global lastTimeSync
 
 	startTime = time.time()
+
+	# an unclean shutdown will not save the last known time of day
+	#	which is used during the next boot until ntp can sync time
+	#	so do it here every 30 seconds
+	# an old RTC
+	timeSyncCommand = '/etc/init.d/save-rtc.sh'
+	if startTime > lastTimeSync + 30 and os.path.exists (timeSyncCommand):
+		subprocess.Popen ( [ timeSyncCommand ] )
+		lastTimeSync = startTime
+
 	packageName = "none"
 
 	if DeferredGuiEditAcknowledgement != None:
@@ -3741,7 +3753,6 @@ def mainLoop ():
 		# restart at beginning of list and signal mode change to the GitHub version thread
 		if currentDownloadMode != lastDownloadMode \
 				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
-			print ("#### starting new download scan")
 			holdOffScan = True
 			WaitForGitHubVersions = True
 			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
@@ -3758,7 +3769,6 @@ def mainLoop ():
 			packageIndex = 0
 			# end of ONCE download - switch auto downloads off
 			if currentDownloadMode == ONE_DOWNLOAD:
-				print ("#### ONCE download finished")
 				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
 				currentDownloadMode = AUTO_DOWNLOADS_OFF
 			# end of boot install

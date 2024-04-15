@@ -72,7 +72,13 @@ MbPage {
 			requestedAction = ''
 		}
 	}
-	
+
+	onIncompatibleChanged:
+	{
+		if (! incompatible )
+			showDetails = false
+	}
+
 	onActiveChanged:
 	{
 		if (active)

@@ -1486,13 +1486,14 @@ class PackageClass:
 		self.InstallAfterDownload = False	# used by ResolveConflicts when doing both download and install
 
 		self.AutoInstallOk = False
-		self.Conflicts = []
+		self.DependencyErrors = []
+		self.FileConflicts = []
+		self.PatchFailures = []
 		self.ConflictsResolvable = True
 
 		self.ActionNeeded = ''
 
 		self.lastConflictCheck = 0
-		self.lastPatchCheck = 0
 
 		self.lastGitHubRefresh = 0
 
@@ -1793,9 +1794,10 @@ class PackageClass:
 				toPackage.DownloadPending = fromPackage.DownloadPending
 				toPackage.InstallPending = fromPackage.InstallPending
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
-				toPackage.Conflicts = fromPackage.Conflicts
+				toPackage.DependencyErrors = fromPackage.DependencyErrors
+				toPackage.FileConflicts = fromPackage.FileConflicts
+				toPackage.PatchFailures = fromPackage.PatchFailures
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
-				toPackage.lastPatchCheck = fromPackage.lastPatchCheck
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
 
@@ -1954,107 +1956,116 @@ class PackageClass:
 				compatible = False
 				doConflictChecks = False
 
-		if compatible and os.path.exists (packageDir + "/patchErrors"):
-			patchFailures = ""
-			logErrors = os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastPatchCheck
-			with open ( packageDir + "/patchErrors" ) as file:
-				for line in file:
-					patchFailures += line
-					if logErrors:
-						logging.warning (packageName + " patch error: " + line.strip() + " ")
-			self.SetIncompatible ("patch errors", patchFailures )
-			compatible = False
 
-			# used to prevent repeaded log entries
-			self.lastPatchCheck = time.time ()
+		# check for package conflicts - but not if an operation is in progress
+		if doConflictChecks and not self.InstallPending and not self.DownloadPending:
 
-		# check for package conflicts
-		if doConflictChecks:
-			conflicts = []
-			# skip checks while operations are pending
-			if not self.InstallPending and not self.DownloadPending:
+			# update dependencies
+			dependencyFile = "/data/" + packageName + "/packageDependencies"
+			logConflict = False
+			if os.path.exists (dependencyFile):
+				if os.path.getmtime ( dependencyFile ) > self.lastConflictCheck:
+					self.DependencyErrors = []
+					try:
+						with open (dependencyFile, 'r') as file:
+							for item in file:
+								parts = item.split ()
+								if len (parts) < 2:
+									logging.error ("package dependency " + item + " requires a package name and a requirement")
+									continue
+								dependencyPackage = parts [0]
+								dependencyRequirement = parts [1]
 
-				dependencyFile = "/data/" + packageName + "/packageDependencies"
+								installedFile = "/etc/venus/installedVersion-" + dependencyPackage
+								packageIsInstalled = os.path.exists (installedFile)
+								packageMustBeInstalled = dependencyRequirement == "installed"
+								if packageIsInstalled != packageMustBeInstalled:
+									self.DependencyErrors.append ( (dependencyPackage, dependencyRequirement) )
+									logging.warning ("package dependency " + packageName + " requires " + dependencyPackage + " to be " + dependencyRequirement)
+					except:
+						pass
+			else:
+				self.DependencyErrors = []
+
+			# check for file conflicts with prevously installed packages
+			# each line in all file lists are checked to see if the <active file>.package contains a different package name
+			# if they differ, a conflict between this and the other package exists
+			#	requiring one or the other package to be uninstalled
+			#
+			# patched files are NOT checked because they patch the active file
+			# the setup script with the 'check' option will test the patch file
+			#	and report any patch failures
+
+			activeFileHasChanged = False
+			fileConflicts = []
+			fileLists =  [ "fileList", "fileListVersionIndependent" ]
+			for fileList in fileLists:
+				path = "/data/" + packageName + "/FileSets/" + fileList
+				if not os.path.exists (path):
+					continue
 				try:
-					with open (dependencyFile, 'r') as file:
-						for item in file:
-							parts = item.split ()
-							if len (parts) < 2:
-								logging.error ("package dependency " + item + " requires a package name and a requirement")
-								continue
-							dependencyPackage = parts [0]
-							dependencyRequirement = parts [1]
-
-							installedFile = "/etc/venus/installedVersion-" + dependencyPackage
-							packageIsInstalled = os.path.exists (installedFile)
-							packageMustBeInstalled = dependencyRequirement == "installed"
-							if packageIsInstalled != packageMustBeInstalled:
-								conflicts.append ( (dependencyPackage, dependencyRequirement) )
-				except:
-					pass
-
-				# check for file conflicts with prevously installed packages
-				# each line in all file lists are checked to see if the <active file>.package contains a different package name
-				# if they differ, a conflict between this and the other package exists
-				#	requiring one or the other package to be uninstalled
-				#
-				# patched files are NOT checked because they patch the active file
-				# the setup script with the 'check' option will test the patch file
-				#	and report any patch failures
-				# those results will be added to the conflicts list above
-				fileLists =  [ "fileList", "fileListVersionIndependent" ]
-				for fileList in fileLists:
-					path = "/data/" + packageName + "/FileSets/" + fileList
-					if not os.path.exists (path):
-						continue
 					with open (path, 'r') as file:
 						# valid entries begin with / and everything after white space is discarded
 						# the result should be a full path to one replacment file
 						for entry in file:
 							entry = entry.strip ()
-							try:
-								if not entry.startswith ("/"):
-									continue
-								replacementFile = entry.split ()[0].strip ()
-								if not replacementFile.startswith ("/"):
-									continue
-								packageFile = replacementFile + ".package"
-								if not os.path.exists ( packageFile) :
-									continue
-								previousPackage = ""
-								try:
-									fd = open (packageFile, 'r')
-									previousPackage = fd.readline().strip()
-									fd.close ()
-									if packageName == previousPackage:
-										continue
-								except:
-									continue
-							except:
+							if not entry.startswith ("/"):
 								continue
-							# here if previously updated file was from a different package
-							baseName =  os.path.basename (replacementFile)
-							# log conflict only if this is the first time it was discovered
-							if os.path.getmtime ( packageFile ) > self.lastConflictCheck:
-								logging.warning ("package file conflict " + baseName + " " + packageName + " " + previousPackage)
+							replacementFile = entry.split ()[0].strip ()
+							packagesList = replacementFile + ".package"
+							if not os.path.exists ( packagesList ) :
+								continue
+							if os.path.getmtime ( packagesList ) > self.lastConflictCheck:
+								activeFileHasChanged = True
+								logConflict = True
+							else:
+								logConflict = False
+							try:
+								with open (packagesList, 'r') as plFile:
+									for entry2 in plFile:
+										packageFromList = entry2.strip()
+										# here if previously updated file was from a different package
+										if packageFromList != packageName:
+											fileConflicts.append ( (packageFromList, "uninstalled") )
+											if logConflict:
+												baseName =  os.path.basename (replacementFile)
+												logging.warning ("package file conflict " + baseName + " to install " + packageName + ", " + packageFromList + " must not be installed")
+							except:
+								pass
+				except:
+					continue
+			if activeFileHasChanged:
+				self.FileConflicts = list ( set ( fileConflicts ) )
+				# run setup script to check for file conflicts (can't be checked here)
+				if os.path.exists ("/data/" + packageName + "/setup"):
+					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 
-							conflicts.append ( (previousPackage, "uninstalled") )
+			# update patch errors list
+			if os.path.exists (packageDir + "/patchErrors"):
+				# rebuild patch errors list
+				if os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastConflictCheck:
+					self.PatchFailures = []
+					with open ( packageDir + "/patchErrors" ) as file:
+						for line in file:
+							self.PatchFailures.append ( line )
+							logging.warning (packageName + " patch check error: " + line.strip() + " ")
+			# no patch errors - clear list
+			else:
+				self.PatchFailures = []
 
-					# used to prevent repeaded errors to the log
-					self.lastConflictCheck = time.time ()
-
+			conflicts = self.DependencyErrors + self.FileConflicts
+			details = ""
 			if len (conflicts) > 0:
 				# eliminate duplicates
-				self.Conflicts = list ( set ( conflicts ) )
+				conflicts = list ( set ( conflicts ) )
 				resolveOk = True
-				details = ""
-				for conflict in self.Conflicts:
+				for conflict in conflicts:
 					if conflict [1] == "uninstalled":
 						details += conflict [0] + " must not be installed\n"
 					else:
 						conflictPackage = PackageClass.LocatePackage (conflict[0])
 						if conflictPackage == None:
-							details += conflict [0] + " not available\n"
+							details += conflict [0] + " must be installed but not available\n"
 							resolveOk = False
 						elif conflictPackage.PackageVersion != "":
 							details += conflict [0] + " must be installed\n"
@@ -2064,39 +2075,25 @@ class PackageClass:
 							details += conflict [0] + " unknown\n"
 				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
 				compatible = False
-			else:
-				self.Conflicts = []
+
+			# report patch errors if there are no other errors
+			elif len (self.PatchFailures) > 0:
+				patchFailures = list ( set ( self.PatchFailures ) )
+				for patchFailure in patchFailures:
+					details += patchFailure.strip () + "\n"
+
+				self.SetIncompatible ("patch error", details,)
+				compatible = False
+
+			# used to prevent repeaded errors to the log
+			self.lastConflictCheck = time.time ()
+		# end if doConflictChecks
 
 		# if no incompatibilities found, clear incompatible dbus parameters
 		#	so the GUI will allow installs
 		if compatible:
 			self.SetIncompatible ("")
 
-		# run setup script to check for errors that can't be checked here
-		# the packageCheckVersion file is updated by CommonResources during its prechecks
-		# only do checks every 30 seconds
-		doCheck = False
-		if doConflictChecks:
-			packageCheckFile = "/data/" + packageName + "/packageCheckVersion"
-			
-			# no check file exists, do checks
-			if not os.path.exists ( packageCheckFile ):
-				doCheck = True
-			# check file exists - check which firmware version was checked
-			#	and if not the current version, do checks
-			else:
-				try:
-					with open ( packageCheckFile ) as file:
-						for line in file:
-							if not VenusVersion in line:
-								doCheck = True
-				# couldn't read the file, attempt check again
-				except:
-					doCheck = True
-		# don't start a new check if there is something pending
-		if doCheck and not self.InstallPending and not self.DownloadPending \
-			and os.path.exists ("/data/" + packageName + "/setup"):
-				PushAction ( command='check' + ':' + packageName, source='AUTO' )
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2868,7 +2865,7 @@ class InstallPackagesClass (threading.Thread):
 		if package == None:
 			logging.error ("ResolveConflicts: " + packageName + "not found")
 
-		for conflict in package.Conflicts:
+		for conflict in (package.DependencyErrors + package.FileConflicts):
 			if len (conflict) < 2:
 				logging.error ("ResolveConflicts: " + packageName + " missing parameters: " + str (conflict) )
 				continue

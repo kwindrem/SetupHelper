@@ -1463,10 +1463,6 @@ fi
 versionStringToNumber $venusVersion
 venusVersionNumber=$versionNumber
 
-# flag the version that is performing these checks
-#	this is used by PackageManager to know when to run checks
-echo "$venusVersion" > "$scriptDir/packageCheckVersion"
-
 getFileLists "$pkgFileSets"
 
 # create temporary directory for temporary install/uninstall files (unique temp directory in volatile storage)

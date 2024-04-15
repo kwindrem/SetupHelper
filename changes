@@ -4,7 +4,8 @@ v8.0: (beta)
 	add TailscaleGX to default package list
 	fixed: PackageManager hangs if there is no setup script in package directory
 	fixed: package conflict message disappears
-	basd conflict checking mechanisms on file modificaiton times
+	fixed: "Once" download scan only scans one package, not all of them
+	based conflict checking mechanisms on file modificaiton times
 		to eliminate unnecessary work
 
 v7.18:

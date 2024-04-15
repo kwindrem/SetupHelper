@@ -3698,14 +3698,27 @@ def mainLoop ():
 		DbusIf.UpdateStatus ( "uninstalling SetupHelper ...", where='Editor' )
 		mainloop.quit()
 		return False
-	idleMessage = ""
+
 	actionMessage = ""
 	statusMessage = ""
+	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
+
+
+	# hold off all package processing if package list is empty
+	emptyPackageList = False
+	reinstallModsRunning = False
+	if len (PackageClass.PackageList) == 0:
+		emptyPackageList = True
+		holdOffScan = True
+	# hold off processing if reinstallMods is running to prevent conflicts
+	#	probalby never happen but just in case
+	elif os.path.exists ("/etc/venus/REINSTALL_MODS_RUNNING"):
+		reinstallModsRunning = True
+		holdOffScan = True
 
 	# if boot-time reinstall has been requiested by reinstallMods
 	#	override modes and initiate auto install of all packages
-	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
-	if os.path.exists (bootReinstallFile):
+	elif os.path.exists (bootReinstallFile):
 		# beginning of boot install - reset package index to insure a complete scan
 		if not bootInstall:
 			packageIndex = 0
@@ -3713,73 +3726,51 @@ def mainLoop ():
 		bootInstall = True
 		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		lastDownloadMode = AUTO_DOWNLOADS_OFF
-		autoInstall = False
+		autoInstall = True
+		holdOffScan = False
+	elif WaitForGitHubVersions:
+		holdOffScan = True
 	# not doing boot install - use dbus values
 	else:
+		holdOffScan = False
+		autoInstall = DbusIf.GetAutoInstall ()
 		# save mode before chaning so changes can be detected below
 		lastDownloadMode = currentDownloadMode
 		currentDownloadMode = DbusIf.GetAutoDownloadMode ()
-		autoInstall = DbusIf.GetAutoInstall ()
+		# download mode changed
+		# restart at beginning of list and signal mode change to the GitHub version thread
+		if currentDownloadMode != lastDownloadMode \
+				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
+			print ("#### starting new download scan")
+			holdOffScan = True
+			WaitForGitHubVersions = True
+			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
-	# hold off processing if reinstallMods is running to prevent conflicts
-	#	probalby never happen but just in case
-	if os.path.exists ("/etc/venus/REINSTALL_MODS_RUNNING"):
-		reinstallModsRunning = True
-	else:
-		reinstallModsRunning = False
-
-
-	# hold off all package processing if package list is empty
-	# or until the GitHub versions have been updated
-	#	and reinstallMods has finished reinstalling packages after Venus OS update
-	if len (PackageClass.PackageList) == 0:
-		holdOffScan = True
-		emptyPackageList = True
-	else:
-		emptyPackageList = False
-		holdOffScan = reinstallModsRunning or ( WaitForGitHubVersions and not bootInstall )
-
-	# setup idle messages
-	if emptyPackageList:
-		idleMessage = "no active packages"
-	# no updates has highest prioroity
-	elif bootInstall:
-		idleMessage = "reinstalling packages after firmware update"
-	elif currentDownloadMode == AUTO_DOWNLOADS_OFF and not autoInstall:
-		idleMessage = ""
-	# hold-off of processing has next highest priority
-	elif WaitForGitHubVersions:
-		idleMessage = "refreshing GitHub version information"
-	elif reinstallModsRunning:
-		idleMessage = "waiting for boot reinstall to complete"
-	# finally, set idleMessage based on download and install states
-	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and autoInstall:
-		idleMessage = "checking for downloads and installs"
-	elif currentDownloadMode == AUTO_DOWNLOADS_OFF and autoInstall:
-		idleMessage = "checking for installs"
-	elif currentDownloadMode != AUTO_DOWNLOADS_OFF and not autoInstall:
-		idleMessage = "checking for downloads"
-
-	# don't do anything yet but make sure new scan starts at beginning
+	# make sure a new scan starts at beginning of list
 	if holdOffScan:
 		packageIndex = 0
 	# process one package per pass of mainloop
 	else:
 		DbusIf.LOCK ("mainLoop 1")	
 		packageListLength = len (PackageClass.PackageList)
+		# reached end of list - start over
 		if packageIndex >= packageListLength:
 			packageIndex = 0
+			# end of ONCE download - switch auto downloads off
+			if currentDownloadMode == ONE_DOWNLOAD:
+				print ("#### ONCE download finished")
+				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
+				currentDownloadMode = AUTO_DOWNLOADS_OFF
+			# end of boot install
+			if bootInstall:
+				logging.warning ("boot-time reinstall complete")
+				bootInstall = False
+				if os.path.exists (bootReinstallFile):
+					os.remove (bootReinstallFile)
 
 		package = PackageClass.PackageList [packageIndex]
 		packageName = package.PackageName
 		packageIndex += 1
-		if currentDownloadMode != lastDownloadMode:
-			# signal mode change to the GitHub threads
-			if currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF:
-				# reset index to start of package list when mode changes
-				packageIndex = 0
-				WaitForGitHubVersions = True
-				UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
 		package.UpdateVersionsAndFlags (doConflictChecks=True)
 
@@ -3800,8 +3791,6 @@ def mainLoop ():
 			if os.path.exists (oneTimeInstallFile):
 				os.remove (oneTimeInstallFile)
 				oneTimeInstall = True
-			elif bootInstall:
-				installOk = True
 			elif autoInstall:
 				installOk = True
 			else:
@@ -3861,18 +3850,6 @@ def mainLoop ():
 	# wait for two complete passes with nothing happening
 	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
 	if noActionCount >= 2:
-		# if no actions are pending, switch download modes if appropriate
-		#	and flag boot-time reinstall is complete
-		if not holdOffScan:
-			if currentDownloadMode == ONE_DOWNLOAD:
-				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
-			# end of boot install
-			if bootInstall:
-				logging.warning ("boot-time reinstall complete")
-				bootInstall = False
-				if os.path.exists (bootReinstallFile):
-					os.remove (bootReinstallFile)
-
 		if SystemReboot:
 			statusMessage = "rebooting ..."
 			# exit the main loop
@@ -3914,6 +3891,22 @@ def mainLoop ():
 	elif actionMessage != "":
 		DbusIf.UpdateStatus ( actionMessage, where='PmStatus' )
 	else:
+		if emptyPackageList:
+			idleMessage = "no active packages"
+		elif reinstallModsRunning:
+			idleMessage = "waiting for boot reinstall to complete"
+		elif bootInstall:
+			idleMessage = "reinstalling packages after firmware update"
+		elif WaitForGitHubVersions:
+			idleMessage = "refreshing GitHub version information"
+		elif currentDownloadMode != AUTO_DOWNLOADS_OFF and autoInstall:
+			idleMessage = "checking for downloads and installs"
+		elif currentDownloadMode == AUTO_DOWNLOADS_OFF and autoInstall:
+			idleMessage = "checking for installs"
+		elif currentDownloadMode != AUTO_DOWNLOADS_OFF and not autoInstall:
+			idleMessage = "checking for downloads"
+		else:
+			idleMessage = ""
 		DbusIf.UpdateStatus ( idleMessage, where='PmStatus' )
 
 	# enable the following lines to report execution time of main loop

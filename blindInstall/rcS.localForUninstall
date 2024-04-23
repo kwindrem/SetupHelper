@@ -12,7 +12,7 @@ logMessage ()
 	echo "blindUninstall: $*" | tai64n >> "/data/log/SetupHelper"
 }
 
-logMessage "--- starting"
+logMessage "--- starting blind uninstall - all packages will be uninstalled"
 
 # check to see if Venus OS will be reinstalled - actuall reinstall will be done later
 swCheckOutput=$(/opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -check)
@@ -38,34 +38,12 @@ for package in $packages; do
 		fi
 	fi
 	# make sure PackageManager does not auto install package
-	if [ ! -f "$package/DO_NOT_AUTO_INSTALL" ]; then
-		logMessage "preventing future $packageName auto install"
-		touch "$package/DO_NOT_AUTO_INSTALL"
-	fi
+	touch "$package/DO_NOT_AUTO_INSTALL"
 done
 
-# insure no packages are reinstalled after boot
-if [ -f "/data/reinstallScriptsList" ]; then
-	logMessage "removing reinstallScriptsList"
-	rm -f "/data/reinstallScriptsList"
-fi
-
-# remove all installed flags
-ls /etc/venus/installed* &> /dev/null
-if (( $? == 0 )); then
-	logMessage "removing installedVersion file for all packages"
-	rm -f /etc/venus/installedVersion*
-fi
-
-# reinstall Venus OS - done in background so this script can clean up and exit without disrupting the software update
-if $reinstallVenusOs ; then
-	logMessage "reinstalling Venus OS $swUpdateVersion"
-	nohup sh -c 'sleep 1; /opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -update' > /dev/null &
-# reboot if not reinstalling Venus OS
-else
-	logMessage "rebooting ..."
-	nohup sh -c 'sleep 1; reboot' > /dev/null &
-fi
+# remove all installed info in case some were missed in loop above
+rm -f /etc/venus/installedVersion*
+rm -rf "/etc/venus/installedModifications"
 
 # rename archive on removable media to prevent blindInstall from running again
 drives=$(ls /run/media/)
@@ -77,7 +55,17 @@ for drive in $drives ; do
 	fi
 done
 
-logMessage "--- ending"
+# reinstall Venus OS - done in background so this script can clean up and exit without disrupting the software update
+if $reinstallVenusOs ; then
+	logMessage "reinstalling Venus OS $swUpdateVersion"
+	nohup sh -c 'sleep 1; /opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -update' > /dev/null &
+# reboot if not reinstalling Venus OS
+else
+	logMessage "rebooting ..."
+	nohup sh -c 'sleep 1; reboot' > /dev/null &
+fi
 
 # don't run this script again !
 rm -f /data/rcS.local
+
+logMessage "--- ending blind uninstall"

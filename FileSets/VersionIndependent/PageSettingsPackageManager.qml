@@ -82,22 +82,22 @@ MbPage {
              {
 				if (! actionNeeded.valid)
 					return ""
-				else if (actionNeeded.value == 'reboot')
+				else if (actionNeeded.value.indexOf ( "REBOOT" ) != -1 )
 					return qsTr ("Reboot")
-				else if (actionNeeded.value == 'guiRestart')
+				else if (actionNeeded.value.indexOf ( "restart" ) != -1 )
 					return qsTr ("Restart GUI")
 				else
 					return ""
 			}
 			onClicked:
             {
-				if (actionNeeded.value == 'reboot')
+				if (finishButton.value == 'REBOOT')
 				{
 					// needs immediate update because GUI will be going down ASAP
 					finishButton.description = qsTr ("REBOOTING ...")
 					editAction.setValue ( 'reboot' )
 				}
-				else if (actionNeeded.value == 'guiRestart')
+				else if (finishButton.value == 'guiRestart')
 				{
 					// needs immediate update because GUI will be going down ASAP
 					finishButton.description = qsTr ("restarting GUI ...")

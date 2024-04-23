@@ -217,13 +217,9 @@ MbPage {
 		else if (showActionNeeded)
 		{
 			if (actionNeeded.indexOf ( "REBOOT" ) != -1 )
-			{
 				sendCommand ( 'reboot', true )
-			}
 			else if (actionNeeded.indexOf ( "restart" ) != -1 )
-			{
 				sendCommand ( 'restartGui', true )
-			}
 		}
 		requestedAction = ''
 	}

@@ -1488,7 +1488,7 @@ class PackageClass:
 		self.AutoInstallOk = False
 		self.DependencyErrors = []
 		self.FileConflicts = []
-		self.PatchFailures = []
+		self.PatchCheckErrors = []
 		self.ConflictsResolvable = True
 
 		self.ActionNeeded = ''
@@ -1796,7 +1796,7 @@ class PackageClass:
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
 				toPackage.DependencyErrors = fromPackage.DependencyErrors
 				toPackage.FileConflicts = fromPackage.FileConflicts
-				toPackage.PatchFailures = fromPackage.PatchFailures
+				toPackage.PatchCheckErrors = fromPackage.PatchCheckErrors
 				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
@@ -1857,7 +1857,7 @@ class PackageClass:
 	#
 	# must be called while LOCKED !!
 
-	def UpdateVersionsAndFlags (self, doConflictChecks=False):
+	def UpdateVersionsAndFlags (self, doConflictChecks=False, doScriptChecks=False):
 		global VersionToNumber
 		global VenusVersion
 		global VenusVersionNumber
@@ -1959,33 +1959,37 @@ class PackageClass:
 
 		# check for package conflicts - but not if an operation is in progress
 		if doConflictChecks and not self.InstallPending and not self.DownloadPending:
-
 			# update dependencies
 			dependencyFile = "/data/" + packageName + "/packageDependencies"
-			logConflict = False
+			dependencyErrors = []
 			if os.path.exists (dependencyFile):
-				if os.path.getmtime ( dependencyFile ) > self.lastConflictCheck:
-					self.DependencyErrors = []
-					try:
-						with open (dependencyFile, 'r') as file:
-							for item in file:
-								parts = item.split ()
-								if len (parts) < 2:
-									logging.error ("package dependency " + item + " requires a package name and a requirement")
-									continue
-								dependencyPackage = parts [0]
-								dependencyRequirement = parts [1]
+				try:
+					with open (dependencyFile, 'r') as file:
+						for item in file:
+							parts = item.split ()
+							if len (parts) < 2:
+								logging.error ("package dependency " + item + " requires a package name and a requirement")
+								continue
+							dependencyPackage = parts [0]
+							dependencyRequirement = parts [1]
 
-								installedFile = "/etc/venus/installedVersion-" + dependencyPackage
-								packageIsInstalled = os.path.exists (installedFile)
-								packageMustBeInstalled = dependencyRequirement == "installed"
-								if packageIsInstalled != packageMustBeInstalled:
-									self.DependencyErrors.append ( (dependencyPackage, dependencyRequirement) )
-									logging.warning ("package dependency " + packageName + " requires " + dependencyPackage + " to be " + dependencyRequirement)
-					except:
-						pass
-			else:
-				self.DependencyErrors = []
+							installedFile = "/etc/venus/installedVersion-" + dependencyPackage
+							packageIsInstalled = os.path.exists (installedFile)
+							packageMustBeInstalled = dependencyRequirement == "installed"
+							if packageIsInstalled != packageMustBeInstalled:
+								dependencyErrors.append ( (dependencyPackage, dependencyRequirement) )
+					dependencyErrors.sort()
+				except:
+					pass
+			# log dependency changes if they have changed
+			if dependencyErrors != self.DependencyErrors:
+				self.DependencyErrors = dependencyErrors
+				if len (dependencyErrors) > 0:
+					for dependency in dependencyErrors:
+						(dependencyPackage, dependencyRequirement) = dependency
+						logging.warning (packageName + " requires " + dependencyPackage + " to be " + dependencyRequirement)
+				else:
+					logging.warning ("dependency conflicts for " + packageName + " have been resolved")
 
 			# check for file conflicts with prevously installed packages
 			# each line in all file lists are checked to see if the <active file>.package contains a different package name
@@ -1996,7 +2000,6 @@ class PackageClass:
 			# the setup script with the 'check' option will test the patch file
 			#	and report any patch failures
 
-			activeFileHasChanged = False
 			fileConflicts = []
 			fileLists =  [ "fileList", "fileListVersionIndependent" ]
 			for fileList in fileLists:
@@ -2015,78 +2018,82 @@ class PackageClass:
 							packagesList = replacementFile + ".package"
 							if not os.path.exists ( packagesList ) :
 								continue
-							modTime = os.path.getmtime ( packagesList )
-							if modTime > self.lastConflictCheck:
-								activeFileHasChanged = True
-								logConflict = True
-							else:
-								logConflict = False
+							# if a package list for an active file changes,
+							#	run script checks again to uncover new or resolved conflicts
+							if os.path.getmtime (packagesList) > self.lastConflictCheck:
+								doScriptChecks = True
 							try:
 								with open (packagesList, 'r') as plFile:
 									for entry2 in plFile:
 										packageFromList = entry2.strip()
 										# here if previously updated file was from a different package
 										if packageFromList != packageName:
-											fileConflicts.append ( (packageFromList, "uninstalled") )
-											if logConflict:
-												baseName =  os.path.basename (replacementFile)
-												logging.warning ("package file conflict " + baseName + " to install " + packageName + ", " + packageFromList + " must not be installed")
+											file =  os.path.basename (replacementFile)
+											fileConflicts.append ( (packageFromList, "uninstalled", file) )
 							except:
 								pass
 				except:
+					logging.critical ("error while reading file lists for " + packageName)
 					continue
-			if activeFileHasChanged:
-				self.FileConflicts = list ( set ( fileConflicts ) )
-				# run setup script to check for file conflicts (can't be checked here)
-				if os.path.exists ("/data/" + packageName + "/setup"):
-					PushAction ( command='check' + ':' + packageName, source='AUTO' )
 
-			# update patch errors list
-			if os.path.exists (packageDir + "/patchErrors"):
-				# rebuild patch errors list
-				if os.path.getmtime ( packageDir + "/patchErrors" ) > self.lastConflictCheck:
-					self.PatchFailures = []
-					with open ( packageDir + "/patchErrors" ) as file:
-						for line in file:
-							self.PatchFailures.append ( line )
-							logging.warning (packageName + " patch check error: " + line.strip() + " ")
-			# no patch errors - clear list
-			else:
-				self.PatchFailures = []
+			conflicts = self.DependencyErrors
 
-			conflicts = self.DependencyErrors + self.FileConflicts
+			if fileConflicts != self.FileConflicts:
+				self.FileConflicts = fileConflicts
+				if len (fileConflicts) > 0:
+					for (otherPackage, dependency, file) in fileConflicts:
+						logging.warning ("to install " + packageName + ", " + otherPackage + " must not be installed (" + file + ")" )
+						conflicts.append ( ( otherPackage, dependency ) )
+				else:
+					logging.warning ("file conflicts for " + packageName + " have been resolved")
+
 			details = ""
 			if len (conflicts) > 0:
 				# eliminate duplicates
 				conflicts = list ( set ( conflicts ) )
 				resolveOk = True
-				for conflict in conflicts:
-					if conflict [1] == "uninstalled":
-						details += conflict [0] + " must not be installed\n"
+				for ( otherPackage, dependency ) in conflicts:
+					if dependency == "uninstalled":
+						details += otherPackage + " must not be installed\n"
 					else:
-						conflictPackage = PackageClass.LocatePackage (conflict[0])
+						conflictPackage = PackageClass.LocatePackage (otherPackage)
 						if conflictPackage == None:
-							details += conflict [0] + " must be installed but not available\n"
+							details += otherPackage + " must be installed but not available\n"
 							resolveOk = False
 						elif conflictPackage.PackageVersion != "":
-							details += conflict [0] + " must be installed\n"
+							details += otherPackage + " must be installed\n"
 						elif conflictPackage.GitHubVersion != "":
-							details += conflict [0] + " must be downloaded and installed\n"
+							details += otherPackage + " must be downloaded and installed\n"
 						else:
-							details += conflict [0] + " unknown\n"
+							details += otherPackage + " unknown\n"
 				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
 				compatible = False
 
-			# report patch errors if there are no other errors
-			elif len (self.PatchFailures) > 0:
-				patchFailures = list ( set ( self.PatchFailures ) )
-				for patchFailure in patchFailures:
-					details += patchFailure.strip () + "\n"
+			# check for and report patch errors if there are no other errors
+			else:
+				patchCheckErrors = []
+				if os.path.exists (packageDir + "/patchErrors"):
+					# rebuild patch errors list
+					with open ( packageDir + "/patchErrors" ) as file:
+						for line in file:
+							patchCheckErrors.append ( line )
+					patchCheckErrors = list ( set ( patchCheckErrors ) )
+				if patchCheckErrors != self.PatchCheckErrors:
+					self.PatchCheckErrors = patchCheckErrors
+					if len (patchCheckErrors) > 0:
+						for line in patchCheckErrors:
+							patchFailure = line.strip()
+							details += patchFailure + "\n"
+							logging.warning (packageName + " patch check error: " + patchFailure + " ")
+						self.SetIncompatible ("patch error", details,)
+						compatible = False
+					else:
+						logging.warning (packageName + " patch check reported no errors")
 
-				self.SetIncompatible ("patch error", details,)
-				compatible = False
-
-			# used to prevent repeated checks
+			# make sure script checks are run once at boot
+			#	(eg patched errors, but there are others)
+			if self.lastConflictCheck == 0:
+				doScriptChecks = True
 			self.lastConflictCheck = time.time ()
 		# end if doConflictChecks
 
@@ -2095,6 +2102,9 @@ class PackageClass:
 		if compatible:
 			self.SetIncompatible ("")
 
+		# run setup script to check for file conflicts (can't be checked here)
+		if doScriptChecks and os.path.exists ("/data/" + packageName + "/setup"):
+			PushAction ( command='check' + ':' + packageName, source='AUTO' )
 	# end UpdateVersionsAndFlags
 # end Package
 
@@ -2243,7 +2253,6 @@ class UpdateGitHubVersionClass (threading.Thread):
 		global WaitForGitHubVersions
 
 		gitHubVersionPackageIndex = 0
-		WaitForGitHubVersions = True
 		forcedRefresh = True
 
 		packageListLength = 0
@@ -2520,7 +2529,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 					PushAction ( command='install' + ':' + packageName, source=source )
 				# no install after, do full version/flag update
 				else:
-					package.UpdateVersionsAndFlags (doConflictChecks=True)
+					package.UpdateVersionsAndFlags (doConflictChecks=True, doScriptChecks=True)
 		DbusIf.UNLOCK ("GitHubDownload - update status")
 
 		# report errors / success
@@ -2696,7 +2705,6 @@ class InstallPackagesClass (threading.Thread):
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ("InstallPackage")
 		package = PackageClass.LocatePackage (packageName)
-		package.ActionNeeded = NONE
 
 		if package == None:
 			logging.error ("InstallPackage: " + packageName + " not in package list")
@@ -3308,10 +3316,9 @@ class MediaScanClass (threading.Thread):
 							method = 'AddSetting'
 
 						try:
-							proc = subprocess.Popen ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
+							subprocess.run ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
 											path, default, typeId, min, max ], 
 											stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-							proc.wait()
 							parameterExists = True
 							logging.warning ("settingsRestore: creating " + path)
 						except:
@@ -3572,7 +3579,6 @@ class MediaScanClass (threading.Thread):
 #		mainLoop
 #		main ( the entry point)
 #		directUninstall
-#		uninstallAllPackages
 #
 #	mainLoop is called each second to make background checks
 #	update global and package flags, versions, etc
@@ -3659,6 +3665,8 @@ bootInstall = False
 DeferredGuiEditAcknowledgement = None
 lastTimeSync = 0
 
+WaitForGitHubVersions = False
+			
 # states for actionNeeded
 REBOOT_NEEDED = 2
 GUI_RESTART_NEEDED = 1
@@ -3670,7 +3678,7 @@ def mainLoop ():
 	global MediaScan
 	global SystemReboot	# initialized/used in main, set in mainloop, PushAction, InstallPackage
 	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
-	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop 
+	global WaitForGitHubVersions  # initialized above, set in UpdateGitHubVersion used in mainLoop 
 	global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
 	global RestartPackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
 	global DeferredGuiEditAcknowledgement # set in the handleGuiEditAction thread becasue the dbus paramter can't be set there
@@ -3682,7 +3690,6 @@ def mainLoop ():
 	global currentDownloadMode
 	global bootInstall
 	global lastTimeSync
-
 	startTime = time.time()
 
 	# an unclean shutdown will not save the last known time of day
@@ -3691,7 +3698,7 @@ def mainLoop ():
 	# an old RTC
 	timeSyncCommand = '/etc/init.d/save-rtc.sh'
 	if startTime > lastTimeSync + 30 and os.path.exists (timeSyncCommand):
-		subprocess.Popen ( [ timeSyncCommand ] )
+		subprocess.run ( [ timeSyncCommand ] )
 		lastTimeSync = startTime
 
 	packageName = "none"
@@ -3706,8 +3713,6 @@ def mainLoop ():
 	# exit mainLoop and do uninstall in main, then reboot
 	# skip all processing below !
 	if MediaScan.AutoUninstall or SetupHelperUninstall:
-		DbusIf.UpdateStatus ( "uninstalling SetupHelper ...", where='PmStatus' )
-		DbusIf.UpdateStatus ( "uninstalling SetupHelper ...", where='Editor' )
 		mainloop.quit()
 		return False
 
@@ -3754,7 +3759,6 @@ def mainLoop ():
 		if currentDownloadMode != lastDownloadMode \
 				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
 			holdOffScan = True
-			WaitForGitHubVersions = True
 			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
 
 	# make sure a new scan starts at beginning of list
@@ -3871,25 +3875,14 @@ def mainLoop ():
 			mainloop.quit()
 			return False
 		elif RestartPackageManager:
-			statusMessage = "restarting PackageManager ..."
-			RestartPackageManager = False
+			DbusIf.UpdateStatus ( "restarting PackageManager ...", where='PmStatus' )
+			DbusIf.SetEditStatus ("")
+			DbusIf.AcknowledgeGuiEditAction ('')
 			# exit the main loop
 			mainloop.quit()
 			return False
 		elif GuiRestart:
-			logging.warning ("restarting GUI and Package Manager")
-			statusMessage = "restarting GUI and Package Manager..."
-			try:
-				# with gui-v2 present, GUI v1 runs from start-gui service not gui service
-				if os.path.exists ('/service/start-gui'):
-					proc = subprocess.Popen ( [ 'svc', '-t', '/service/start-gui' ] )
-				elif  os.path.exists ('/service/gui'):
-					proc = subprocess.Popen ( [ 'svc', '-t', '/service/gui' ] )
-				else:
-					logging.critical ("GUI restart failed")
-			except:
-				logging.critical ("GUI restart failed")
-			GuiRestart = False
+			DbusIf.UpdateStatus ( "restarting GUI and Package Manager...", where='PmStatus' )
 			DbusIf.SetEditStatus ("")
 			DbusIf.AcknowledgeGuiEditAction ('')
 			# exit the main loop
@@ -3928,52 +3921,35 @@ def mainLoop ():
 # end mainLoop
 
 # uninstall a package with a direct call to it's setup script
-# used to do a blind uninstall in main () below
-# or a forced remove (FORCE_REMOVE flag set)
+# used to bypass package list, and other processing
+#
+# do not use once package list has been set up
+#
+# SetupHelper uninstall is deferred and handled
+#	during PackageManager exit
 
 def	directUninstall (packageName):
+	global SetupHelperUninstall
+	global SystemReboot
+	global GuiRestart
+
+	if packageName == "SetupHelper":
+		SetupHelperUninstall = True
+		return
+
 	try:
 		setupFile = "/data/" + packageName + "/setup"
 		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
-			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'runFromPm' ],
-										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
+			proc = subprocess.run ( [ setupFile, 'uninstall', 'runFromPm' ] )
 			proc.wait()
+			returnCode = proc.returncode
+			if returnCode == EXIT_REBOOT:
+				SystemReboot = True
+			elif returnCode == EXIT_RESTART_GUI:
+				GuiRestart = True
 	except:
-		pass
+		logging.critical ("could not uninstall " + packageName)
 
-
-# uninstall all packages found in /data
-# package must be a directory with a file named version
-# with the first character of that file 'v'
-# and an executale file named 'setup' must exist in the directory
-# no other checks are made
-# SetupHelper is NOT removed since it's running this service
-# if found, returns true if it was found so it can be done later
-#	just before the program ends
-
-def uninstallAllPackages ():
-	deferredSetupHelperRemove = False
-	for path in os.listdir ("/data"):
-		packageDir = "/data/" + path
-		if not os.path.isdir (packageDir):
-			continue
-		packageName = path
-
-		versionFile = packageDir + "/version"
-		try:
-			fd = open (versionFile, 'r')
-			version = fd.readline().strip()
-			fd.close ()
-		except:
-			continue
-		if version == "" or version[0] != 'v':
-			continue
-		if packageName == "SetupHelper":
-			deferredSetupHelperRemove = True
-		else:
-			directUninstall (packageName)
-
-	return deferredSetupHelperRemove
 
 #	main
 #
@@ -3995,7 +3971,6 @@ def main():
 	InitializePackageManager = False
 	RestartPackageManager = False
 	SetupHelperUninstall = False
-	WaitForGitHubVersions = True	# hold off package processing until first GitHub version refresh pass
 
 	# set logging level to include info level entries
 	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )
@@ -4126,11 +4101,10 @@ def main():
 				# forced removal flag
 				if os.path.exists (flagFile):
 					os.remove (flagFile)
-					forcedRemove = True
-					if os.path.exists ("/etc/venus/nstalledVersion-" + packageName):
+					if os.path.exists ("/etc/venus/installedVersion-" + packageName):
 						logging.warning ( "uninstalling " + packageName + " prior to forced remove" )
 						directUninstall (packageName)
-					# now remove the package
+					# now remove the package from list
 					logging.warning ( "forced remove of " + packageName )
 					PackageClass.RemovePackage (packageIndex=index)
 					runAgain = True
@@ -4174,25 +4148,6 @@ def main():
 
 	#### this section of code runs only after the mainloop quits (LOCK / UNLOCK no longer necessary)
 
-	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
-	if MediaScan.AutoUninstall:
-		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='PmStatus')
-		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
-		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
-
-
-		# uninstall all pacakges - returns True if SetupHelper was found and skipped
-		#	 so it can be done later
-		#	note: SetupHelperUninstall may have been set when an uninstall command
-		#		was received from the GUI so don't clear it here.
-		if uninstallAllPackages ():
-			SetupHelperUninstall = True
-
-	elif SystemReboot:
-		DbusIf.UpdateStatus ( message="REBOOTING ...", where='PmStatus')
-		DbusIf.UpdateStatus ( message="REBOOTING ...", where='Editor' )
-		logging.warning (">>>> REBOOTING: to complete package installation")
-
 
 	# stop threads, remove service from dbus
 	logging.warning ("stopping threads")
@@ -4218,35 +4173,49 @@ def main():
 	if InitializePackageManager:
 		DbusIf.DbusSettings['packageCount'] = 0
 
-	DbusIf.RemoveDbusService ()
+	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
+	# notify before DbusServicces is removed
+	if MediaScan.AutoUninstall:
+		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='PmStatus')
+		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
+		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
+		SystemReboot = True
 
-	# SetupHelper uninstall with delayed reboot
-	if SetupHelperUninstall:
-		try:
-			logging.critical (">>>> uninstalling SetupHelper and exiting")
-			# schedule reboot for 30 seconds later since this script will die during the ininstall
-			# this should give enough time for the uninstall to finish before reboot
-			subprocess.Popen ( [ 'nohup', 'bash', '-c', 'sleep 30; shutdown -r now', '&' ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL  )
-		except:
-			pass
-
-		directUninstall ("SetupHelper")
-
-	# check for reboot
+		# uninstall all packages EXCEPT SetupHelper which is done later
+		for path in os.listdir ("/data"):
+			packageDir = "/data/" + path
+			if not os.path.isdir (packageDir):
+				continue
+			directUninstall (path)
+	elif SetupHelperUninstall:
+		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='PmStatus' )
+		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='Editor' )
+		logging.critical (">>>> UNINSTALLING SetupHelper ...")
 	elif SystemReboot:
-		try:
-			proc = subprocess.Popen ( [ 'shutdown', '-r', 'now', 'rebooting to complete package installation' ] )
-			# for debug:    proc = subprocess.Popen ( [ 'shutdown', '-k', 'now', 'simulated reboot - system staying up' ] )
-		except:
-			logging.critical ("shutdown failed")
+		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='PmStatus')
+		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='Editor' )
+		logging.warning (">>>> REBOOTING SYSTEM: to complete package installation")
 
-	if SystemReboot or SetupHelperUninstall:
-		# insure the package manager service doesn't restart when we exit
-		#	it will start up again after the reboot if it is still installed
-		try:
-			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ], text=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-		except:
-			logging.critical ("svc to shutdown PackageManager failed")
+	# remaining tasks are handled in packageManagerEnd.sh because
+	#	SetupHelper uninstall needs to be done after PackageManager.py exists
+	#	and the reboot/GUI restart (if any) needs to be done after that.
+	if SystemReboot or SetupHelperUninstall or GuiRestart:
+		command = [ '/data/SetupHelper/packageManagerEnd.sh' ]
+		if SetupHelperUninstall:
+			command.append ("shUninstall")
+		if SystemReboot:
+			command.append ("reboot")
+		elif GuiRestart:
+			command.append ("guiRestart")
+
+		# this runs in the background and will CONTINUE after PackageManager.py exits below
+		logging.critical ("finishing up in packageManagerEnd.sh")
+		subprocess.Popen ( command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
+
+	# delay to leave reboot message up on status lines for a few seconds
+	# and to provide sufficient time for packageManagerEnd.sh to start up
+	time.sleep (5.0)
+	DbusIf.RemoveDbusService ()
 
 	logging.critical (">>>> PackageManager exiting")
 

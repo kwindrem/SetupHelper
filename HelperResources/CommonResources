@@ -1351,45 +1351,45 @@ deferGuiRestart=false
 userInteraction=true
 runFromPm=false
 while [ $# -gt 0 ]; do
-        case $1 in
-            "reinstall")
-                reinstall=true
-                ;;
-            "force")
-                force=true
-                ;;
-            "deferReboot")
-                deferReboot=true
-                ;;
-            "deferGuiRestart")
-                deferGuiRestart=true
-                ;;
-            "install")
-                scriptAction='INSTALL'
-                ;;
-            "uninstall")
-                scriptAction='UNINSTALL'
-                ;;
-            "auto")
-                logToConsole=false
-				userInteraction=false
-                ;;
-            "runFromPm")
-				runFromPm=true
-                logToConsole=false
-				userInteraction=false
-                deferReboot=true
-                deferGuiRestart=true
-                ;;
-            "check")
-				# if no other actions were set, set it here
-				#	but allow other actions to override this one
-				if [ $scriptAction == 'NONE' ]; then
-					scriptAction='CHECK'
-				fi
-                ;;
-            *)
-        esac
+	case $1 in
+		"reinstall")
+			reinstall=true
+			;;
+		"force")
+			force=true
+			;;
+		"deferReboot")
+			deferReboot=true
+			;;
+		"deferGuiRestart")
+			deferGuiRestart=true
+			;;
+		"install")
+			scriptAction='INSTALL'
+			;;
+		"uninstall")
+			scriptAction='UNINSTALL'
+			;;
+		"auto")
+			logToConsole=false
+			userInteraction=false
+			;;
+		"runFromPm")
+			runFromPm=true
+			logToConsole=false
+			userInteraction=false
+			deferReboot=true
+			deferGuiRestart=true
+			;;
+		"check")
+			# if no other actions were set, set it here
+			#	but allow other actions to override this one
+			if [ $scriptAction == 'NONE' ]; then
+				scriptAction='CHECK'
+			fi
+			;;
+		*)
+	esac
     shift
 done
 

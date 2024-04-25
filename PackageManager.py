@@ -944,14 +944,18 @@ class DbusIfClass:
 		self.DbusSettings['packageCount'] = count
 	def GetPackageCount (self):
 		return self.DbusSettings['packageCount']
-	def SetAutoDownload (self, value):
+	def SetAutoDownloadMode (self, value):
 		self.DbusSettings['autoDownload'] = value
 	def GetAutoDownloadMode (self):
 		return self.DbusSettings['autoDownload']
 	def GetAutoInstall (self):
-		return self.DbusSettings['autoInstall']
+		return self.DbusSettings['autoInstall'] == 1
 	def SetAutoInstall (self, value):
-		self.DbusSettings['autoInstall'] = value
+		if value == True:
+			dbusValue = 1
+		else:
+			dbusValue = 0
+		self.DbusSettings['autoInstall'] = dbusValue
 	def SetPmStatus (self, value):
 		self.DbusService['/PmStatus'] = value
 	def SetMediaStatus (self, value):
@@ -1493,7 +1497,7 @@ class PackageClass:
 
 		self.ActionNeeded = ''
 
-		self.lastConflictCheck = 0
+		self.lastScriptPrecheck = 0
 
 		self.lastGitHubRefresh = 0
 
@@ -1797,7 +1801,7 @@ class PackageClass:
 				toPackage.DependencyErrors = fromPackage.DependencyErrors
 				toPackage.FileConflicts = fromPackage.FileConflicts
 				toPackage.PatchCheckErrors = fromPackage.PatchCheckErrors
-				toPackage.lastConflictCheck = fromPackage.lastConflictCheck
+				toPackage.lastScriptPrecheck = fromPackage.lastScriptPrecheck
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
 
@@ -1857,7 +1861,7 @@ class PackageClass:
 	#
 	# must be called while LOCKED !!
 
-	def UpdateVersionsAndFlags (self, doConflictChecks=False, doScriptChecks=False):
+	def UpdateVersionsAndFlags (self, doConflictChecks=False, doScriptPreChecks=False):
 		global VersionToNumber
 		global VenusVersion
 		global VenusVersionNumber
@@ -2020,8 +2024,8 @@ class PackageClass:
 								continue
 							# if a package list for an active file changes,
 							#	run script checks again to uncover new or resolved conflicts
-							if os.path.getmtime (packagesList) > self.lastConflictCheck:
-								doScriptChecks = True
+							if os.path.getmtime (packagesList) > self.lastScriptPrecheck:
+								doScriptPreChecks = True
 							try:
 								with open (packagesList, 'r') as plFile:
 									for entry2 in plFile:
@@ -2092,9 +2096,9 @@ class PackageClass:
 
 			# make sure script checks are run once at boot
 			#	(eg patched errors, but there are others)
-			if self.lastConflictCheck == 0:
-				doScriptChecks = True
-			self.lastConflictCheck = time.time ()
+			if self.lastScriptPrecheck == 0:
+				doScriptPreChecks = True
+			self.lastScriptPrecheck = time.time ()
 		# end if doConflictChecks
 
 		# if no incompatibilities found, clear incompatible dbus parameters
@@ -2103,7 +2107,7 @@ class PackageClass:
 			self.SetIncompatible ("")
 
 		# run setup script to check for file conflicts (can't be checked here)
-		if doScriptChecks and os.path.exists ("/data/" + packageName + "/setup"):
+		if doScriptPreChecks and os.path.exists ("/data/" + packageName + "/setup"):
 			PushAction ( command='check' + ':' + packageName, source='AUTO' )
 	# end UpdateVersionsAndFlags
 # end Package
@@ -2529,7 +2533,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 					PushAction ( command='install' + ':' + packageName, source=source )
 				# no install after, do full version/flag update
 				else:
-					package.UpdateVersionsAndFlags (doConflictChecks=True, doScriptChecks=True)
+					package.UpdateVersionsAndFlags (doConflictChecks=True, doScriptPreChecks=True)
 		DbusIf.UNLOCK ("GitHubDownload - update status")
 
 		# report errors / success
@@ -2849,6 +2853,10 @@ class InstallPackagesClass (threading.Thread):
 					where=sendStatusTo, logLevel=logLevel )
 			if source == 'GUI':
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
+
+		# installs do script conflict checks
+		#	update last check time here so checks aren't run right away
+		package.lastScriptPrecheck = time.time ()
 
 		package.UpdateVersionsAndFlags ()
 
@@ -3749,7 +3757,6 @@ def mainLoop ():
 		holdOffScan = True
 	# not doing boot install - use dbus values
 	else:
-		holdOffScan = False
 		autoInstall = DbusIf.GetAutoInstall ()
 		# save mode before chaning so changes can be detected below
 		lastDownloadMode = currentDownloadMode
@@ -3760,6 +3767,8 @@ def mainLoop ():
 				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
 			holdOffScan = True
 			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
+		else:
+			holdOffScan = False
 
 	# make sure a new scan starts at beginning of list
 	if holdOffScan:
@@ -3773,7 +3782,7 @@ def mainLoop ():
 			packageIndex = 0
 			# end of ONCE download - switch auto downloads off
 			if currentDownloadMode == ONE_DOWNLOAD:
-				DbusIf.SetAutoDownload (AUTO_DOWNLOADS_OFF)
+				DbusIf.SetAutoDownloadMode (AUTO_DOWNLOADS_OFF)
 				currentDownloadMode = AUTO_DOWNLOADS_OFF
 			# end of boot install
 			if bootInstall:
@@ -3786,7 +3795,8 @@ def mainLoop ():
 		packageName = package.PackageName
 		packageIndex += 1
 
-		package.UpdateVersionsAndFlags (doConflictChecks=True)
+		# skip conflict checks if boot-time checks are bening made
+		package.UpdateVersionsAndFlags (doConflictChecks = not bootInstall)
 
 		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
@@ -4194,7 +4204,7 @@ def main():
 	elif SystemReboot:
 		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='PmStatus')
 		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='Editor' )
-		logging.warning (">>>> REBOOTING SYSTEM: to complete package installation")
+		logging.warning (">>>> REBOOTING SYSTEM")
 
 	# remaining tasks are handled in packageManagerEnd.sh because
 	#	SetupHelper uninstall needs to be done after PackageManager.py exists

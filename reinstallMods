@@ -69,13 +69,13 @@ else
 	logMessage "SetupHelper already installed"
 fi
 
-# tell PackageManager to reinstall the remaining packages"
-logMessage "PackageManager will reinstall remaining packages"
-touch "/etc/venus/REINSTALL_PACKAGES"
-
 # reboot now if signaled from setup script
 if $rebootNeeded ; then
     logMessage "rebooting ..."
     reboot
+else
+	# tell PackageManager to reinstall the remaining packages"
+	logMessage "PackageManager will reinstall remaining packages"
+	touch "/etc/venus/REINSTALL_PACKAGES"
 fi
 

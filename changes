@@ -4,16 +4,20 @@ v8.0: (beta)
 	fixed: PackageManager hangs if there is no setup script in package directory
 	fixed: package conflict message disappears
 	fixed: "Once" download scan doesn't check all packages
-	fixed: package checks run unnecessarily until time syncs with NTP
-		after an unclean shutdown
+	fixed: package checks run unnecessarily after an unclean shutdown
+		the real time clock last's value was not updated
+		causing file mod times to be newer than last RTC value
+	fixed: patch fails if pachage was installed by replacement (old install)
 	base script prechecks on file modificaiton times to eliminate unnecessary work
 	setupHelper uninstall and reboots/gui restarts moved from PackageManager main
 		to separate script
 	add TailscaleGX to default package list
 	updatePackage: changed HelperResources version checking to minimize prompts
 	updatePackage: added patch options including MANUAL to prevent automatic patch updates
-	updatePackage: rewrite main file set loop for speed improvement
-
+	updatePackage: rewrite update file sets loop for speed improvement
+	replace OS's patch with one that handles more cases (eg, 0 context) and options
+	fixed: PackageManager hangs on Python 2 (Venus OS prior to v2.80)
+	
 v7.18:
 	fixed: only first service is uninstalled
 

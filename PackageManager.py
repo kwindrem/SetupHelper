@@ -366,8 +366,13 @@ import time
 import re
 import glob
 
-PythonVersion = sys.version_info
 # accommodate both Python 2 (prior to v2.80) and 3
+# note subprocess.run and subprocess.DEVNULL do not exist in python 2
+#	so subprocess.Popen and subprocess.PIPE and subprocess.communicate ()
+#	are used in all subprodess calls even if process output is not needed
+#	or if it is not necessary to wait for the command to finish
+
+PythonVersion = sys.version_info
 if PythonVersion >= (3, 0):
 	import queue
 	from gi.repository import GLib
@@ -891,21 +896,18 @@ class DbusIfClass:
 
 		# remove the dbus Settings paths - via the command line 
 		try:
-			proc = subprocess.Popen (['dbus', '-y', 'com.victronenergy.settings', '/', 'RemoveSettings', settingsToRemove  ],
-						stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc = subprocess.Popen (['dbus', '-y', 'com.victronenergy.settings', '/',
+						'RemoveSettings', settingsToRemove  ],
+						bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			_, stderr = proc.communicate ()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
 		except:
 			logging.error ("dbus RemoveSettings call failed")
 		else:
-			proc.wait()
-			# convert from binary to string
-			out, err = proc.communicate ()
-			stdout = out.decode ().strip ()
-			stderr = err.decode ().strip ()
-			returnCode = proc.returncode
 			if returnCode != 0:
 				logging.error ("dbus RemoveSettings failed " + str (returnCode))
 				logging.error ("stderr: " + stderr)
-
 	
 	#	UpdateStatus
 	#
@@ -2172,17 +2174,14 @@ class UpdateGitHubVersionClass (threading.Thread):
 		url = "https://raw.githubusercontent.com/" + gitHubUser + "/" + packageName + "/" + gitHubBranch + "/version"
 		try:
 			proc = subprocess.Popen (["wget", "--timeout=10", "-qO", "-", url],
-							stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+						bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			stdout, _ = proc.communicate ()
+			stdout = stdout.decode ().strip ()
+			returnCode = proc.returncode
 		except:
 			logging.error ("wget for version failed " + packageName)
 			gitHubVersion = ""
 		else:
-			proc.wait()
-			# convert from binary to string
-			stdout, stderr = proc.communicate ()
-			stdout = stdout.decode ().strip ()
-			stderr = stderr.decode ().strip ()
-			returnCode = proc.returncode
 			if proc.returncode == 0:
 				gitHubVersion = stdout
 			else:
@@ -2456,14 +2455,15 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
 		try:
-			proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],\
-										stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+			proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],
+								bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			_, stderr = proc.communicate()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
 		except:
 			errorMessage = "could not access archive on GitHub " + packageName
 			downloadError = True
 		else:
-			proc.wait()
-			returnCode = proc.returncode
 			if returnCode != 0:
 				errorMessage = "could not access " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub"
 				errorDetails = "returnCode" + str (returnCode) +  "stderr" + stderr
@@ -2471,17 +2471,14 @@ class DownloadGitHubPackagesClass (threading.Thread):
 		if not downloadError:
 			try:
 				proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
-											stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+								bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+				_, stderr = proc.communicate ()
+				stderr = stderr.decode ().strip ()
+				returnCode = proc.returncode
 			except:
 				errorMessage = "could not unpack " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch
 				downloadError = True
 			else:
-				proc.wait()
-				stdout, stderr = proc.communicate ()
-				# convert from binary to string
-				stdout = stdout.decode ().strip ()
-				stderr = stderr.decode ().strip ()
-				returnCode = proc.returncode
 				if returnCode != 0:
 					errorMessage = "unpack failed " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch
 					errorDetails = "stderr: " + stderr
@@ -2766,12 +2763,9 @@ class InstallPackagesClass (threading.Thread):
 		DbusIf.UpdateStatus ( message=action + "ing " + packageName, where=sendStatusTo, logLevel=WARNING )
 		try:
 			proc = subprocess.Popen ( [ setupFile, action, 'runFromPm' ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			proc.wait()
-			# convert from binary to string
-			out, err = proc.communicate ()
-			stdout = out.decode ().strip ()
-			stderr = err.decode ().strip ()
+										bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			_, stderr = proc.communicate ()
+			stderr = stderr.decode ().strip ()
 			returnCode = proc.returncode
 			setupRunFail = False
 		except:
@@ -3053,19 +3047,16 @@ class MediaScanClass (threading.Thread):
 		# unpack the archive - result is placed in tempDirectory
 		try:
 			proc = subprocess.Popen ( ['tar', '-xzf', path, '-C', tempDirectory ],
-										stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+							bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			_, stderr = proc.communicate ()
+			stderr = stderr.decode ().strip ()
+			returnCode = proc.returncode
 		except:
 			DbusIf.UpdateStatus ( message="tar failed for " + packageName,
 									where='Media', logLevel=ERROR)
 			time.sleep (5.0)
 			DbusIf.UpdateStatus ( message="", where='Media')
 			return False
-		proc.wait()
-		stdout, stderr = proc.communicate ()
-		# convert from binary to string
-		stdout = stdout.decode ().strip ()
-		stderr = stderr.decode ().strip ()
-		returnCode = proc.returncode
 		if returnCode != 0:
 			DbusIf.UpdateStatus ( message="could not unpack " + packageName + " from SD/USB media",
 									where='Media', logLevel=ERROR)
@@ -3243,8 +3234,8 @@ class MediaScanClass (threading.Thread):
 					shutil.rmtree (logDestDir)
 
 				proc = subprocess.Popen ( [ 'zip', '-rq', backupPath + "/logs.zip", "/data/log" ],
-											stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
-				proc.wait()
+										bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+				proc.commiunicate()	#output ignored
 				returnCode = proc.returncode
 				logsWritten = "logs"
 			except:
@@ -3324,9 +3315,10 @@ class MediaScanClass (threading.Thread):
 							method = 'AddSetting'
 
 						try:
-							subprocess.run ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
+							proc = subprocess.Popen ( [ 'dbus', '-y', 'com.victronenergy.settings', '/', method, '',
 											path, default, typeId, min, max ], 
-											stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+											bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+							proc.commiunicate ()	# output ignored
 							parameterExists = True
 							logging.warning ("settingsRestore: creating " + path)
 						except:
@@ -3706,7 +3698,12 @@ def mainLoop ():
 	# an old RTC
 	timeSyncCommand = '/etc/init.d/save-rtc.sh'
 	if startTime > lastTimeSync + 30 and os.path.exists (timeSyncCommand):
-		subprocess.run ( [ timeSyncCommand ] )
+		try:
+			subprocess.Popen ( [ timeSyncCommand ],
+					bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc.commiunicate ()	# output ignored
+		except:
+			pass
 		lastTimeSync = startTime
 
 	packageName = "none"
@@ -3950,15 +3947,17 @@ def	directUninstall (packageName):
 	try:
 		setupFile = "/data/" + packageName + "/setup"
 		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
-			proc = subprocess.run ( [ setupFile, 'uninstall', 'runFromPm' ] )
-			proc.wait()
+			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'runFromPm' ],
+						bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+			proc.commiunicate ()	# output ignored
 			returnCode = proc.returncode
-			if returnCode == EXIT_REBOOT:
-				SystemReboot = True
-			elif returnCode == EXIT_RESTART_GUI:
-				GuiRestart = True
 	except:
 		logging.critical ("could not uninstall " + packageName)
+	else:
+		if returnCode == EXIT_REBOOT:
+			SystemReboot = True
+		elif returnCode == EXIT_RESTART_GUI:
+			GuiRestart = True
 
 
 #	main
@@ -4219,8 +4218,12 @@ def main():
 			command.append ("guiRestart")
 
 		# this runs in the background and will CONTINUE after PackageManager.py exits below
-		logging.critical ("finishing up in packageManagerEnd.sh")
-		subprocess.Popen ( command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL )
+		try:
+			logging.critical ("finishing up in packageManagerEnd.sh")
+			proc = subprocess.Popen ( command, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+			proc.communicate ()	# output ignored
+		except:
+			logging.critical ("packageManagerEnd.sh failed")
 
 	# delay to leave reboot message up on status lines for a few seconds
 	# and to provide sufficient time for packageManagerEnd.sh to start up

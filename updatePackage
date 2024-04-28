@@ -1054,16 +1054,19 @@ for package in $packageList; do
 						mv "$oldReplacement" "$toReplacement"
 					fi
 					versionedFileExists=true
+				else
+					logMessage "ERROR $package $baseName: no replacement for $toVersion"
+					touch "$toReplacement.CHECK_REPLACEMENT"
+				fi
+				if ! $oldReplacementIsUseOrig ; then
 					if [ -f "$toStockFile" ]; then
 						cp "$toStockFile" "$toReplacement.orig"
 					elif [ -f "$oldReplacement.orig" ]; then
 						mv "$oldReplacement.orig" "$toReplacement.orig"
 					else
-						logMessage "ERROR $package $baseName: $toVersion no original"
+						logMessage "ERROR $package $baseName: no original for $toVersion"
 						touch "$toReplacement.NO_ORIG"
 					fi
-				else
-					touch "$toReplacement.CHECK_REPLACEMENT"
 				fi
 
 				# update links and look for additional replacements
@@ -1150,7 +1153,7 @@ for package in $packageList; do
 		for file in ${fileList[@]} ; do
 			baseName=$(basename "$file")
 			replacement="$fileSet/$baseName"
-			if [ -f "$replacement" ] &&  [ -L "$replacement" ]; then
+			if [ -f "$replacement" ] && ! [ -L "$replacement" ]; then
 				replacementFilesExist=true
 				break
 			fi
@@ -1160,8 +1163,6 @@ for package in $packageList; do
 		if ! $replacementFilesExist ; then
 			touch "$fileSet/LINKS_ONLY"
 		fi
-
-		doFsChecks=true
 
 		# remove file sets for incompatible Venus OS versions
 		if [ -e "$fileSet/INCOMPATIBLE_VERSION" ]; then
@@ -1222,6 +1223,7 @@ for package in $packageList; do
 				# flag file set incomplete
 				if [ -f "$replacement.CHECK_REPLACEMENT" ] || [ -f "$replacement.NO_ORIG" ] \
 						|| [ -f "$replacement.BAD_LINK" ] ; then
+echo "#### final checks INCOMPLETE"
 					touch "$fileSet/INCOMPLETE"
 				fi
 			done # for file

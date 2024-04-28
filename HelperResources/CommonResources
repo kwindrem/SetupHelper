@@ -37,7 +37,8 @@ restartSystemCalc=false
 restartDigitalinputs=false
 
 # use local patch executable - BusyBox version has bugs
-patch="/data/SetupHelper/patch"
+# include options that are used in all calls
+patch="/data/SetupHelper/patch --force --silent --reject-file=/dev/null"
 
 
 # file lists are populated by getFileLists called from_chckFileSets and autoinstall
@@ -689,7 +690,7 @@ restoreActiveFile ()
 		#	if success, don't restore original
 		previousPatchFile="$previousPatchesDir/$baseName.patch"
 		if [ -e "$previousPatchFile" ] && 
-			$patch -f -s --reverse --reject-file=/dev/null "$activeFile" "$previousPatchFile" &> /dev/null ; then
+			$patch --reverse "$activeFile" "$previousPatchFile" &> /dev/null ; then
 			restoreOriginal=false
 		# no previous patch file or reverse patch failed
 		#	original will be restored
@@ -1570,10 +1571,21 @@ fi # if [ $scriptAction != 'UNINSTALL' ]
 
 # create the forward and reverse patched files
 # used during the actual install and to test if the patch/reverse patch will succeed
-# done here so PackageManager knows if this will be possible before starting the opeartion!
+# done here so PackageManager knows if this will be possible before starting the opeartion
 #
-# BusyBox patch doesn't support the -o option
-#	so copy orignals to the patched file locaiton first then patch the copy
+# if this and other packages have both modified the active file,
+#	the patch from this package is first removed
+#		by reverse patching the active file with the PREVIOUS patch file
+#	the new patch is then applied
+#	a test reverse patch insures the patch can be removed in the future
+#	the patch file used for this patch is then saved so it can be used
+#		for the reverse patch on next install/uninstall
+#
+# if no other packages have modified the active file,
+#	the patch is applied to .orig file if exists
+#	rather than reverse patching the active file
+#	this maintains compatibility with packages installed with older versions of SetupHelper
+
 
 if ! [ -z "$fileListPatched" ];then
 	patchErrors=()
@@ -1599,25 +1611,34 @@ if ! [ -z "$fileListPatched" ];then
 			fi
 
 			patchOk=false
-			# no other packages in list - ignore any previous patch and patch .orig file
-			if ! $otherPackagesInList && $thisPackageInList && [ -e "$file.orig" ]; then
-					cp "$file.orig" "$tempActiveFile"
-					patchOk=true
-			# this package not currently in .package list - patch active file
-			elif ! $thisPackageInList; then
-				cp "$file" "$tempActiveFile"
-				patchOk=true
-			# attempt to remove the previous patch for this package
-			# if this succeeds proceed with forward patch on result
-			elif $thisPackageInList && [ -e "$previousPatchFile" ]; then
-				if $patch -f -s --reverse --reject-file=/dev/null "$tempActiveFile" "$previousPatchFile" &> /dev/null ; then
-					cp "$file" "$tempActiveFile"
-					patchOk=true
-				# reverse patch failed
+			
+			if $thisPackageInList; then
+				# only this package modified active flie - ignore any previous patch and patch .orig file
+				if ! $otherPackagesInList ; then
+					if [ -e "$file.orig" ]; then
+						cp "$file.orig" "$tempActiveFile"
+						patchOk=true
+					else
+						patchErrors+=( "no original file for $baseName" )
+					fi
+				# this and others have modified the active file
+				# attempt to remove the previous patch for this package
+				# then patch the result
 				else
-					patchErrors+=( "unable to remove previous patch for $baseName" )
+					if $patch --reverse -o "$tempActiveFile" "$file" "$previousPatchFile" &> /dev/null ; then
+						patchOk=true
+					# reverse patch failed
+					else
+						patchErrors+=( "unable to remove previous patch for $baseName" )
+					fi
 					rm "$previousPatchFile"
 				fi
+			# this package has not previously modified the active file but other packages may have
+			#	(if no others, there is no .orig file)
+			# patch active file
+			else
+				cp "$file" "$tempActiveFile"
+				patchOk=true
 			fi
 			patchSuccess=false
 			forwardPatched="$tempFileDir/$baseName".patchedForInstall
@@ -1626,15 +1647,14 @@ if ! [ -z "$fileListPatched" ];then
 			# a suitable source for the patch was located above
 			if $patchOk; then
 				# attempt to patch the active file with any file ending in .patch
-				# the first one that successfully creates a forward AND reverse patch
+				# the first one that successfully creates a forward AND reverse patch is used
 				# .patchedForInstall provides the patched file for updateActiveFile
 				patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
 				for patchFile in ${patchFiles[@]};do
 					cp "$tempActiveFile" "$forwardPatched"
-					if $patch -f -s --forward --reject-file=/dev/null "$forwardPatched" "$patchFile" &> /dev/null ; then
+					if $patch --forward "$forwardPatched" "$patchFile" &> /dev/null ; then
 						# forward patch succeeded - test reverse patch (both must succeed)
-						cp "$forwardPatched" "$reversePatchTest"
-						if $patch -f -s --reverse --reject-file=/dev/null "$reversePatchTest" "$patchFile" &> /dev/null ; then
+						if $patch --reverse -o /dev/null "$forwardPatched" "$patchFile" &> /dev/null ; then
 							patchSuccess=true
 							break
 						fi
@@ -1650,7 +1670,6 @@ if ! [ -z "$fileListPatched" ];then
 			else
 				patchErrors+=( "no patch source for $baseName" )
 			fi
-			rm -f "$reversePatchTest"
 			if ! $patchSuccess ; then
 				rm -f "$forwardPatched"
 				rm -f "$currentPatchFile"

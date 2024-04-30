@@ -4219,9 +4219,8 @@ def main():
 
 		# this runs in the background and will CONTINUE after PackageManager.py exits below
 		try:
-			logging.critical ("finishing up in packageManagerEnd.sh")
-			proc = subprocess.Popen ( command, bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			proc.communicate ()	# output ignored
+			logging.warning ("finishing up in packageManagerEnd.sh")
+			proc = subprocess.Popen ( command )
 		except:
 			logging.critical ("packageManagerEnd.sh failed")
 
@@ -4230,7 +4229,7 @@ def main():
 	time.sleep (5.0)
 	DbusIf.RemoveDbusService ()
 
-	logging.critical (">>>> PackageManager exiting")
+	logging.warning (">>>> PackageManager exiting")
 
 	# program exits here
 

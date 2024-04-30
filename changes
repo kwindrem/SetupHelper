@@ -18,6 +18,7 @@ v8.0: (beta)
 	replace OS's patch with one that handles more cases (eg, 0 context) and options
 	fixed: PackageManager hangs on Python 2 (Venus OS prior to v2.80)
 	fixed: some patching errors
+	fixed: PackageManager does not exit for reboot
 	
 v7.18:
 	fixed: only first service is uninstalled

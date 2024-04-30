@@ -1633,9 +1633,10 @@ if ! [ -z "$fileListPatched" ];then
 					fi
 					rm "$previousPatchFile"
 				fi
-			# this package has not previously modified the active file but other packages may have
-			#	(if no others, there is no .orig file)
-			# patch active file
+			# this package has not previously modified the active file
+			# other packages have modified the active file
+			# if not, there is no .orig file
+			# either way, patch the active file
 			else
 				cp "$file" "$tempActiveFile"
 				patchOk=true

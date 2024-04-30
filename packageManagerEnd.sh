@@ -64,16 +64,20 @@ while [ $# -gt 0 ]; do
 done
 
 # allow PackageManager exit before doing anything
-# insure the PackageManager service doesn't restart when it exits
-#	it will start up again after the reboot if it is still installed
 if $shUninstall || $reboot ; then
-	svc -o "/service/PackageManager"
+	service="/service/PackageManager"
+	# insure the PackageManager service doesn't restart when it exits
+	#	it will start up again after the reboot if it is still installed
+	#	only issue svc -o if PM is running or it will be started !!!
+	if [ $(svstat "$service" | awk '{print $2}') == "up" ]; then
+		svc -o "$service"
+	fi
 	while true; do
-		if [ -z $( pgrep -f PackageManager.py ) ];  then
+		if [ -z "$( pgrep -f PackageManager.py )" ]; then
 			break
 		else
 			logMessage "waiting for PackageManager.py to exit"
-			sleep 1
+			sleep 5
 		fi
 	done
 fi
@@ -95,9 +99,9 @@ if $shUninstall ; then
 fi
 
 if $reboot ; then
-	logMessage ">>>> rebooting to complete package un/install"
+	logMessage ">>>> REBOOTING ..."
 	# TODO: add -k for debugging - outputs message but doesn't reboot
-	shutdown -r now "rebooting to complete package un/install"
+	shutdown -r now "PackageManager is REBOOTING SYSTEM ..."
 elif $guiRestart ; then
 	if $shUninstall ; then
 		logMessage ">>>> restarting GUI"

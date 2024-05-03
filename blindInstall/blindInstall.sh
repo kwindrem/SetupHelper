@@ -46,8 +46,9 @@
 # to become available before running the package install script.
 #
 
-source "/data/SetupHelper-blind/EssentialResources"
-source "/data/SetupHelper-blind/LogHandler"
+source "/data/SetupHelper-blind/HelperResources/EssentialResources"
+source "/data/SetupHelper-blind/HelperResources/LogHandler"
+logToConsole=false
 
 logMessage "starting"
 

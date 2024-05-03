@@ -327,10 +327,7 @@ standardActionPrompt ()
     fi
     echo "  Uninstall (u) and restores all files to stock"
     echo "  Quit (q) without further action"
-    echo "  Display setup log (s) outputs the last 100 lines of the log"
-    if [ ! -z "$packageLogFile" ]; then
-        echo "  Display Log (l) outputs the last 100 lines of the log"
-    fi
+    echo "  Display log (l) outputs the last 100 lines of the log"
     echo
     response=''
     while true; do
@@ -359,9 +356,6 @@ standardActionPrompt ()
                 exit $EXIT_SUCCESS
                 ;;
             [lL]*)
-                displayLog $packageLogFile
-                ;;
-            [sS]*)
                 displayLog $setupLogFile
                 ;;
             *)
@@ -627,7 +621,7 @@ updateActiveFile ()
 		cp "$currentPatchFile" "$previousPatchFile"
 	# no patch file used for this update
 	#	make sure restoreActiveFile doesn't try to reverse patch for uninstall
-	else
+	elif [ -e "$previousPatchFile" ]; then
 		rm -f "$previousPatchFile"
 	fi
 	updateRestartFlags "$activeFile"
@@ -689,12 +683,15 @@ restoreActiveFile ()
 		# attempt to reverse patch the active file
 		#	if success, don't restore original
 		previousPatchFile="$previousPatchesDir/$baseName.patch"
-		if [ -e "$previousPatchFile" ] && 
-			$patch --reverse "$activeFile" "$previousPatchFile" &> /dev/null ; then
+		if ! [ -e "$previousPatchFile" ]; then
+			logMessage "CRITICAL: $packageName $baseName - no prevoius patch file"
+			unpatchError=true
+		elif $patch --reverse "$activeFile" "$previousPatchFile" &> /dev/null ; then
 			restoreOriginal=false
-		# no previous patch file or reverse patch failed
+		# reverse patch failed
 		#	original will be restored
 		else
+			logMessage "CRITICAL: $packageName $baseName - reverse patch failed"
 			unpatchError=true
 		fi
 	fi
@@ -710,15 +707,28 @@ restoreActiveFile ()
 		fi
     fi
 
+	#### TODO: DRASTIC but can't think of a way around this
+	#### TODO: how/when to erase this message for this package ?????
 	if $unpatchError ; then
-		#### TODO: DRASTIC but can't think of a way around this
-		message="CRITICAL: $package $baseName could not be uninstalled"
-		logMessage "message"
-		echo "message" >> "$scriptDir/patchErrors"
-		message="  moodificataions by $remainingPackages were lost and must be reinstalled"
-		logMessage "message"
-		echo "message" >> "$scriptDir/patchErrors"
+		message1="CRITICAL: $package $baseName could not be uninstalled cleanly"
+		message2="  $remainingPackages must be uninstalled and reinstalled"
+		logMessage "$message1"
+		logMessage "$message2"
+		# remove previous patch errors - and report this error
+		rm -f "$scriptDir/patchErrors"
+		echo "$message1" >> "$scriptDir/patchErrors"
+		echo "$message2" >> "$scriptDir/patchErrors"
 
+		rm -f "$packageList"
+
+		# report errors to other packages as well
+		for otherPackage in $remainingPackages ; do
+			otherPkgPatchErrors="$packageRoot/$otherPackage/patchErrors"
+			rm -f "$otherPkgPatchErrors"
+			echo "$message1" >> "$otherPkgPatchErrors"
+			echo "$otherPackage must be uninstalled and reinstalled" >> "$otherPkgPatchErrors"
+			rm -f "$setupOptionsRoot/$otherPackage/previousPatches/$baseName.patch"
+		done
 		setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
 	fi
 
@@ -1454,7 +1464,6 @@ if $reinstall ; then
 # not running from reinstallMods
 else
     runningAtBoot=false
-    pruneSetupLogFile
 fi
 
 if [ ! -d "$setupOptionsDir" ]; then
@@ -1589,14 +1598,14 @@ fi # if [ $scriptAction != 'UNINSTALL' ]
 
 if ! [ -z "$fileListPatched" ];then
 	patchErrors=()
-	for file in ${fileListPatched[@]}; do
-		baseName=$( basename $file )
+	for activeFile in ${fileListPatched[@]}; do
+		baseName=$( basename $activeFile )
 		tempActiveFile="$tempFileDir/$baseName"
-		if [ -e "$file" ] ; then
+		if [ -e "$activeFile" ] ; then
 			previousPatchFile="$previousPatchesDir/$baseName.patch"
 
 			# chek for this package and others in .package list
-			packageList="$file.package"
+			packageList="$activeFile.package"
 			thisPackageInList=false
 			otherPackagesInList=false
 			if [ -f "$packageList" ]; then
@@ -1615,8 +1624,8 @@ if ! [ -z "$fileListPatched" ];then
 			if $thisPackageInList; then
 				# only this package modified active flie - ignore any previous patch and patch .orig file
 				if ! $otherPackagesInList ; then
-					if [ -e "$file.orig" ]; then
-						cp "$file.orig" "$tempActiveFile"
+					if [ -e "$activeFile.orig" ]; then
+						cp "$activeFile.orig" "$tempActiveFile"
 						patchOk=true
 					else
 						patchErrors+=( "no original file for $baseName" )
@@ -1625,26 +1634,24 @@ if ! [ -z "$fileListPatched" ];then
 				# attempt to remove the previous patch for this package
 				# then patch the result
 				else
-					if $patch --reverse -o "$tempActiveFile" "$file" "$previousPatchFile" &> /dev/null ; then
+					if $patch --reverse -o "$tempActiveFile" "$activeFile" "$previousPatchFile" &> /dev/null ; then
 						patchOk=true
 					# reverse patch failed
 					else
-						patchErrors+=( "unable to remove previous patch for $baseName" )
+						patchErrors+=( "unable to remove previous patch from active file $baseName" )
 					fi
-					rm "$previousPatchFile"
 				fi
 			# this package has not previously modified the active file
 			# other packages have modified the active file
 			# if not, there is no .orig file
 			# either way, patch the active file
 			else
-				cp "$file" "$tempActiveFile"
+				cp "$activeFile" "$tempActiveFile"
 				patchOk=true
 			fi
 			patchSuccess=false
 			forwardPatched="$tempFileDir/$baseName".patchedForInstall
 			currentPatchFile="$tempFileDir/$baseName.currentPatch"
-			reversePatchTest="$tempFileDir/$baseName.reversePatchTest"
 			# a suitable source for the patch was located above
 			if $patchOk; then
 				# attempt to patch the active file with any file ending in .patch
@@ -1679,7 +1686,7 @@ if ! [ -z "$fileListPatched" ];then
 			patchErrors+=( "$baseName no active file for patch" )
 			continue
 		fi
-	done # for file
+	done # for activeFile
 
 	# save errors in patchErrors file
 	if ! [ -z "$patchErrors" ] ; then

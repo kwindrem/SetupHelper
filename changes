@@ -19,6 +19,13 @@ v8.0: (beta)
 	fixed: PackageManager hangs on Python 2 (Venus OS prior to v2.80)
 	fixed: some patching errors
 	fixed: PackageManager does not exit for reboot
+	updatePackage: prompt for helper resources update
+	don't use HelperResources from package directory (only from SetupHelper)
+		this was necessary because /data/SetupHelper/patch
+		is now used in place of the stock patch executable
+	moved SetupHelper logging to /var/log/PackageManager/current
+	fixed: uninstall of patched files failed
+	added manual recheck for errors discovered in setup script prechecks
 	
 v7.18:
 	fixed: only first service is uninstalled

@@ -2083,6 +2083,7 @@ class PackageClass:
 					with open ( packageDir + "/patchErrors" ) as file:
 						for line in file:
 							patchCheckErrors.append ( line )
+							compatible = False
 					patchCheckErrors = list ( set ( patchCheckErrors ) )
 				if patchCheckErrors != self.PatchCheckErrors:
 					self.PatchCheckErrors = patchCheckErrors
@@ -2092,7 +2093,6 @@ class PackageClass:
 							details += patchFailure + "\n"
 							logging.warning (packageName + " patch check error: " + patchFailure + " ")
 						self.SetIncompatible ("patch error", details,)
-						compatible = False
 					else:
 						logging.warning (packageName + " patch check reported no errors")
 

@@ -6,10 +6,15 @@
 # Venus OS will also be reinstalled if a suitable .swu file is found on removable media
 
 # log activity
+logDir="/var/log/PackageManager"
+logFile="$logDir/current"
+if ! [ "$logDir" ]; then
+	mkdir -P "$logDir"
+fi
 logMessage ()
 {
 	echo "blindUninstall: $*"
-	echo "blindUninstall: $*" | tai64n >> "/data/log/SetupHelper"
+	echo "blindUninstall: $*" | tai64n >> "$logDir"
 }
 
 logMessage "--- starting blind uninstall - all packages will be uninstalled"

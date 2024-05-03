@@ -7,9 +7,9 @@
 
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 packageBase="$( dirname $scriptDir )"
-helperFilesDir="$scriptDir/HelperResources"
-source "$helperFilesDir/EssentialResources"
-source "$helperFilesDir/LogHandler"
+helperResourcesDir="$scriptDir/HelperResources"
+source "$helperResourcesDir/EssentialResources"
+source "$helperResourcesDir/LogHandler"
 
 # disable outputting log messages to console
 runningAtBoot=true
@@ -19,7 +19,6 @@ logMessage "reinstallMods starting"
 # prevent PackageManager from conflicting with this script
 rm -f "/etc/venus/REINSTALL_PACKAGES"
 
-# call setup script only if SetupHelper not currently installed and was not manually uninstalled
 rebootNeeded=false
 if [ -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL" ]; then
 	logMessage "CRITICAL: SetupHelper was manually uninstalled therefore it was not reinstalled"

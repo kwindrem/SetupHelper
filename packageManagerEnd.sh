@@ -24,7 +24,6 @@
 #
 #	reboot overrides a guiRestart since the reboot will restart the GUI
 
-# PackageManager log file since this is an extension PM
 logFile=/data/log/PackageManager/current
 logMessage ()
 {

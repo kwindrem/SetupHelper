@@ -20,8 +20,6 @@
 #
 #	patched replacement files are created in CommonResources prior to returning control to the setup script
 #
-# helper resources are copied from the HelperResources directory at the root of all packages to HelperResources in the package directory
-#
 # This is a unix bash script and should be run on a host computer, not a GX device
 # Windows will not run this script natively.
 # However Windows 10 apparently supports bash:
@@ -433,11 +431,7 @@ if [ "$globalEndAction" == "restore" ]; then
 		fi
 		logMessage "WARNING $package: restored from backup"
 		deleteNestedDirectories "$sourceFiles"
-		deleteNestedDirectories "$sourceDirectory/HelperResources"
 		mv "$backupFiles" "$sourceFiles"
-		if [ -e "$backupDirectory/HelperResources" ]; then
-			mv -f "$backupDirectory/HelperResources" "$sourceDirectory"
-		fi
 		deleteNestedDirectories $backupDirectory
 	done
 	exit
@@ -451,57 +445,6 @@ if [ -f "$packageRoot/SetupHelper/version" ]; then
 else
 	shVersion=""
 	shVersionNumber=0
-fi
-
-
-if [ -f "$packageRoot/SetupHelper/HelperResources/version" ]; then
-	shHelperVersion=$( cat "$packageRoot/SetupHelper/HelperResources/version" )
-else
-	shHelperVersion=""
-fi
-if  [ "$shVersion" != "$shHelperVersion" ]; then
-	logMessage "WARNING: SetupHelper and it's HelperResources versions differ"
-	logMessage "    updating HelperResources version from $shHelperVersion to $shVersion"
-	cp "$packageRoot/SetupHelper/version" "$packageRoot/SetupHelper/HelperResources/version"
-fi
-if [ -f "$packageRoot/HelperResources/version" ]; then
-	helperVersion=$( cat "$packageRoot/HelperResources/version" )
-	versionStringToNumber $helperVersion
-	helperVersionNumber=$versionNumber
-else
-	helperVersion=""
-	helperVersionNumber=0
-fi
-
-# update HelperResources main copy if SetuHelper is a released version
-#	and SetupHelper is newer or if file modificaitons are newer than main copy
-if [[ $shVersion != *~* ]]; then
-	setupHelperIsReleased=false
-	updateHelperResources=false
-	if (( shVersionNumber > helperVersionNumber )); then
-		updateHelperResources=true
-	# if versions are the same, compare file mod dates
-	elif (( shVersionNumber == helperVersionNumber )); then
-		for file in $( ls "$packageRoot/HelperResources" ); do
-			baseName=$( basename $file )
-			if [[ "$packageRoot/SetupHelper/HelperResources"/$baseName" -nt "$packageRoot/HelperResources"/$baseName" ]]; then
-				updateHelperResources=true
-				break
-			fi
-		done
-	fi
-	if $updateHelperResources ; then
-		logMessage "updating main copy of HelperResources from SetupHelper"
-exit
-		rm -rf "$packageRoot/HelperResources"
-		cp -r "$packageRoot/SetupHelper/HelperResources" "$packageRoot"
-		cp "$packageRoot/SetupHelper/version" "$packageRoot/HelperResources"
-		helperVersion=$shVersion
-		helperVersionNumber=$shVersionNumber
-	fi
-else
-	logMessage "WARNING: SetupHelper is not a released version - HelperResources NOT UPDATED"
-	setupHelperIsReleased=true
 fi
 
 
@@ -544,7 +487,7 @@ for package in $packageList; do
 	versionIndependentFileSet="$workingFiles/VersionIndependent"
 
     if [ ! -d "$sourceDirectory" ] || [ ! -f "$sourceDirectory/version" ]; then
-        logMessage "$sourceDirectory - not a package directory"
+        logMessage "WARNING: $sourceDirectory - not a package directory - skipping"
         continue	# next package
     fi
     if [ ! -d "$sourceFiles" ]; then
@@ -613,9 +556,6 @@ for package in $packageList; do
 		mkdir -p "$workingDirectory"
 		if [ -d "$sourceFiles" ]; then
 			cp -pR "$sourceFiles" "$workingFiles"
-		fi
-		if [ -e "$sourceDirectory/HelperResources" ]; then
-			cp -pR "$sourceDirectory/HelperResources" "$workingDirectory"
 		fi
 	fi
 
@@ -864,40 +804,6 @@ for package in $packageList; do
 			done
 		done # for file in fileListPatched
 	fi	# check patch files
-
-	# update the package's copy of helper resources
-	if [ -f "$workingDirectory/HelperResources/version" ]; then
-		pkgHelperVersion=$( cat "$workingDirectory/HelperResources/version" )
-		versionStringToNumber $pkgHelperVersion
-		pkgHelperVersionNumber=$versionNumber
-	else
-		pkgHelperVersion=""
-		pkgHelperVersionNumber=0
-	fi
-	updateHelperResources=false
-	if (( helperVersionNumber > pkgHelperVersionNumber )); then
-		updateHelperResources=true
-	# if versions are the same, compare file mod dates
-	elif (( helperVersionNumber == pkgHelperVersionNumber )); then
-		for file in $( ls "$packageRoot/HelperResources" ); do
-			baseName=$( basename $file )
-			if [[ "$packageRoot/HelperResources/$baseName" -nt "$workingDirectory/HelperResources/$baseName" ]]; then
-				updateHelperResources=true
-				break
-			fi
-		done
-	fi
-	if $updateHelperResources ; then
-		logMessage "$package: updating HelperResources to $helperVersion"
-		cp -r "$packageRoot/HelperResources" "$workingDirectory"
-	fi
-
-	if ((packageErrors > 0 )); then
-		logMessage "$packageErrors errors so far"
-		if ! yesNoPrompt "continue with file set checks anyway (y/n)? " ; then
-			continue # next package
-		fi
-	fi
 
 	beginProgress "$package: updating file sets"
 
@@ -1223,7 +1129,6 @@ for package in $packageList; do
 				# flag file set incomplete
 				if [ -f "$replacement.CHECK_REPLACEMENT" ] || [ -f "$replacement.NO_ORIG" ] \
 						|| [ -f "$replacement.BAD_LINK" ] ; then
-echo "#### final checks INCOMPLETE"
 					touch "$fileSet/INCOMPLETE"
 				fi
 			done # for file
@@ -1321,10 +1226,6 @@ echo "#### final checks INCOMPLETE"
 				if [ -d "$sourceFiles" ]; then
 					mv "$sourceFiles" "$backupFiles"
 				fi
-				if [ -e "$sourceDirectory/HelperResources" ]; then
-					rm -rf "$backupDirectory/HelperResources"
-					mv "$sourceDirectory/HelperResources" "$backupDirectory"
-				fi
 			else
 				logMessage "$package: $backupName unchanged"
 			fi
@@ -1334,11 +1235,11 @@ echo "#### final checks INCOMPLETE"
 				deleteNestedDirectories "$sourceFiles"
 				mv "$workingFiles" "$sourceFiles"
 			fi
-			if [ -e "$workingDirectory/HelperResources" ]; then
-				rm -rf "$sourceDirectory/HelperResources"
-				mv "$workingDirectory/HelperResources" "$sourceDirectory"
-				deleteNestedDirectories $workingDirectory
+			if [ -e "$sourceDirectory/HelperResources" ]; then
+				logMessage "$package: removing HelperResources"
+				deleteNestedDirectories "$sourceDirectory/HelperResources"
 			fi
+			deleteNestedDirectories "$workingDirectory"
 			;;
 		*)
 			logMessage "ERROR: invalid end action $endAction"

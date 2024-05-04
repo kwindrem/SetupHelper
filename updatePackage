@@ -1235,7 +1235,7 @@ for package in $packageList; do
 				deleteNestedDirectories "$sourceFiles"
 				mv "$workingFiles" "$sourceFiles"
 			fi
-			if [ -e "$sourceDirectory/HelperResources" ]; then
+			if [ -e "$sourceDirectory/HelperResources" ] && [ "$package" != "SetupHelper"]; then
 				logMessage "$package: removing HelperResources"
 				deleteNestedDirectories "$sourceDirectory/HelperResources"
 			fi

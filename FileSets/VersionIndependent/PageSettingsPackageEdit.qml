@@ -42,8 +42,7 @@ MbPage {
 	property bool navigate: ! actionPending && ! waitForAction
 	property bool detailsExist: incompatibleDetails != ""
 	property bool detailsResolvable: incompatibleResolvableItem.valid ? incompatibleResolvableItem.value : ""
-	property bool showProceed: ( showDetails || actionPending ) && ! waitForAction
-	/////////property bool showProceed: ( ! detailsExist || detailsResolvable || actionPending ) && ! waitForAction
+
 	property bool showDetails: false
 	property string localError: ""
 
@@ -354,7 +353,7 @@ MbPage {
 			description: ""
 			value: ( actionPending || detailsResolvable ) ? qsTr("Proceed") : showDetails ? qsTr ("Recheck") : qsTr ("Now")
 			onClicked: confirm ()
-			show: ( actionPending || showDetails  ) && showProceed || showActionNeeded
+			show: ( actionPending || showDetails || showActionNeeded ) && ! waitForAction
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK

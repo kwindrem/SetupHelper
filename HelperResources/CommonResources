@@ -686,13 +686,17 @@ restoreActiveFile ()
 		if ! [ -e "$previousPatchFile" ]; then
 			logMessage "CRITICAL: $packageName $baseName - no prevoius patch file"
 			unpatchError=true
-		elif $patch --reverse "$activeFile" "$previousPatchFile" &> /dev/null ; then
-			restoreOriginal=false
-		# reverse patch failed
-		#	original will be restored
 		else
-			logMessage "CRITICAL: $packageName $baseName - reverse patch failed"
-			unpatchError=true
+			tempFile="$tempFileDir/$baseName"
+			cp "$activeFile" "$tempFile"
+			if $patch --reverse -o "$activeFile" "$tempFile" "$previousPatchFile" &> /dev/null ; then
+				restoreOriginal=false
+			# reverse patch failed
+			#	original will be restored
+			else
+				logMessage "CRITICAL: $packageName $baseName - reverse patch failed"
+				unpatchError=true
+			fi
 		fi
 	fi
 	# restore original if no other packages have modified this active file
@@ -1642,7 +1646,7 @@ if ! [ -z "$fileListPatched" ];then
 					fi
 				fi
 			# this package has not previously modified the active file
-			# other packages have modified the active file
+			# other packages may have modified the active file
 			# if not, there is no .orig file
 			# either way, patch the active file
 			else
@@ -1659,8 +1663,7 @@ if ! [ -z "$fileListPatched" ];then
 				# .patchedForInstall provides the patched file for updateActiveFile
 				patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
 				for patchFile in ${patchFiles[@]};do
-					cp "$tempActiveFile" "$forwardPatched"
-					if $patch --forward "$forwardPatched" "$patchFile" &> /dev/null ; then
+					if $patch --forward -o "$forwardPatched" "$tempActiveFile" "$patchFile" &> /dev/null ; then
 						# forward patch succeeded - test reverse patch (both must succeed)
 						if $patch --reverse -o /dev/null "$forwardPatched" "$patchFile" &> /dev/null ; then
 							patchSuccess=true

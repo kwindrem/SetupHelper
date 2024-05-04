@@ -3667,7 +3667,7 @@ lastTimeSync = 0
 
 WaitForGitHubVersions = False
 			
-# states for actionNeeded
+# states for package.ActionNeeded
 REBOOT_NEEDED = 2
 GUI_RESTART_NEEDED = 1
 NONE = 0
@@ -3859,7 +3859,12 @@ def mainLoop ():
 		actionsNeeded += "REBOOT system ?"
 	elif systemAction == GUI_RESTART_NEEDED:
 		actionsNeeded += "restart GUI ?"
-	DbusIf.DbusService['/ActionNeeded'] = actionsNeeded
+
+	# don't show an action needed if reboot, etc is pending
+	if SystemReboot or GuiRestart or RestartPackageManager or InitializePackageManager:
+		DbusIf.DbusService['/ActionNeeded'] = ""
+	else:
+		DbusIf.DbusService['/ActionNeeded'] = actionsNeeded
 
 	DbusIf.UNLOCK ("mainLoop 2")
 
@@ -4187,6 +4192,7 @@ def main():
 	if MediaScan.AutoUninstall:
 		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='PmStatus')
 		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
+		DbusIf.DbusService['/ActionNeeded'] = ""
 		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
 		SystemReboot = True
 
@@ -4199,10 +4205,12 @@ def main():
 	elif SetupHelperUninstall:
 		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='PmStatus' )
 		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='Editor' )
+		DbusIf.DbusService['/ActionNeeded'] = ""		
 		logging.critical (">>>> UNINSTALLING SetupHelper ...")
 	elif SystemReboot:
 		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='PmStatus')
 		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='Editor' )
+		DbusIf.DbusService['/ActionNeeded'] = ""
 		logging.warning (">>>> REBOOTING SYSTEM")
 
 	# remaining tasks are handled in packageManagerEnd.sh because

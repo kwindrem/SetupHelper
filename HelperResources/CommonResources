@@ -395,9 +395,9 @@ forcePackageUninstall ()
 
 # backupActiveFile makes a copy of the active file in file.orig
 # if the original file does not exist the NO_ORIG flag is set
-#	to allow restoreAcive file to remove the active file
+#	to allow restoreAciveFile to remove the active file
 #
-# if the backup (.orig file) exists the backup is not ukpdated
+# if the backup (.orig file) exists the backup is not updated
 #
 # $1 is the full path/file name to be backed up
 #
@@ -410,18 +410,26 @@ backupActiveFile ()
 	if $installFailed ; then
 		return 1
 	fi
+	local activeFile="$1"
+	local origFile="$activeFile.orig"
+	local noOrigFile="$activeFile.NO_ORIG"
 
-    baseName=$(basename $1)
-    if [ -e "$1.orig" ] || [ -e "$1.NO_ORIG" ]; then
-        return 1
-    elif [ ! -f "$1" ]; then
-        touch "$1.NO_ORIG"
-        return 0
-    else
-        cp "$1" "$1.orig"
-        rm -f "$1.NO_ORIG"
-        return 0
-    fi
+	if [ -e "$activeFile" ]; then
+		if ! [ -e "$origFile" ]; then
+			cp "$activeFile" "$origFile"
+			rm -f "$noOrigFile"
+			return 0
+		else
+			return 1
+		fi
+	else
+		if ! [ -e "$noOrigFile" ]; then
+			touch "$noOrigFile"
+			return 0
+		else
+			return 1
+		fi		
+	fi
 }
 
 
@@ -506,11 +514,10 @@ updateActiveFile ()
 		return 1
 	fi
 
-    # separate source and replacement files specified
     local sourceFile=""
     local activeFile=""
-    local previousPackage=""
-    local doPatch=false
+
+    # separate source and replacement files specified
     if [ $# == 2 ]; then
         if [ -f "$1" ]; then
 			sourceFile="$1"
@@ -523,31 +530,41 @@ updateActiveFile ()
     else
         activeFile="$1"
     fi
-
 	local baseName=$(basename "$activeFile")
-	local packageList="$activeFile.package"
+
 	# replacement files are not needed for some versions
 	# if so marked, leave original untouched
-	if [ -f "$fileSet/$baseName.USE_ORIGINAL" ]; then
+	if [ -e "$fileSet/$baseName.USE_ORIGINAL" ]; then
 		return 1
+	fi
+
+	# if the location of the active file must exist
+	if [ ! -e "$(dirname "$activeFile")" ]; then
+		setInstallFailed $EXIT_FILE_SET_ERROR "path to $activeFile does not exist"
+		return 1
+	fi
+
+    local usePatchedFile=false
+	local patchedReplacement="$tempFileDir/$baseName.patchedForInstall"
+	local currentPatchFile="$tempFileDir/$baseName.currentPatch"
 
 	# source file not specified separately - look for it in expected places
-    elif [ -z "$sourceFile" ]; then
+    if [ -z "$sourceFile" ]; then
 		# first in temp files - patched file
- 		if [ -f "$tempFileDir/$baseName.patchedForInstall" ]; then
-            sourceFile="$tempFileDir/$baseName.patchedForInstall"
-            doPatch=true
+ 		if [ -e "$patchedReplacement" ] && [ -e "$currentPatchFile" ]; then
+            sourceFile="$patchedReplacement"
+            usePatchedFile=true
 		# then in temp files - replacement
-		elif [ -f "$tempFileDir/$baseName" ]; then
+		elif [ -e "$tempFileDir/$baseName" ]; then
             sourceFile="$tempFileDir/$baseName"
 		# then in version-specific FileSet
-        elif [ -f "$fileSet/$baseName" ]; then
+        elif [ -e "$fileSet/$baseName" ]; then
             sourceFile="$fileSet/$baseName"
 		# then in version-independent file set
-        elif [ -f "$versionIndependentFileSet/$baseName" ]; then
+        elif [ -e "$versionIndependentFileSet/$baseName" ]; then
             sourceFile="$versionIndependentFileSet/$baseName"
-		# then in FileSets
-        elif [ -f "$pkgFileSets/$baseName" ]; then
+		# then in FileSets (previous location of version-indepencent files)
+        elif [ -e "$pkgFileSets/$baseName" ]; then
             sourceFile="$pkgFileSets/$baseName"
 		# nothing found - can't continue
 		else
@@ -556,152 +573,167 @@ updateActiveFile ()
         fi
     fi
 
-	local pathToFile=$(dirname "$activeFile")
-	if [ ! -e "$pathToFile" ]; then
-		# fatal if GUI v1 not present and needed for install
-		if [[ "$pathToFile" == "/opt/victronenergy/gui/"* ]]; then
-			if $guiV1required ; then
-				setInstallFailed $EXIT_NO_GUI_V1 "$packageName requires GUI v1"
-			# GUI v1 not needed - proceed without updating active file
-			fi
-		# active file is not in GUI v1 part of file system - so this is fatal
-		 else
-			setInstallFailed $EXIT_FILE_SET_ERROR "path to $activeFile does not exist"
-		fi
-		return 1
-	fi
-
-	# check for package conflicts
-	# loop through all names in .package file
-	#	conflict if package names do not match and this is a replacement (not a patch)
-	matchFound=false
+	# can't continue if other packages modified this file and this is a replacement (not a patch)
+	local local packageList="$activeFile.package"
+    local previousPackage=""
+    local matchFound=false
 	if [ -e "$packageList" ]; then
 		previousPackages=$( cat "$packageList" )
 		for previousPackage in ${previousPackages[@]}; do
-			if [ $packageName == $previousPackage ]; then
+			if [ "$packageName" == "$previousPackage" ]; then
 				matchFound=true
-			elif ! $doPatch ; then
-				setInstallFailed $EXIT_PACKAGE_CONFLICT "$(basename $activeFile) was already modfied by $previousPackage"
+			elif ! $usePatchedFile ; then
+				setInstallFailed $EXIT_PACKAGE_CONFLICT "$baseName was already modfied by $previousPackage"
 				return 1
 			fi
 		done
 	fi
 
-	# add file to installed files list (used for uninstallAll)
-	# do this before actually modifying things just in case there's an error
-	#	that way the uninstall is assured
-	echo "$activeFile" >> "$installedFilesList"
+	# add file to installed files list (used by uninstallAll)
+	if [ -e "$installedFilesList" ] \
+			&& (( $( grep -c "$activeFile" "$installedFilesList" ) == 0 )); then
+		echo "$activeFile" >> "$installedFilesList"
+	fi
 
-	# update package flag to prevent overwrites by other packages
+	# save the current patch file for use during a future uninstall
+	local previousPatchFile="$previousPatchesDir/$baseName.patch"
+	if $usePatchedFile ; then
+		cp "$currentPatchFile" "$previousPatchFile"
+	# no patch file used for this update
+	else
+		rm -f "$previousPatchFile"
+	fi
+
 	# if replacement, replace the .package file
-	if ! $doPatch ; then
+	if ! $usePatchedFile ; then
 		echo $packageName > "$packageList"
-	# if patch and this package not in list, add add it
+	# if patch and this package not in list yet, add add it
 	elif ! $matchFound ; then
 		echo $packageName >> "$packageList"
 	fi
-	# already updated - don't need to do any more
-	if [ -f "$activeFile" ]; then
-		if cmp -s "$sourceFile" "$activeFile" > /dev/null ; then
-			return 1
-		fi
-	fi
 
-    backupActiveFile "$activeFile"
-
-	# update the active file
+	# update the active file if needed
 	# patched files have already incorporated current active file content
-	# so nothing diffrerent here
-	cp "$sourceFile" "$activeFile"
-
-	# save the current patch file for use during an uninstall
-	currentPatchFile="$tempFileDir/$baseName.currentPatch"
-	previousPatchFile="$previousPatchesDir/$baseName.patch"
-	if [ -e "$currentPatchFile" ]; then
-		cp "$currentPatchFile" "$previousPatchFile"
-	# no patch file used for this update
-	#	make sure restoreActiveFile doesn't try to reverse patch for uninstall
-	elif [ -e "$previousPatchFile" ]; then
-		rm -f "$previousPatchFile"
+	# 	so nothing diffrerent here
+	doUpdate=false
+	if ! [ -f "$activeFile" ] || ! cmp -s "$sourceFile" "$activeFile" ; then
+		backupActiveFile "$activeFile"
+		cp "$sourceFile" "$activeFile"
+		if [[ -x "$activeFile.orig" ]]; then
+			chmod +x "$activeFile"
+		fi
+		updateRestartFlags "$activeFile"
+		thisFileUpdated=true
+		return 0
+	else
+		return 1
 	fi
-	updateRestartFlags "$activeFile"
-	thisFileUpdated=true
-	return 0
 } # end updateActiveFile ()
 
 
-# restoreActiveFile moves the backup copy to the active location
+# restoreActiveFile 
+# restores the active file to the content before this package modified it
+# for replacements, the backup copy is moved to the active location
 # if the backup copy doesn't exist BUT the NO_ORIG flag is set
 # the active copy is deleted to restore the system to stock
+#
+# for patches, this package's changes are removed from the active file
+#	by reverse patching it
+#
+# if the reverse patch fails, the original is restored
+#	modifications from all other packages are also removed !!
+#	this is drastic but has best chance to leave the system without errors
+#
 # $1 is the active name, the one to be backed up
 #
 # returns 0 if active file was restored, 1 if not
 # also sets thisFileUpdated for backwards compatibility with existing setup scripts
 #
-# restore only if the package that updated this file is the current package
-#	failure is indicated in the return code but does not trigger as faliure
-
 
 restoreActiveFile ()
 {
     thisFileUpdated=false
 	local activeFile="$1"
-	local baseName=$( basename "$activeFile" )
 	local packageList="$activeFile.package"
 	# look for this package's name in .package list
 	#	and remove it if found
 	matchFound=false
 	remainingPackages=""
 	if [ -f "$packageList" ]; then
-		previousPackages=$( cat "$packageList" )
+		previousPackages=($( cat "$packageList" ))
 		for previousPackage in ${previousPackages[@]}; do
-			if [ $packageName == $previousPackage ]; then
+			if [ "$packageName" == "$previousPackage" ]; then
 				matchFound=true
 			else
 				remainingPackages+="$previousPackage "
 			fi
 		done
-	# no .package file - so OK to install
+	# no .package file - so proceed with removal anyway
 	else
 		matchFound=true
 	fi
 	
-	# if not found - nothing to uninstall
+	# if this package not found - nothing to do
 	if ! $matchFound ; then
 		return 1
     fi
-	restoreOriginal=true
-	unpatchError=false
-	# no other packages in .package so remove it
-	#	and restore the original
-	if [ -z "$remainingPackages" ] ; then
-		rm -f "$packageList"
-	else
-		# eliminate this package from .package list if there are others
-		grep -v "$packageName" "$packageList" | tee "$packageList" > /dev/null
 
-		# attempt to reverse patch the active file
-		#	if success, don't restore original
-		previousPatchFile="$previousPatchesDir/$baseName.patch"
-		if ! [ -e "$previousPatchFile" ]; then
-			logMessage "CRITICAL: $packageName $baseName - no prevoius patch file"
-			unpatchError=true
-		else
+	local baseName=$( basename "$activeFile" )
+	local previousPatchFile="$previousPatchesDir/$baseName.patch"
+
+	reversePatchError=false
+	restoreOriginal=false
+	# no other packages so restore the original
+	if [ -z "$remainingPackages" ] ; then
+		restoreOriginal=true
+	# other packages have also modified the active file
+	# attempt to reverse patch the active file
+	#	if success, move result into the active position
+	#	DO NOT restore original
+	else
+		if [ -e "$previousPatchFile" ]; then
 			tempFile="$tempFileDir/$baseName"
 			cp "$activeFile" "$tempFile"
-			if $patch --reverse -o "$activeFile" "$tempFile" "$previousPatchFile" &> /dev/null ; then
-				restoreOriginal=false
-			# reverse patch failed
-			#	original will be restored
+			if $patch --reverse -o "$activeFile.tmp" "$tempFile" "$previousPatchFile" &> /dev/null ; then
+				mv -f "$activeFile.tmp" "$activeFile"
+				thisFileUpdated=true
 			else
 				logMessage "CRITICAL: $packageName $baseName - reverse patch failed"
-				unpatchError=true
+				rm -f "$activeFile.tmp"
+				reversePatchError=true
 			fi
+		else
+			logMessage "CRITICAL: $packageName $baseName - no prevoius patch file"
+			reversePatchError=true
+		fi
+		# if the reverse patch failed, remove mods from ALL packages
+		#### TODO: DRASTIC but can't think of a way around this
+		if $reversePatchError ; then
+			message1="CRITICAL: $package $baseName could not be uninstalled cleanly"
+			message2="  $remainingPackages must be uninstalled and reinstalled"
+			logMessage "$message1"
+			logMessage "$message2"
+			echo "$message1" >> "$scriptDir/patchErrors"
+			echo "$message2" >> "$scriptDir/patchErrors"
+
+			# report errors to other packages as well
+			for otherPackage in $remainingPackages ; do
+				otherPkgPatchErrors="$packageRoot/$otherPackage/patchErrors"
+				echo "$message1" >> "$otherPkgPatchErrors"
+				echo "$otherPackage must be uninstalled and reinstalled" >> "$otherPkgPatchErrors"
+				# remove previous patch in other package(s) since it no longer applies
+				rm -f "$previousPatchesRoot/$otherPackage/$baseName.patch"
+			done
+			setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
 		fi
 	fi
+
+	# always remove previous patch file
+	rm -f "$previousPatchFile"
+
 	# restore original if no other packages have modified this active file
 	#	or if reverse patch failed
-	if $restoreOriginal ; then
+	if $restoreOriginal || $reversePatchError ; then
 		if [ -e "$activeFile.orig" ]; then
 			mv -f "$activeFile.orig" "$activeFile"
 			thisFileUpdated=true
@@ -709,41 +741,24 @@ restoreActiveFile ()
 			rm -f "$activeFile"
 			thisFileUpdated=true
 		fi
-    fi
-
-	#### TODO: DRASTIC but can't think of a way around this
-	#### TODO: how/when to erase this message for this package ?????
-	if $unpatchError ; then
-		message1="CRITICAL: $package $baseName could not be uninstalled cleanly"
-		message2="  $remainingPackages must be uninstalled and reinstalled"
-		logMessage "$message1"
-		logMessage "$message2"
-		# remove previous patch errors - and report this error
-		rm -f "$scriptDir/patchErrors"
-		echo "$message1" >> "$scriptDir/patchErrors"
-		echo "$message2" >> "$scriptDir/patchErrors"
 
 		rm -f "$packageList"
 
-		# report errors to other packages as well
-		for otherPackage in $remainingPackages ; do
-			otherPkgPatchErrors="$packageRoot/$otherPackage/patchErrors"
-			rm -f "$otherPkgPatchErrors"
-			echo "$message1" >> "$otherPkgPatchErrors"
-			echo "$otherPackage must be uninstalled and reinstalled" >> "$otherPkgPatchErrors"
-			rm -f "$setupOptionsRoot/$otherPackage/previousPatches/$baseName.patch"
-		done
-		setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
+	# there are other packages, remove only this package from list
+	else
+		grep -v "$packageName" "$packageList" | tee "$packageList" > /dev/null
 	fi
-
-	rm -f "$previousPatchFile"
 
 	# remove file from installed file list
 	if [ -f "$installedFilesList" ]; then
 		grep -v "$activeFile" "$installedFilesList" | tee "$installedFilesList" > /dev/null
 	fi
-	updateRestartFlags "$activeFile"
-	return 0
+	if $thisFileUpdated; then
+		updateRestartFlags "$activeFile"
+		return 0
+	else
+		return 1
+	fi
 } # end restoreActiveFile ()
 
 
@@ -1031,7 +1046,7 @@ installAllServices ()
 	# get list of services in the package's service directory
 	if [ -d "$servicesDir" ]; then
 		servicesList=( $( cd "$servicesDir"; ls -d * 2> /dev/null ) )
-		if [ ! -z "$servicesList" ]; then
+		if ! [ -z "$servicesList" ]; then
 			logMessage "installing services"
 			for service in ${servicesList[@]} ; do
 				if $installFailed; then break; fi
@@ -1412,7 +1427,7 @@ while [ $# -gt 0 ]; do
 done
 
 # do after logToConsole is enabled/disabled abvove
-logMessage "--- starting setup script $packageVersion action $scriptAction"
+logMessage "--- starting setup script $packageVersion action: $scriptAction"
 
 # packages that require options to proceed unattended
 # must include the optionsRequried flag file in their package directory
@@ -1487,12 +1502,21 @@ getFileLists "$pkgFileSets"
 # tempFileDir is removed in the exit trap above but it is in volatile storage so will be removed on boot anyway
 tempFileDir=$( mktemp -d )
 
-# patch files previously used to patch a file are stored in setupOptions
-#	so they survive a firmware update or package update
-previousPatchesDir="$setupOptionsDir/previousPatches"
+# patch files previously used to patch a file are stored in /etc/venus
+# so they track the selected root fs and are erased when Venus OS is updated
+previousPatchesRoot="/etc/venus/previousPatches"
+previousPatchesDir="$previousPatchesRoot/$packageName"
 if ! [ -e "$previousPatchesDir" ]; then
 	mkdir -p "$previousPatchesDir"
 fi
+# relocate previous patch files
+oldPreviousPatchesDir="$setupOptionsDir/previousPatches"
+if [ -e "$oldPreviousPatchesDir" ]; then
+	logMessage "relocating previous patches"
+	mv "$oldPreviousPatchesDir"/* "$previousPatchesDir"
+	rm -rf "$oldPreviousPatchesDir"
+fi
+unset oldPreviousPatchesDir
 
 # do install pre-checks - skip if uninstalling
 if [ $scriptAction != 'UNINSTALL' ]; then
@@ -1580,35 +1604,40 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 			sed -e 's/VisibleItemModel/VisualItemModel/' "$sourceFile" > "$tempFileDir/$baseName"
 		done
 	fi
-fi # if [ $scriptAction != 'UNINSTALL' ]
 
-# create the forward and reverse patched files
-# used during the actual install and to test if the patch/reverse patch will succeed
-# done here so PackageManager knows if this will be possible before starting the opeartion
-#
-# if this and other packages have both modified the active file,
-#	the patch from this package is first removed
-#		by reverse patching the active file with the PREVIOUS patch file
-#	the new patch is then applied
-#	a test reverse patch insures the patch can be removed in the future
-#	the patch file used for this patch is then saved so it can be used
-#		for the reverse patch on next install/uninstall
-#
-# if no other packages have modified the active file,
-#	the patch is applied to .orig file if exists
-#	rather than reverse patching the active file
-#	this maintains compatibility with packages installed with older versions of SetupHelper
+	# create the forward and reverse patched files
+	# used during the actual install and to test if the patch/reverse patch will succeed
+	# done here so PackageManager knows if this will be possible before starting the install
+	#
+	# if this and other packages have both modified the active file,
+	#	the patch from this package is first removed
+	#		by reverse patching the active file with the PREVIOUS patch file
+	#	the new patch is then applied
+	#	a test reverse patch insures the patch can be removed in the future
+	#	the patch file used for this patch is then saved so it can be used
+	#		for the reverse patch on next install/uninstall
+	#
+	# if no other packages have modified the active file,
+	#	the patch is applied to .orig file if exists
+	#	rather than reverse patching the active file
+	#	this maintains compatibility with packages installed with older versions of SetupHelper
 
-
-if ! [ -z "$fileListPatched" ];then
-	patchErrors=()
-	for activeFile in ${fileListPatched[@]}; do
-		baseName=$( basename $activeFile )
-		tempActiveFile="$tempFileDir/$baseName"
-		if [ -e "$activeFile" ] ; then
+	if ! $installFailed && ! [ -z "$fileListPatched" ];then
+		patchErrors=()
+		for activeFile in ${fileListPatched[@]}; do
+			baseName=$( basename $activeFile )
+			tempActiveFile="$tempFileDir/$baseName"
+			currentPatchFile="$tempFileDir/$baseName.currentPatch"
 			previousPatchFile="$previousPatchesDir/$baseName.patch"
 
-			# chek for this package and others in .package list
+			rm -f "$currentPatchFile"
+
+			if ! [ -e "$activeFile" ] ; then
+				patchErrors+=( "$baseName no active file for patch" )
+				continue
+			fi
+
+			# check for this and other packages in .package list
 			packageList="$activeFile.package"
 			thisPackageInList=false
 			otherPackagesInList=false
@@ -1624,44 +1653,44 @@ if ! [ -z "$fileListPatched" ];then
 			fi
 
 			patchOk=false
-			
+
 			if $thisPackageInList; then
-				# only this package modified active flie - ignore any previous patch and patch .orig file
+				# only this package modified active file
+				# ignore any previous patch and patch .orig file
 				if ! $otherPackagesInList ; then
 					if [ -e "$activeFile.orig" ]; then
 						cp "$activeFile.orig" "$tempActiveFile"
 						patchOk=true
 					else
-						patchErrors+=( "no original file for $baseName" )
+						patchErrors+=( "$baseName no .orig file for patch" )
 					fi
 				# this and others have modified the active file
 				# attempt to remove the previous patch for this package
 				# then patch the result
-				else
+				elif [ -e "$previousPatchFile" ]; then
 					if $patch --reverse -o "$tempActiveFile" "$activeFile" "$previousPatchFile" &> /dev/null ; then
 						patchOk=true
 					# reverse patch failed
 					else
-						patchErrors+=( "unable to remove previous patch from active file $baseName" )
+						patchErrors+=( "$baseName unable to remove previous patch" )
 					fi
+				else
+					patchErrors+=( "$baseName no previous patch file" )
 				fi
 			# this package has not previously modified the active file
-			# other packages may have modified the active file
-			# if not, there is no .orig file
-			# either way, patch the active file
+			# patch the active file
 			else
 				cp "$activeFile" "$tempActiveFile"
 				patchOk=true
 			fi
 			patchSuccess=false
-			forwardPatched="$tempFileDir/$baseName".patchedForInstall
-			currentPatchFile="$tempFileDir/$baseName.currentPatch"
 			# a suitable source for the patch was located above
 			if $patchOk; then
 				# attempt to patch the active file with any file ending in .patch
 				# the first one that successfully creates a forward AND reverse patch is used
 				# .patchedForInstall provides the patched file for updateActiveFile
 				patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
+				forwardPatched="$tempActiveFile.patchedForInstall"
 				for patchFile in ${patchFiles[@]};do
 					if $patch --forward -o "$forwardPatched" "$tempActiveFile" "$patchFile" &> /dev/null ; then
 						# forward patch succeeded - test reverse patch (both must succeed)
@@ -1672,44 +1701,41 @@ if ! [ -z "$fileListPatched" ];then
 					fi
 				done
 				if $patchSuccess ; then
-					# save this so patch file used for install can be saved for evenutal uninstall
-					#	or to reverse patch prior to reinstall
+					# save this so forwardPatched (created above) is used for install
+					# when file is installed, currentPatchFile will be copied to previousPatchFile
+					#	for a future uninstall or reinstall
 					cp "$patchFile" "$currentPatchFile"
 				else
-					patchErrors+=( "patch unsuccesful for $baseName" )
+					patchErrors+=( "$baseName patch unsuccesful" )
+					rm -f "$forwardPatched"
 				fi
 			else
-				patchErrors+=( "no patch source for $baseName" )
+				patchErrors+=( "$baseName no patch source" )
 			fi
-			if ! $patchSuccess ; then
-				rm -f "$forwardPatched"
-				rm -f "$currentPatchFile"
-			fi
-		else
-			patchErrors+=( "$baseName no active file for patch" )
-			continue
-		fi
-	done # for activeFile
+		done # for activeFile
 
-	# save errors in patchErrors file
-	if ! [ -z "$patchErrors" ] ; then
-		rm -f "$scriptDir/patchErrors"
-		for patchError in "${patchErrors[@]}"; do
-			logMessage "$patchError"
-			echo "$patchError" >> "$scriptDir/patchErrors"
-		done
-		# script will exit since we are still in pre-checks !!
-		setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
-		if [ $scriptAction == 'CHECK' ]; then
-			exit $EXIT_PATCH_ERROR
+		# save errors in patchErrors file
+		if ! [ -z "$patchErrors" ] ; then
+			rm -f "$scriptDir/patchErrors"
+			for patchError in "${patchErrors[@]}"; do
+				logMessage "$patchError"
+				echo "$patchError" >> "$scriptDir/patchErrors"
+			done
+			setInstallFailed $EXIT_PATCH_ERROR "patch error details were saved in $packageName/patchErrors"
+
+			# pre-checks only - direct exit
+			if [ $scriptAction == 'CHECK' ]; then
+				exit $EXIT_PATCH_ERROR
+			# script will exit since we are still in pre-checks !!
+			else
+				endScript
+			fi
+		# no errors - remove the error history
 		else
-			endScript
+			rm -f "$scriptDir/patchErrors"
 		fi
-	# no errors - remove the error history
-	else
-		rm -f "$scriptDir/patchErrors"
-	fi
-fi # if fileListPatched
+	fi # if fileListPatched
+fi # if [ $scriptAction != 'UNINSTALL' ]
 
 # go no further if just checking
 if [ $scriptAction == 'CHECK' ]; then

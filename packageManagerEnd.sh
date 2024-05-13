@@ -62,7 +62,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# allow PackageManager exit before doing anything
+# wait for PackageManager to exit before doing anything
 if $shUninstall || $reboot ; then
 	service="/service/PackageManager"
 	# insure the PackageManager service doesn't restart when it exits

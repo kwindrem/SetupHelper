@@ -6,16 +6,27 @@ import com.victron.velib 1.0
 
 MbPage {
 	id: root
-	title: qsTr("Package manager")
+	title: showControls ? qsTr("Package manager") : qsTr("Package manager not running")
     property string settingsPrefix: "com.victronenergy.settings/Settings/PackageManager"
     property string servicePrefix: "com.victronenergy.packageManager"
 	property string bindVrmloggerPrefix: "com.victronenergy.logger"
-    VBusItem { id: pmStatus; bind: Utils.path(servicePrefix, "/PmStatus") }
+    VBusItem { id: pmStatusItem; bind: Utils.path(servicePrefix, "/PmStatus") }
+	property string pmStatus: pmStatusItem.valid ? pmStatusItem.value : ""
     VBusItem { id: mediaStatus; bind: Utils.path(servicePrefix, "/MediaUpdateStatus") }
     VBusItem { id: actionNeeded; bind: Utils.path(servicePrefix, "/ActionNeeded") }
     VBusItem { id: editAction; bind: Utils.path(servicePrefix, "/GuiEditAction") }
     property bool showMediaStatus: mediaStatus.valid && mediaStatus.value != ""
-    property bool showControls: pmStatus.valid
+    property bool showControls: pmStatusItem.valid
+
+	// the last status message received from PackageManager is saved in lastStatus
+	//	so there is some status to display when PackageManager quits
+	property string lastStatus: ""
+
+	onPmStatusChanged:
+	{
+		if (pmStatusItem.valid)
+			lastStatus = pmStatus
+	}
 
 	model: VisibleItemModel
     {
@@ -24,12 +35,12 @@ MbPage {
 			id: status
             text:
             {
-				if (! showControls)
-					return "Package manager not running"
-				else if (mediaStatus.valid && mediaStatus.value != "")
+				if (mediaStatus.valid && mediaStatus.value != "")
 					return mediaStatus.value
+				else if (showControls)
+					return pmStatus
 				else
-					return pmStatus.value
+					return lastStatus
 			}
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter

@@ -1,80 +1,39 @@
 #!/bin/sh
 
-# reinstalMods will reinstall SetupHelper if a Venus OS update removes it
+# this script is called from /data/rcS.local during system boot
+# it checks to see if SetupHelper and the PackageManager service
+#	are installed and if not, will install the PackageManager service
 #
-# other packages will then be reinstalled by PackageManager
-#
+# the REINSTALL_PACKAGES flag file is then set so that when
+#	PackageManger runs, it will do boot-time reinstall checks for all packages
 
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
-packageBase="$( dirname $scriptDir )"
 helperResourcesDir="$scriptDir/HelperResources"
 source "$helperResourcesDir/EssentialResources"
 source "$helperResourcesDir/LogHandler"
+source "$helperResourcesDir/ServiceResources"
 
 # disable outputting log messages to console
-runningAtBoot=true
+logToConsole=false
 
 logMessage "reinstallMods starting"
 
-# prevent PackageManager from conflicting with this script
-rm -f "/etc/venus/REINSTALL_PACKAGES"
-
-rebootNeeded=false
 if [ -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL" ]; then
 	logMessage "CRITICAL: SetupHelper was manually uninstalled therefore it was not reinstalled"
-	logMessage "    other packages will NOT BE REINSTALLED either !!!!!"
-	exit
-fi
+	logMessage "    other packages will NOT BE REINSTALLED either !"
+	rm -f "/etc/venus/REINSTALL_PACKAGES"
 
-# SetupHelper not installed, attempt to do so
-if ! [ -f "$installedVersionFile" ]; then
-	command="$scriptDir/setup"
-	if [ ! -f $command ] ; then
-		logMessage "ERROR: SetupHelper setup script not found - can't reinstall"
-		exit
+# install PackageManager service if not yet installed
+else
+	# install PackageManager service if not yet installed
+	if ! [ -e "$serviceDir/PackageManager" ]; then
+		logMessage "installing PackageManager service - PackageManager will reinstall all packages"
+		installService PackageManager
 	fi
-
-	# flag to prevent PackageManager from conflicting with installing SetupHelper here
-	#	probably will never happen but just in case
-	touch "/etc/venus/REINSTALL_MODS_RUNNING"
-
-	# run setup script
-	$command reinstall auto deferReboot
-	returnCode=$?
-
-	rm -f "/etc/venus/REINSTALL_MODS_RUNNING"
-
-	case $returnCode in
-		$EXIT_SUCCESS )
-			;;
-		$EXIT_REBOOT )
-			rebootNeeded=true
-			;;
-		$EXIT_NO_GUI_V1 )
-			logMessage "ERROR: SetupHelper install failed - no GUI v1 installed"
-			exit
-			;;
-		$EXIT_ROOT_FULL )
-			logMessage "ERROR: SetupHelper install failed - no room in root partition"
-			exit
-			;;
-		*)
-			logMessage "ERROR: SetupHelper install failed - reason $returnCode"
-			exit
-			;;
-	esac
-	logMessage "SetupHelper installed"
-else
-	logMessage "SetupHelper already installed"
-fi
-
-# reboot now if signaled from setup script
-if $rebootNeeded ; then
-    logMessage "rebooting ..."
-    reboot
-else
-	# tell PackageManager to reinstall the remaining packages"
-	logMessage "PackageManager will reinstall remaining packages"
+	# notify PackageManager that it needs to check all packages for possible reinstall
+	# flag file is cleared in PackageManager when all install checks have been made
 	touch "/etc/venus/REINSTALL_PACKAGES"
 fi
+
+logMessage "reinstallMods finished"
 

@@ -357,6 +357,7 @@ INFO = 20
 DEBUG = 10
 
 import sys
+import signal
 import subprocess
 import threading
 import os
@@ -708,7 +709,6 @@ class AddRemoveClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.warning ("attempting to stop AddRemove thread")
 		self.threadRunning = False
 		self.AddRemoveQueue.put ( ('STOP', ''), block=False )
 
@@ -1974,7 +1974,7 @@ class PackageClass:
 						for item in file:
 							parts = item.split ()
 							if len (parts) < 2:
-								logging.error ("package dependency " + item + " requires a package name and a requirement")
+								logging.error ("package dependency " + item + " incomplete")
 								continue
 							dependencyPackage = parts [0]
 							dependencyRequirement = parts [1]
@@ -2247,7 +2247,6 @@ class UpdateGitHubVersionClass (threading.Thread):
 	#	when run returns, the main method should catch the tread with join ()
 
 	def StopThread (self):
-		logging.warning ("attempting to stop UpdateGitHubVersion thread")
 		self.threadRunning = False
 		self.SetPriorityGitHubVersion ( 'STOP' )
 
@@ -2593,7 +2592,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.warning ("attempting to stop DownloadGitHub thread")
 		self.threadRunning = False
 		self.DownloadQueue.put ( ('STOP', ''), block=False )
 
@@ -2941,7 +2939,6 @@ class InstallPackagesClass (threading.Thread):
 	# StopThread () is called to shut down the thread
 
 	def StopThread (self):
-		logging.warning ("attempting to stop InstallPackages thread")
 		self.threadRunning = False
 		self.InstallQueue.put ( ('STOP', ''), block=False )
 
@@ -3376,7 +3373,6 @@ class MediaScanClass (threading.Thread):
 	#	 this gives other threads time away from slower media scanning operations
 
 	def StopThread (self):
-		logging.warning ("attempting to stop MediaScan thread")
 		self.threadRunning = False
 		self.MediaQueue.put  ( "STOP", block=False )
 
@@ -3598,14 +3594,10 @@ class MediaScanClass (threading.Thread):
 # 	(it would take 10 seconds to scan 10 packages)
 #
 #	PackageManager is responsible for reinstalling packages following a firmware update
-#	reinstallMods is a script called from /data/rcS.local that installs SetupHelper
-#		including the PackageManager service
-#	to avoid conflicts, there are two flag files that handshake reinstallMods and PackageManager
-#		/etc/venus/REINSTALL_PACKAGES is set by reinstallMods
-#			to notify Package manager to reinstall all packages
-#			PackageManager clears that flag when all packages have been reinstalled
-#		/etc/venus/REINSTALL_MODS_RUNNING is set and cleared by reinstallMods
-#			PackageManager tests this flag and holds off scanning for installs while it is set
+#	reinstallMods is a script called from /data/rcS.local that installs the PackageManager service
+#		then sets the /etc/venus/REINSTALL_PACKAGES flag file instructing PackageManager
+#		to do a boot-time check all packages for possible reinstall
+#		PackageManager clears that flag when all packages have been reinstalled
 #	boot-time reinstall is done using the normal automatic install mechanism but bypasses
 #		the test for the user selectable auto install on/off
 #
@@ -3722,20 +3714,13 @@ def mainLoop ():
 		return False
 
 	actionMessage = ""
-	statusMessage = ""
 	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
 
 
 	# hold off all package processing if package list is empty
 	emptyPackageList = False
-	reinstallModsRunning = False
 	if len (PackageClass.PackageList) == 0:
 		emptyPackageList = True
-		holdOffScan = True
-	# hold off processing if reinstallMods is running to prevent conflicts
-	#	probalby never happen but just in case
-	elif os.path.exists ("/etc/venus/REINSTALL_MODS_RUNNING"):
-		reinstallModsRunning = True
 		holdOffScan = True
 
 	# if boot-time reinstall has been requiested by reinstallMods
@@ -3743,9 +3728,9 @@ def mainLoop ():
 	elif os.path.exists (bootReinstallFile):
 		# beginning of boot install - reset package index to insure a complete scan
 		if not bootInstall:
+			bootInstall = True
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
-		bootInstall = True
 		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		lastDownloadMode = AUTO_DOWNLOADS_OFF
 		autoInstall = True
@@ -3797,7 +3782,7 @@ def mainLoop ():
 
 		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
-		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF\
+		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF \
 					and DownloadGitHub.DownloadVersionCheck (package):
 			# don't allow install if download is needed - even if it has not started yet
 			packageOperationOk = False
@@ -3807,26 +3792,19 @@ def mainLoop ():
 		# validate package for install
 		if packageOperationOk and package.Incompatible == "" :
 			installOk = False
-			oneTimeInstall = False
+			# one-time install flag file is set in package directory - install without further checks
 			oneTimeInstallFile = "/data/" + packageName + "/ONE_TIME_INSTALL"
 			if os.path.exists (oneTimeInstallFile):
 				os.remove (oneTimeInstallFile)
-				oneTimeInstall = True
-			elif autoInstall:
 				installOk = True
-			else:
-				autoInstallFile = "/data/" + packageName + "/AUTO_INSTALL"
-				if os.path.exists (autoInstallFile):
+			# auto install OK (not manually uninstalled) and versions are different
+			elif package.AutoInstallOk and package.PackageVersionNumber != package.InstalledVersionNumber:
+				if autoInstall:
+					installOk = True
+				elif os.path.exists ("/data/" + packageName + "/AUTO_INSTALL"):
 					installOk = True
 
-			# block install if manually uninstalled or if versions are the same
-			if not package.AutoInstallOk:
-				installOk = False
-			# block install if versions are the same
-			elif package.PackageVersionNumber == package.InstalledVersionNumber:
-				installOk = False
-
-			if installOk or oneTimeInstall:
+			if installOk:
 				packageOperationOk = False
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
@@ -3875,41 +3853,22 @@ def mainLoop ():
 
 	# wait for two complete passes with nothing happening
 	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
+	# these actions are all handled in main () after mainLoop () exits
 	if noActionCount >= 2:
-		if SystemReboot:
-			statusMessage = "rebooting ..."
-			# exit the main loop
-			mainloop.quit()
-			return False
-		elif InitializePackageManager:
-			statusMessage = "initializing and restarting PackageManager ..."
-			# exit the main loop
-			mainloop.quit()
-			return False
-		elif RestartPackageManager:
-			DbusIf.UpdateStatus ( "restarting PackageManager ...", where='PmStatus' )
-			DbusIf.SetEditStatus ("")
-			DbusIf.AcknowledgeGuiEditAction ('')
-			# exit the main loop
-			mainloop.quit()
-			return False
-		elif GuiRestart:
-			DbusIf.UpdateStatus ( "restarting GUI and Package Manager...", where='PmStatus' )
-			DbusIf.SetEditStatus ("")
-			DbusIf.AcknowledgeGuiEditAction ('')
-			# exit the main loop
+		if SystemReboot or InitializePackageManager or GuiRestart or RestartPackageManager:
+			# already exiting - include pending operations
+			if systemAction == REBOOT_NEEDED:
+				SystemReboot = True
+			elif systemAction == GUI_RESTART_NEEDED:
+				GuiRestart = True
 			mainloop.quit()
 			return False
 
-	if statusMessage != "":
-		DbusIf.UpdateStatus ( statusMessage, where='PmStatus' )
-	elif actionMessage != "":
+	if actionMessage != "":
 		DbusIf.UpdateStatus ( actionMessage, where='PmStatus' )
 	else:
 		if emptyPackageList:
 			idleMessage = "no active packages"
-		elif reinstallModsRunning:
-			idleMessage = "waiting for boot reinstall to complete"
 		elif bootInstall:
 			idleMessage = "reinstalling packages after firmware update"
 		elif WaitForGitHubVersions:
@@ -3965,6 +3924,27 @@ def	directUninstall (packageName):
 			GuiRestart = True
 
 
+# signal handler for TERM and CONT
+# this is needed to allow pending operations to finish before PackageManager exits
+# TERM sets RestartPackageManager which causes mainLoop to exit and therefor main to complete
+# TERM, then CONT is issued by supervise when shutting down the service
+# CONT handler differentiates a restart vs service down for logging purposes
+
+def setPmRestart (signal, frame):
+	global RestartPackageManager
+
+	RestartPackageManager = True
+
+def shutdownPmRestart (signal, frame):
+	global RestartPackageManager
+	global ShutdownPackageManager
+	if RestartPackageManager:
+		ShutdownPackageManager = True
+
+signal.signal (signal.SIGTERM, setPmRestart)
+signal.signal (signal.SIGCONT, shutdownPmRestart)
+
+
 #	main
 #
 # ######## code begins here
@@ -3978,12 +3958,14 @@ def main():
 	global GuiRestart	# initialized in main, set in PushAction, InstallPackage, used in mainloop
 	global InitializePackageManager # initialized in main, set in PushAction, used in mainloop
 	global RestartPackageManager # initialized in main, set in PushAction, used in mainloop
+	global ShutdownPackageManager
 	global SetupHelperUninstall
 	global WaitForGitHubVersions  # initialized in main, set in UpdateGitHubVersion used in mainLoop
 	SystemReboot = False
 	GuiRestart = False
 	InitializePackageManager = False
 	RestartPackageManager = False
+	ShutdownPackageManager = False
 	SetupHelperUninstall = False
 
 	# set logging level to include info level entries
@@ -4162,6 +4144,35 @@ def main():
 
 	#### this section of code runs only after the mainloop quits (LOCK / UNLOCK no longer necessary)
 
+	# output final prompts to GUI and log
+	DbusIf.DbusService['/ActionNeeded'] = ""
+	DbusIf.SetEditStatus ("")
+	DbusIf.AcknowledgeGuiEditAction ('')
+	message = ""
+	if MediaScan.AutoUninstall:
+		message = "UNINSTALLING ALL PACKAGES & REBOOTING ..."
+		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
+	elif SetupHelperUninstall:
+		message = "UNINSTALLING SetupHelper ..."
+		logging.critical (">>>> UNINSTALLING SetupHelper ...")
+	elif InitializePackageManager:
+		if SystemReboot:
+			message = "initializing and REBOOTING ..."
+			logging.warning (">>>> initializing PackageManager and REBOOTING SYSTEM")
+		else:
+			logging.warning (">>>> initializing PackageManager ...")
+			message = "initializing and restarting PackageManager ..."
+	elif SystemReboot:
+		message = "REBOOTING SYSTEM ..."
+		logging.warning (">>>> REBOOTING SYSTEM")
+	elif GuiRestart:
+		message = "restarting GUI and Package Manager..."
+	elif ShutdownPackageManager:
+		message = "shutting down PackageManager ..."
+	elif RestartPackageManager:
+		message = "restarting PackageManager ..."
+	DbusIf.UpdateStatus ( message=message, where='PmStatus' )
+	DbusIf.UpdateStatus ( message=message, where='Editor' )
 
 	# stop threads, remove service from dbus
 	logging.warning ("stopping threads")
@@ -4172,11 +4183,11 @@ def main():
 	MediaScan.StopThread ()
 
 	try:
-		UpdateGitHubVersion.join (timeout=5.0)
-		DownloadGitHub.join (timeout=5.0)
-		InstallPackages.join (timeout=5.0)
-		AddRemove.join (timeout=5.0)
-		MediaScan.join (timeout=5.0)
+		UpdateGitHubVersion.join (timeout=1.0)
+		DownloadGitHub.join (timeout=1.0)
+		InstallPackages.join (timeout=1.0)
+		AddRemove.join (timeout=1.0)
+		MediaScan.join (timeout=1.0)
 	except:
 		logging.critical ("attempt to join threads failed - one or more threads failed to exit")
 		pass
@@ -4190,28 +4201,12 @@ def main():
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
 	# notify before DbusServicces is removed
 	if MediaScan.AutoUninstall:
-		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='PmStatus')
-		DbusIf.UpdateStatus ( message="UNINSTALLING ALL PACKAGES & REBOOTING ...", where='Editor' )
-		DbusIf.DbusService['/ActionNeeded'] = ""
-		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
 		SystemReboot = True
-
 		# uninstall all packages EXCEPT SetupHelper which is done later
 		for path in os.listdir ("/data"):
 			packageDir = "/data/" + path
-			if not os.path.isdir (packageDir):
-				continue
-			directUninstall (path)
-	elif SetupHelperUninstall:
-		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='PmStatus' )
-		DbusIf.UpdateStatus ( "UNINSTALLING SetupHelper ...", where='Editor' )
-		DbusIf.DbusService['/ActionNeeded'] = ""		
-		logging.critical (">>>> UNINSTALLING SetupHelper ...")
-	elif SystemReboot:
-		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='PmStatus')
-		DbusIf.UpdateStatus ( message="REBOOTING SYSTEM ...", where='Editor' )
-		DbusIf.DbusService['/ActionNeeded'] = ""
-		logging.warning (">>>> REBOOTING SYSTEM")
+			if os.path.isdir (packageDir):
+				directUninstall (path)
 
 	# remaining tasks are handled in packageManagerEnd.sh because
 	#	SetupHelper uninstall needs to be done after PackageManager.py exists
@@ -4232,14 +4227,11 @@ def main():
 		except:
 			logging.critical ("packageManagerEnd.sh failed")
 
-	# delay to leave reboot message up on status lines for a few seconds
-	# and to provide sufficient time for packageManagerEnd.sh to start up
-	time.sleep (5.0)
+	# delay to provide time for packageManagerEnd.sh to start up
+	time.sleep (0.1)
 	DbusIf.RemoveDbusService ()
 
 	logging.warning (">>>> PackageManager exiting")
-
-	# program exits here
 
 # Always run our main loop so we can process updates
 main()

@@ -26,7 +26,11 @@ v8.0: (beta)
 	moved SetupHelper logging to /var/log/PackageManager/current
 	fixed: uninstall of patched files failed
 	added manual recheck for errors discovered in setup script prechecks
-	
+	move patched files to /etc/venus so it tracks the selected root fs and is cleared
+		when the firmware is updated
+	PackageManager completes pending operations before exiting
+	fixed: patch not working
+
 v7.18:
 	fixed: only first service is uninstalled
 

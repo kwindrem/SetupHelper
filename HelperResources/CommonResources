@@ -51,13 +51,6 @@ fileListAll=()
 ######## skip to bottom of file for remainder of code executed when script is sourced
 
 
-installFailed=false
-installExitReason=$EXIT_ERROR
-installFailMessage=""
-installPreChecks=true
-installFailCount=0
-uninstallFailed=false
-
 # cleanup on any exit
 exitCleanup ()
 {
@@ -66,77 +59,6 @@ exitCleanup ()
 }
 
 trap exitCleanup EXIT
-
-
-# setInstallFailed sets flags to prevent further install steps
-#	and insure the package is uninstalled completely
-#
-#	$1 indicates the reason for the failure and will evenutally be uused
-#	report the failure reason when exiting the script
-#
-#	any remaining paremeters are passed to logMessage
-#		and also saved in installFailMessage for others to use
-#	the message is also sent to stderr if not running from the command line
-#		this allows PackageManager to report the full reason for failure
-#
-#	a setup script can be run from the console, or from another script or program (unattended)
-#	when running from the console
-#		setInstallFailed will report errors and return to the caller
-#
-#	if running unattended and if the script action is INSTALL
-#		during the precheck period (before any system modification)
-#			setInstallFailed WILL EXIT WITHOUT RETURNING TO THE CALLER !!!!!
-#		after the precheck period, system modifications may have been made so
-#			the scriptAction is changed to UNINSTALL so the modifictions can be reversed
-#	otherwise, setInstallFailed just logs the error
-#
-#	note that PackageManager makes most of the pre-check tests
-#			before calling the setup script
-#		the only exception is file set checks made in checkFileSets
-#
-# installFailed is set here so that additional install operations will not be performed
-
-
-setInstallFailed ()
-{
-	(( installFailCount += 1 ))
-	if [ ! -z "$1" ]; then
-		installExitReason=$1
-	# no reson specified - use the generaic error exit code
-	else
-		installExitReason=EXIT_ERROR
-	fi
-	message="${@:2}"
-	if [ ! -z "$message" ]; then
-		installFailMessage="$message"
-		logMessage "ERROR: $message"
-		# if not running from console, output error to stderr
-		if ! $logToConsole ; then
-			echo "$message" >&2
-		fi
-	else
-		installFailMessage=""
-	fi
-
-	if [ $scriptAction == 'UNINSTALL' ]; then
-		uninstallFailed=true
-	else
-		installFailed=true
-	fi
-	if ! $userInteraction && [ $scriptAction == 'INSTALL' ]; then
-		# during "pre-checks" failures occur before any system mofifications
-		#	EXIT NOW - DO NOT RETURN TO THE CALLER !!!!!
-		if $installPreChecks ; then
-			exit $installExitReason
-		# after "pre-checks" system mofifications may already have occured
-		#	so an uninstall needs to follow the install
-		else
-			scriptAction='UNINSTALL'
-		fi
-	fi
-}
-
-
 
 # checkPackageDependencies checks the packageDependencies file in the package directory
 #
@@ -356,7 +278,7 @@ standardActionPrompt ()
                 exit $EXIT_SUCCESS
                 ;;
             [lL]*)
-                displayLog $setupLogFile
+				tail -100 "$logFile" | tai64nlocal
                 ;;
             *)
         esac
@@ -1347,14 +1269,6 @@ endScript ()
 # cleanup from previous versions - reinstallScriptsList no loner used
 rm -f "/data/reinstallScriptsList"
 
-# set global machine type
-if [ -f /etc/venus/machine ]; then
-	machine=$(cat /etc/venus/machine)
-else
-	machine=""
-	setInstallFailed $EXIT_INCOMPATIBLE_PLATFORM "can't determine Venus device type"
-fi
-
 # initialize version strings and numbers for future checks
 if [ -f "$installedVersionFile" ]; then
 	installedVersion=$(cat "$installedVersionFile")
@@ -1742,50 +1656,13 @@ if [ $scriptAction == 'CHECK' ]; then
 	exit $EXIT_SUCCESS
 fi
 
-# make sure rootfs is mounted R/W & and resized to allow space for replacement files
-#	arbitrary minimum size of 3 MB
-if ! $installFailed; then
-	rootMinimumSize=3
-	availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+# in the Victron images, the root FS is read-only and is a minimum size
+# in order to install modificaitons, the root partition needs to be
+#	remounted read-write and resized to allow mods to be added
+# updateRootToReadWrite calls remount-rw.sh or resize2fs.sh
+#	then check to make sure there is sufficient space before allowing installs
 
-	# remount read-write
-	if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
-		# only remount read-write for CCGX
-		if [ "$machine" == "ccgx" ]; then
-			if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
-				logMessage "remounting root read-write"
-				/opt/victronenergy/swupdate-scripts/remount-rw.sh
-			fi
-		# remount and resize for other platforms
-		elif [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-			/opt/victronenergy/swupdate-scripts/resize2fs.sh
-			availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-			logMessage "remounting read-write root and resizing - $availableSpace MB now available"
-		fi
-		# check to see if remount was successful
-		if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
-			setInstallFailed $EXIT_ROOT_FULL "ERROR: unable to remount root read-write - can't continue"
-		fi
-	# root already read-write, attempt to resize if space is limited (CCGX can't resize)
-	elif (( $availableSpace < $rootMinimumSize )); then
-		if [ "$machine" == "ccgx" ]; then
-			logMessage "can't resize root on CCGX"
-		else
-			if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-				/opt/victronenergy/swupdate-scripts/resize2fs.sh
-				availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-				logMessage "resized root - $availableSpace MB now available"
-			fi
-		fi
-	fi
-fi
-if ! $installFailed; then
-	# make sure the root partition has space for the package
-	if (( $availableSpace < $rootMinimumSize )); then
-		setInstallFailed $EXIT_ROOT_FULL "no room for modified files on root ($availableSpace MB remaining) - can't continue"
-	fi
-fi
-
+updateRootToReadWrite
 
 # done with pre checks
 #	prior to this no system mofications have been made

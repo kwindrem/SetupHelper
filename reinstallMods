@@ -1,16 +1,15 @@
 #!/bin/sh
 
 # this script is called from /data/rcS.local during system boot
-# it checks to see if SetupHelper and the PackageManager service
-#	are installed and if not, will install the PackageManager service
+# it checks to see the PackageManager service is installed and if not,
+#	will install the PackageManager service
 #
-# the REINSTALL_PACKAGES flag file is then set so that when
-#	PackageManger runs, it will do boot-time reinstall checks for all packages
+# the REINSTALL_PACKAGES flag file is then set so that
+#	when PackageManger runs, it will do boot-time reinstall checks for all packages
 
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"
 helperResourcesDir="$scriptDir/HelperResources"
 source "$helperResourcesDir/EssentialResources"
-source "$helperResourcesDir/LogHandler"
 source "$helperResourcesDir/ServiceResources"
 
 # disable outputting log messages to console
@@ -21,19 +20,27 @@ logMessage "reinstallMods starting"
 if [ -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL" ]; then
 	logMessage "CRITICAL: SetupHelper was manually uninstalled therefore it was not reinstalled"
 	logMessage "    other packages will NOT BE REINSTALLED either !"
-	rm -f "/etc/venus/REINSTALL_PACKAGES"
 
 # install PackageManager service if not yet installed
 else
-	# install PackageManager service if not yet installed
-	if ! [ -e "$serviceDir/PackageManager" ]; then
-		logMessage "installing PackageManager service - PackageManager will reinstall all packages"
-		installService PackageManager
+	# installing the PackageManager service requires remounting root R/W
+	updateRootToReadWrite
+
+	if ! $installFailed ; then
+		# install PackageManager service if not yet installed
+		if ! [ -e "$serviceDir/PackageManager" ]; then
+			logMessage "installing PackageManager service - PackageManager will reinstall all packages"
+			installService PackageManager
+		fi
 	fi
-	# notify PackageManager that it needs to check all packages for possible reinstall
-	# flag file is cleared in PackageManager when all install checks have been made
-	touch "/etc/venus/REINSTALL_PACKAGES"
+	if ! $installFailed ; then
+		# notify PackageManager that it needs to check all packages for possible reinstall
+		# flag file is cleared in PackageManager when all install checks have been made
+		touch "/etc/venus/REINSTALL_PACKAGES"
+		logMessage "reinstallMods finished"
+	else
+		logMessage "reinstallMods not completed - packages will not be reinstalled"
+	fi
 fi
 
-logMessage "reinstallMods finished"
 

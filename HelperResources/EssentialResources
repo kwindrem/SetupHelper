@@ -44,6 +44,42 @@ altOrigFileDir="$pkgFileSets/AlternateOriginals"
 servicesDir="$scriptDir/services"
 
 
+# LogHandler functions and variables
+
+logDir="/var/log/PackageManager"
+logFile="$logDir/current"
+if ! [ "$logDir" ]; then
+	mkdir -P "$logDir"
+	touch "$logFile"
+fi
+
+oldLogFile="/var/log/SetupHelper"
+if [ -e "$oldLogFile" ]; then
+	if (( $( tail -5 "$oldLogFile" | grep -c "WARNING: this log file no longer used" ) == 0 )); then
+		echo "WARNING: this log file no longer used" >> "$oldLogFile"
+		echo "      SetupHelper now logged to /var/log/PackageManager/current" >> "$oldLogFile"
+	fi
+fi
+
+# enable logging to console
+# scripts can disable logging by setting 
+# logToConsole to false AFTER sourcing EssentialResources
+logToConsole=true
+
+# write a message to log file and console
+
+logMessage ()
+{
+    # to console
+    if $logToConsole ; then
+        echo "$*"
+    fi
+
+    # to setup helper log
+	echo "$shortScriptName: $*" | tai64n >> $logFile
+}
+
+
 # rc local file that calls reinstallMods
 #	rcS.local avoids conflicts with mods that blindly replace /data/rc.local
 rcLocal="/data/rcS.local"
@@ -66,10 +102,6 @@ EXIT_PACKAGE_CONFLICT=246
 EXIT_PATCH_ERROR=245
 
 
-# old variables - keep for compatibility
-exitReboot=$EXIT_REBOOT
-exitSuccess=$EXIT_SUCCESS
-
 # directory that holds script's options
 # options were removed from the script directory so they are preserved when the package is reinstalled
 setupOptionsRoot="/data/setupOptions"
@@ -81,3 +113,265 @@ packageListFile="/data/packageList"
 qmlDir=/opt/victronenergy/gui/qml
 
 
+# setInstallFailed sets flags to prevent further install steps
+#	and insure the package is uninstalled completely
+#
+#	$1 indicates the reason for the failure and will evenutally be uused
+#	report the failure reason when exiting the script
+#
+#	any remaining paremeters are passed to logMessage
+#		and also saved in installFailMessage for others to use
+#	the message is also sent to stderr if not running from the command line
+#		this allows PackageManager to report the full reason for failure
+#
+#	a setup script can be run from the console, or from another script or program (unattended)
+#	when running from the console
+#		setInstallFailed will report errors and return to the caller
+#
+#	if running unattended and if the script action is INSTALL
+#		during the precheck period (before any system modification)
+#			setInstallFailed will EXIT WITHOUT RETURNING TO THE CALLER !!!!!
+#		after the precheck period, system modifications may have been made so
+#			the scriptAction is changed to UNINSTALL so the modifictions can be reversed
+#	otherwise, setInstallFailed just logs the error
+#
+# installFailed is set here so that additional install operations will not be performed
+
+installFailed=false
+installExitReason=$EXIT_ERROR
+installFailMessage=""
+installPreChecks=true
+installFailCount=0
+uninstallFailed=false
+
+setInstallFailed ()
+{
+	(( installFailCount += 1 ))
+	if [ ! -z "$1" ]; then
+		installExitReason=$1
+	# no reson specified - use the generaic error exit code
+	else
+		installExitReason=EXIT_ERROR
+	fi
+	message="${@:2}"
+	if [ ! -z "$message" ]; then
+		installFailMessage="$message"
+		logMessage "ERROR: $message"
+		# if not running from console, output error to stderr
+		if ! $logToConsole ; then
+			echo "$message" >&2
+		fi
+	else
+		installFailMessage=""
+	fi
+
+	if [ $scriptAction == 'UNINSTALL' ]; then
+		uninstallFailed=true
+	else
+		installFailed=true
+	fi
+	if ! $userInteraction && [ $scriptAction == 'INSTALL' ]; then
+		# during "pre-checks" failures occur before any system mofifications
+		#	EXIT NOW - DO NOT RETURN TO THE CALLER !!!!!
+		if $installPreChecks ; then
+			exit $installExitReason
+		# after "pre-checks" system mofifications may already have occured
+		#	so an uninstall needs to follow the install
+		else
+			scriptAction='UNINSTALL'
+		fi
+	fi
+}
+
+# set global machine type
+if [ -f /etc/venus/machine ]; then
+	machine=$(cat /etc/venus/machine)
+else
+	machine=""
+	setInstallFailed $EXIT_INCOMPATIBLE_PLATFORM "can't determine Venus device type"
+fi
+
+# make sure rootfs is mounted R/W & and resized to allow space for replacement files
+#	arbitrary minimum size of 3 MB
+# this needs to be called before root fs mods are made.
+#	CommonResources calls this but if you source a subset of helper resources
+#	that script needs to find a place to call updateRootToRW
+
+updateRootToReadWrite ()
+{
+	if ! $installFailed; then
+		rootMinimumSize=3
+		availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+
+		# remount read-write
+		if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
+			# only remount read-write for CCGX
+			if [ "$machine" == "ccgx" ]; then
+				if [ -f /opt/victronenergy/swupdate-scripts/remount-rw.sh ]; then
+					logMessage "remounting root read-write"
+					/opt/victronenergy/swupdate-scripts/remount-rw.sh
+				fi
+			# remount and resize for other platforms
+			elif [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+				/opt/victronenergy/swupdate-scripts/resize2fs.sh
+				availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+				logMessage "remounting read-write root and resizing - $availableSpace MB now available"
+			fi
+			# check to see if remount was successful
+			if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
+				setInstallFailed $EXIT_ROOT_FULL "ERROR: unable to remount root read-write - can't continue"
+			fi
+		# root already read-write, attempt to resize if space is limited (CCGX can't resize)
+		elif (( $availableSpace < $rootMinimumSize )); then
+			if [ "$machine" == "ccgx" ]; then
+				logMessage "can't resize root on CCGX"
+			else
+				if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+					/opt/victronenergy/swupdate-scripts/resize2fs.sh
+					availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+					logMessage "resized root - $availableSpace MB now available"
+				fi
+			fi
+		fi
+	fi
+	if ! $installFailed; then
+		# make sure the root partition has space for the package
+		if (( $availableSpace < $rootMinimumSize )); then
+			setInstallFailed $EXIT_ROOT_FULL "no room for modified files on root ($availableSpace MB remaining) - can't continue"
+		fi
+	fi
+}
+
+
+# convert a version string to an integer to make comparisions easier
+# the Victron format for version numbers is: vX.Y~Z-large-W
+# the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
+# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
+#	large builds now have the same version number as the "normal" build
+#
+# the version string passed to this function allows for quite a bit of flexibility
+#	any alpha characters are permitted prior to the first digit
+#	up to 3 version parts PLUS a prerelease part are permitted
+#		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
+#	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
+#	any non-numeric character can be used to separate main versions
+#	special significance is assigned to single caracter separators between the numeric strings
+#		b or ~ indicates a beta release
+#		a indicates an alpha release
+#		d indicates an development release
+# 		these offset the pre-release number so that b/~ has higher numeric value than any a
+#			and a has higher value than d separator
+#
+# a blank version or one without at least one number part is considered invalid
+# alpha and beta seperators require at least two number parts
+#
+# returns 0 if conversion succeeeded, 1 if not
+# the value integer is returned in $versionNumber
+# a status text string is returned in $versionStringToNumberStatus
+#	and will include the string passed to the function
+#	as well as the converted number if successful and the type of release detected
+#		or an error reason if not
+#
+
+
+function versionStringToNumber ()
+{
+	local version="$*"
+	local numberParts
+	local versionParts
+	local numberParts
+	local otherParts
+	local other
+	local number=0
+	local type='release'
+
+	# split incoming string into
+	# an array of numbers: major, minor, prerelease, etc
+	# and an array of other substrings
+	# the other array is searched for releasy type strings and the related offest added to the version number
+	
+	read -a numberParts <<< $(echo $version | tr -cs '0-9' ' ')
+	numberPartsLength=${#numberParts[@]}
+	if (( $numberPartsLength == 0 )); then
+		versionNumber=0
+		versionStringToNumberStatus="$version: invalid, missing major version"
+		return 1
+	fi
+	if (( $numberPartsLength >= 2 )); then
+		read -a otherParts <<< $(echo $version | tr -s '0-9' ' ')
+	
+		for other in ${otherParts[@]}; do
+			case $other in
+				'b' | '~')
+					type='beta'
+					(( number += 60000 ))
+					break ;;
+				'a')
+					type='alpha'
+					(( number += 30000 ))
+					break ;;
+				'd')
+					type='develop'
+					break ;;
+			esac
+		done
+	fi
+
+	# if release all parts contribute to the main version number
+	#	and offset is greater than all prerelease versions
+	if [ "$type" == "release" ] ; then
+		(( number += 90000 ))
+	# if pre-release, last part will be the pre release part
+	#	and others part will be part the main version number
+	else
+		(( numberPartsLength-- ))
+		(( number += 10#${numberParts[$numberPartsLength]} ))
+	fi
+	# include core version number
+	(( number += 10#${numberParts[0]} * 10000000000000 ))
+	if (( numberPartsLength >= 2)); then
+		(( number += 10#${numberParts[1]} * 1000000000 ))
+	fi
+	if (( numberPartsLength >= 3)); then
+		(( number += 10#${numberParts[2]} * 100000 ))
+	fi
+
+	versionNumber=$number
+	versionStringToNumberStatus="$version:$number $type"
+	return 0
+}
+
+
+
+# compares two version strings
+#
+# missing verions are treated as 0
+#
+# returns 0 if they are equal
+# returns 1 if the first is newer than the second
+# returns -1 if the second is newer than the first
+
+function compareVersions ()
+{
+	local versionNumber2
+
+	if [ -z $2 ]; then
+		versionNumber2=0
+	else
+		versionStringToNumber $2
+		versionNumber2=$versionNumber
+	fi
+	if [ -z $1 ]; then
+		versionNumber=0
+	else
+		versionStringToNumber $1
+	fi
+
+	if (( versionNumber == versionNumber2 ));then
+		return 0
+	elif (( versionNumber > versionNumber2 ));then
+		return 1
+	else
+		return -1
+	fi
+}

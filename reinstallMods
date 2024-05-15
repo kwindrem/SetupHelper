@@ -21,7 +21,7 @@ if [ -f "$setupOptionsDir/DO_NOT_AUTO_INSTALL" ]; then
 	logMessage "CRITICAL: SetupHelper was manually uninstalled therefore it was not reinstalled"
 	logMessage "    other packages will NOT BE REINSTALLED either !"
 
-# install PackageManager service if not yet installed
+# install PackageManager service
 else
 	# installing the PackageManager service requires remounting root R/W
 	updateRootToReadWrite

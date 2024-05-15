@@ -24,21 +24,8 @@
 #
 #	reboot overrides a guiRestart since the reboot will restart the GUI
 
-logFile=/data/log/PackageManager/current
-logMessage ()
-{
-     # to setup helper log
-    if [ ! -z $logFile ]; then
-        if [ -f "$logFile" ]; then
-			echo "pmEnd: $*" | tai64n >> $logFile
-        fi
-    fi
-}
-
-# copied from Essential Resources
-EXIT_SUCCESS=0
-EXIT_REBOOT=123
-EXIT_RESTART_GUI=124
+source "/data/SetupHelper/HelperResources/EssentialResources"
+logToConsole=false
 
 logMessage "starting packageManagerEnd.sh"
 
@@ -62,27 +49,25 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# wait for PackageManager to exit before doing anything
 if $shUninstall || $reboot ; then
-	service="/service/PackageManager"
-	# insure the PackageManager service doesn't restart when it exits
-	#	it will start up again after the reboot if it is still installed
-	#	only issue svc -o if PM is running or it will be started !!!
-	if [ $(svstat "$service" | awk '{print $2}') == "up" ]; then
-		svc -o "$service"
-	fi
+	waitCount=0
+	# wait for up to 20 seconds for PM to exit
 	while true; do
 		if [ -z "$( pgrep -f PackageManager.py )" ]; then
 			break
-		else
+		elif (( waitCount == 0 )); then
 			logMessage "waiting for PackageManager.py to exit"
-			sleep 5
+		elif (( waitCount > 20 )); then
+			logMessage "PackageManager.py DID NOT EXIT - continuing anyway"
+			break
 		fi
+		(( waitCount += 1 ))
+		sleep 1
 	done
 fi
 
 if $shUninstall ; then
-	logMessage ">>>> uninstalling SetupHelper !!"
+	logMessage ">>>> uninstalling SetupHelper"
 	setupFile="/data/SetupHelper/setup"
 	if [ -f "$setupFile" ]; then
 		$setupFile uninstall runFromPm

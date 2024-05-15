@@ -3,8 +3,7 @@
 # EssentialResources for SetupHelper
 # contains a variables necessary for all setup helper scripts
 #
-# sourced from CommonResources, UpdateResources and reinstallMods
-#	and also updateFileSets
+# sourced from IncludeHelpers, packageManagerEnd.sh and reinstallMods
 
 # get the full, unambiguous path to this script (and therefore to script that sourced it)
 scriptDir="$( cd "$(dirname $0)" >/dev/null 2>&1 ; /bin/pwd -P )"

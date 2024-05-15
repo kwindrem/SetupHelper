@@ -1,35 +1,19 @@
-v8.0: (beta)
+v8.0:
 	allow multiple packages to modify the same file
 	allow multiple patch files for each active file
 	fixed: PackageManager hangs if there is no setup script in package directory
-	fixed: package conflict message disappears
 	fixed: "Once" download scan doesn't check all packages
-	fixed: package checks run unnecessarily after an unclean shutdown
-		the real time clock last's value was not updated
-		causing file mod times to be newer than last RTC value
-	fixed: patch fails if pachage was installed by replacement (old install)
-	base script prechecks on file modificaiton times to eliminate unnecessary work
-	setupHelper uninstall and reboots/gui restarts moved from PackageManager main
-		to separate script
-	add TailscaleGX to default package list
-	updatePackage: changed HelperResources version checking to minimize prompts
-	updatePackage: added patch options including MANUAL to prevent automatic patch updates
-	updatePackage: rewrite update file sets loop for speed improvement
-	replace OS's patch with one that handles more cases (eg, 0 context) and options
 	fixed: PackageManager hangs on Python 2 (Venus OS prior to v2.80)
-	fixed: some patching errors
-	fixed: PackageManager does not exit for reboot
-	updatePackage: prompt for helper resources update
-	don't use HelperResources from package directory (only from SetupHelper)
+	use HelperResources only from SetupHelper (not from package directory)
 		this was necessary because /data/SetupHelper/patch
 		is now used in place of the stock patch executable
 	moved SetupHelper logging to /var/log/PackageManager/current
-	fixed: uninstall of patched files failed
-	added manual recheck for errors discovered in setup script prechecks
-	move patched files to /etc/venus so it tracks the selected root fs and is cleared
-		when the firmware is updated
-	PackageManager completes pending operations before exiting
-	fixed: patch not working
+		from /var/log/SetupHelper
+	added Recheck button for errors discovered in setup script prechecks
+	PackageManager now completes pending operations before exiting
+	add TailscaleGX to default package list
+	updatePackage: added patch options including MANUAL to prevent automatic patch updates
+	updatePackage: rewrite update file sets loop for speed improvement
 
 v7.18:
 	fixed: only first service is uninstalled

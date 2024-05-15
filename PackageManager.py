@@ -467,7 +467,11 @@ def PushAction (command=None, source=None):
 	elif action == 'install' or action == 'uninstall' or action == 'check':
 		DbusIf.LOCK ("PushAction 2")
 		package = PackageClass.LocatePackage (packageName)
-		if package != None:
+		# SetupHelper uninstall is processed later as PackageManager exists
+		if packageName == "SetupHelper" and action == 'uninstall':
+			global SetupHelperUninstall
+			SetupHelperUninstall = True
+		elif package != None:
 			package.InstallPending = True
 			theQueue = InstallPackages.InstallQueue
 			queueText = "Install"
@@ -2697,10 +2701,6 @@ class InstallPackagesClass (threading.Thread):
 
 		global SetupHelperUninstall
 
-		if packageName == "SetupHelper" and action == 'uninstall':
-			SetupHelperUninstall = True
-			return
-
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ("InstallPackage")
 		package = PackageClass.LocatePackage (packageName)
@@ -3651,7 +3651,6 @@ class MediaScanClass (threading.Thread):
 # persistent storage for mainLoop
 packageIndex = 0
 noActionCount = 0
-lastDownloadMode = AUTO_DOWNLOADS_OFF
 currentDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
 DeferredGuiEditAcknowledgement = None
@@ -3678,7 +3677,6 @@ def mainLoop ():
 	global noActionCount
 	global packageIndex
 	global noActionCount
-	global lastDownloadMode
 	global currentDownloadMode
 	global bootInstall
 	global lastTimeSync
@@ -3709,19 +3707,20 @@ def mainLoop ():
 	#	or SetupHelper uninstall was deferred
 	# exit mainLoop and do uninstall in main, then reboot
 	# skip all processing below !
-	if MediaScan.AutoUninstall or SetupHelperUninstall:
-		mainloop.quit()
-		return False
-
 	actionMessage = ""
 	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
 
+	# default values - changed below based on states
+	emptyPackageList = False
+	scanForActions = True
+	currentDownloadMode = AUTO_DOWNLOADS_OFF
+	autoInstall = False
 
 	# hold off all package processing if package list is empty
-	emptyPackageList = False
 	if len (PackageClass.PackageList) == 0:
 		emptyPackageList = True
-		holdOffScan = True
+		scanForActions = False
+		packageIndex = 0
 
 	# if boot-time reinstall has been requiested by reinstallMods
 	#	override modes and initiate auto install of all packages
@@ -3731,29 +3730,31 @@ def mainLoop ():
 			bootInstall = True
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
-		currentDownloadMode = AUTO_DOWNLOADS_OFF
-		lastDownloadMode = AUTO_DOWNLOADS_OFF
 		autoInstall = True
-		holdOffScan = False
 	elif WaitForGitHubVersions:
-		holdOffScan = True
-	# not doing boot install - use dbus values
+		scanForActions = False
+
+	# don't look for new actions if uninstalling all packages or uninstalling SetupHelper
+	#	uses defaults above
+	elif MediaScan.AutoUninstall or SetupHelperUninstall:
+		pass
+
+	# not doing something special - use dbus values
 	else:
 		autoInstall = DbusIf.GetAutoInstall ()
 		# save mode before chaning so changes can be detected below
 		lastDownloadMode = currentDownloadMode
 		currentDownloadMode = DbusIf.GetAutoDownloadMode ()
 		# download mode changed
-		# restart at beginning of list and signal mode change to the GitHub version thread
+		# restart at beginning of list and request GitHub version refresh
 		if currentDownloadMode != lastDownloadMode \
 				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
-			holdOffScan = True
+			packageIndex = 0
+			scanForActions = False
 			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
-		else:
-			holdOffScan = False
 
 	# make sure a new scan starts at beginning of list
-	if holdOffScan:
+	if not scanForActions:
 		packageIndex = 0
 	# process one package per pass of mainloop
 	else:
@@ -3809,7 +3810,7 @@ def mainLoop ():
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
 		DbusIf.UNLOCK ("mainLoop 1")
-	# end if not holdOffScan
+	# end if scanForActions
 
 	DbusIf.LOCK ("mainLoop 2")
 	actionsPending = False
@@ -3820,7 +3821,6 @@ def mainLoop ():
 	for package in PackageClass.PackageList:
 		if package.DownloadPending or package.InstallPending:
 			actionsPending = True
-			
 		# clear GitHub version if not refreshed in 10 minutes
 		elif package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
 			package.SetGitHubVersion ("")
@@ -3853,9 +3853,11 @@ def mainLoop ():
 
 	# wait for two complete passes with nothing happening
 	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
+	#	or ininstalling packages
 	# these actions are all handled in main () after mainLoop () exits
 	if noActionCount >= 2:
-		if SystemReboot or InitializePackageManager or GuiRestart or RestartPackageManager:
+		if SystemReboot or InitializePackageManager or GuiRestart\
+				 or RestartPackageManager or MediaScan.AutoUninstall or SetupHelperUninstall:
 			# already exiting - include pending operations
 			if systemAction == REBOOT_NEEDED:
 				SystemReboot = True
@@ -3908,9 +3910,11 @@ def	directUninstall (packageName):
 		SetupHelperUninstall = True
 		return
 
+	packageDir = "/data/" + packageName
+	setupFile = packageDir + "/setup"
 	try:
-		setupFile = "/data/" + packageName + "/setup"
-		if os.path.isfile(setupFile)and os.access(setupFile, os.X_OK):
+		if os.path.isdir (packageDir) and os.path.isfile (setupFile) \
+				and os.access(setupFile, os.X_OK):
 			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'runFromPm' ],
 						bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 			proc.commiunicate ()	# output ignored
@@ -3932,7 +3936,6 @@ def	directUninstall (packageName):
 
 def setPmRestart (signal, frame):
 	global RestartPackageManager
-
 	RestartPackageManager = True
 
 def shutdownPmRestart (signal, frame):
@@ -4189,7 +4192,7 @@ def main():
 		AddRemove.join (timeout=1.0)
 		MediaScan.join (timeout=1.0)
 	except:
-		logging.critical ("attempt to join threads failed - one or more threads failed to exit")
+		logging.critical ("one or more threads failed to exit")
 		pass
 
 	# if initializing PackageManager persistent storage, set PackageCount to 0
@@ -4198,15 +4201,23 @@ def main():
 	if InitializePackageManager:
 		DbusIf.DbusSettings['packageCount'] = 0
 
+	# com.victronenergy.packageManager no longer available after this call
+	DbusIf.RemoveDbusService ()
+
 	# auto uninstall triggered by AUTO_UNINSTALL_PACKAGES flag file on removable media
-	# notify before DbusServicces is removed
 	if MediaScan.AutoUninstall:
-		SystemReboot = True
 		# uninstall all packages EXCEPT SetupHelper which is done later
 		for path in os.listdir ("/data"):
-			packageDir = "/data/" + path
-			if os.path.isdir (packageDir):
-				directUninstall (path)
+			directUninstall (path)
+		SystemReboot = True
+
+	# tell supervise not to restart PackageManager when this program exits
+	if SystemReboot or SetupHelperUninstall:
+		logging.warning ("setting PackageManager to not restart")
+		try:
+			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ] )
+		except:
+			logging.critical ("svc command failed")
 
 	# remaining tasks are handled in packageManagerEnd.sh because
 	#	SetupHelper uninstall needs to be done after PackageManager.py exists
@@ -4226,10 +4237,6 @@ def main():
 			proc = subprocess.Popen ( command )
 		except:
 			logging.critical ("packageManagerEnd.sh failed")
-
-	# delay to provide time for packageManagerEnd.sh to start up
-	time.sleep (0.1)
-	DbusIf.RemoveDbusService ()
 
 	logging.warning (">>>> PackageManager exiting")
 

@@ -217,7 +217,7 @@ installService ()
 	#	that way the uninstall is assured
 	echo "$serviceName" >> "$installedServicesList"
 
-    # service not yet installed, COPY service directory to the service directory(s)
+    # service not yet installed, COPY service's directory (run files) to the service directory(s)
     if [ ! -e "/service/$serviceName" ]; then
         logMessage "installing $serviceName service"
 
@@ -239,7 +239,10 @@ installService ()
 					serviceRunning=true
 					break
 				fi
-				echo "waiting for $serviceName service to start"
+				# only report wait once
+				if (( delayCount == 10 )); then
+					echo "waiting for $serviceName service to start"
+				fi
 				sleep 1
 				(( delayCount-- ))
 			done
@@ -266,13 +269,7 @@ installService ()
 				fi
             fi
 			if serviceIsUp $serviceName ; then
-				if $runFromPm && [ $serviceName == 'PackageManager' ]; then
-					logMessage "$serviceName restart deferred until GUI restart"
-					restartGui=true
-				else
-					logMessage "restarting $serviceName service"
-					svc -t "/service/$serviceName"
-				fi
+				svc -t "/service/$serviceName"
 			fi
         fi
 		# log needs to be handled separtely including a restart

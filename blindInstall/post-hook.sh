@@ -46,11 +46,15 @@
 # to become available before running the package install script.
 #
 
+logDir="/var/log/PackageManager"
+logFile="$logDir/current"
+if ! [ "$logDir" ]; then
+	mkdir -P "$logDir"
+fi
 logMessage ()
 {
 	echo "$*"
-
-	echo "blind install post-hook.sh: $*" | tai64n >> /data/log/SetupHelper
+	echo "blind install post-hook.sh: $*" | tai64n >> "$logFile"
 }
 
 

@@ -42,7 +42,7 @@ MbPage {
 	property bool navigate: ! actionPending && ! waitForAction
 	property bool detailsExist: incompatibleDetails != ""
 	property bool detailsResolvable: incompatibleResolvableItem.valid ? incompatibleResolvableItem.value : ""
-	property bool showProceed: ( ! detailsExist || detailsResolvable) && ! waitForAction
+
 	property bool showDetails: false
 	property string localError: ""
 
@@ -72,7 +72,13 @@ MbPage {
 			requestedAction = ''
 		}
 	}
-	
+
+	onIncompatibleChanged:
+	{
+		if (! incompatible )
+			showDetails = false
+	}
+
 	onActiveChanged:
 	{
 		if (active)
@@ -203,21 +209,27 @@ MbPage {
 	{
 		if (showDetails)
 		{
-			sendCommand ( 'resolveConflicts:' + packageName, true )
-			showDetails = false
+			if (detailsResolvable)
+			{
+				sendCommand ( 'resolveConflicts:' + packageName, true )
+				showDetails = false
+			}
+			// trigger setup script prechecks
+			else
+			{
+				sendCommand ( 'check:' + packageName, true )
+				showDetails = false
+			}
 		}
 		else if (actionPending)
 			sendCommand ( requestedAction + ':' + packageName, true )
 		else if (showActionNeeded)
 		{
 			if (actionNeeded.indexOf ( "REBOOT" ) != -1 )
-			{
 				sendCommand ( 'reboot', true )
-			}
 			else if (actionNeeded.indexOf ( "restart" ) != -1 )
-			{
 				sendCommand ( 'restartGui', true )
-			}
+				hideActionNeededTimer.start ()
 		}
 		requestedAction = ''
 	}
@@ -339,9 +351,9 @@ MbPage {
 			width: 92
 			anchors { right: cancelButton.left; bottom: statusMessage.bottom }
 			description: ""
-			value: ( actionPending || showDetails ) ? qsTr("Proceed") : qsTr ("Now")
+			value: ( actionPending || detailsResolvable ) ? qsTr("Proceed") : showDetails ? qsTr ("Recheck") : qsTr ("Now")
 			onClicked: confirm ()
-			show: ( actionPending || (showDetails && detailsResolvable) || showActionNeeded ) && showProceed
+			show: ( actionPending || showDetails || showActionNeeded ) && ! waitForAction
 			writeAccessLevel: User.AccessInstaller
 		}
 		MbOK

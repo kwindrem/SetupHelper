@@ -1,0 +1,5 @@
+#### add the following lines to the package's setup script
+
+#### following line incorporates helper resources into this script
+source "/data/SetupHelper/HelperResources/IncludeHelpers"
+#### end of lines to include helper resources

@@ -151,7 +151,7 @@ MbPage {
 				else if (entryValid)
 					return ("add " + packageName + " ?")
 				else if (editPackageName.value == "")
-					return ("enter package name")
+					return ("enter a unique package name")
 				else if (editGitHubUser.value == "")
 					return ("enter GitHub user")
 				else if (editGitHubBranch.value == "")

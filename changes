@@ -1,8 +1,25 @@
+v8.0:
+	allow multiple packages to modify the same file
+	allow multiple patch files for each active file
+	fixed: PackageManager hangs if there is no setup script in package directory
+	fixed: "Once" download scan doesn't check all packages
+	fixed: PackageManager hangs on Python 2 (Venus OS prior to v2.80)
+	use HelperResources only from SetupHelper (not from package directory)
+		this was necessary because /data/SetupHelper/patch
+		is now used in place of the stock patch executable
+	moved SetupHelper logging to /var/log/PackageManager/current
+		from /var/log/SetupHelper
+	added Recheck button for errors discovered in setup script prechecks
+	PackageManager now completes pending operations before exiting
+	add TailscaleGX to default package list
+	updatePackage: added patch options including MANUAL to prevent automatic patch updates
+	updatePackage: rewrite update file sets loop for speed improvement
+
 v7.18:
 	fixed: only first service is uninstalled
 
 v7.17:
-	fixed: services not always uninstalled
+	services not always uninstalled
 
 v7.16:
 	fixed: PackageManager hangs with package add
@@ -15,7 +32,7 @@ v7.14:
 	fixed: incompatible message not cleared when package no longer incompatible
 
 v7.13:
-	fixed: PackageManager doesn't always install packages after firmware update
+	fixed: PackageManager doesn't install packages after firmware update
 
 v7.12:
 	fixed: PackageManager hangs if there is no setup script in package directory

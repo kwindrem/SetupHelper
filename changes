@@ -1,3 +1,6 @@
+v8.1:
+	fixed: GitHub version refresses occuring too fast (~10 seconds vs 10 minutes)
+
 v8.0:
 	allow multiple packages to modify the same file
 	allow multiple patch files for each active file

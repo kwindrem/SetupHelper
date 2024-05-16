@@ -3713,7 +3713,6 @@ def mainLoop ():
 	# default values - changed below based on states
 	emptyPackageList = False
 	scanForActions = True
-	currentDownloadMode = AUTO_DOWNLOADS_OFF
 	autoInstall = False
 
 	# hold off all package processing if package list is empty

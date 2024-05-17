@@ -1,3 +1,6 @@
+v8.2:
+	fixed: auto downloads can happen even when off (introduced in v8.1)
+
 v8.1:
 	fixed: GitHub version refresses occuring too fast (~10 seconds vs 10 minutes)
 

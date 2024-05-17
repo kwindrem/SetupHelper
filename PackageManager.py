@@ -3729,14 +3729,15 @@ def mainLoop ():
 			bootInstall = True
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
+		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		autoInstall = True
 	elif WaitForGitHubVersions:
+		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		scanForActions = False
 
 	# don't look for new actions if uninstalling all packages or uninstalling SetupHelper
-	#	uses defaults above
 	elif MediaScan.AutoUninstall or SetupHelperUninstall:
-		pass
+		currentDownloadMode = AUTO_DOWNLOADS_OFF
 
 	# not doing something special - use dbus values
 	else:

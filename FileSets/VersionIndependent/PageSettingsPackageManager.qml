@@ -48,13 +48,15 @@ MbPage {
         MbItemOptions
         {
             id: autoDownload
-            description: qsTr ("Automatic GitHub downloads")
+            description: qsTr ("GitHub check frequency")
             bind: Utils.path (settingsPrefix, "/GitHubAutoDownload")
             possibleValues:
             [
-                MbOption { description: "On"; value: 1 },
-                MbOption { description: "Once"; value: 2 },
-                MbOption { description: "Off"; value: 0 }
+				MbOption { description: "Once"; value: 99 },
+				MbOption { description: "Every 10 minutes"; value: 1 },
+				MbOption { description: "Hourly"; value: 2 },
+				MbOption { description: "Daily"; value: 3 },
+                MbOption { description: "Never"; value: 0 }
             ]
             writeAccessLevel: User.AccessInstaller
         }

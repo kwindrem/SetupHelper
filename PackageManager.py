@@ -29,7 +29,9 @@
 
 AUTO_DOWNLOADS_OFF = 0
 NORMAL_DOWNLOAD = 1
-ONE_DOWNLOAD = 2
+HOURLY_DOWNLOAD = 2
+DAILY_DOWNLOAD = 3
+ONE_DOWNLOAD = 99
 
 #		/Settings/PackageManager/AutoInstall
 #			0 - no automatic install
@@ -2148,7 +2150,9 @@ class PackageClass:
 # slow refresh also controls GitHub version expiration
 
 FAST_GITHUB_REFRESH = 0.25
-SLOW_GITHUB_REFRESH = 600.0
+NORMAL_GITHUB_REFRESH = 600.0	# 10 minutes
+HOURLY_GITHUB_REFRESH = 60.0 * 60.0
+DAILY_GITHUB_REFRESH = HOURLY_GITHUB_REFRESH * 24.0
 
 class UpdateGitHubVersionClass (threading.Thread):
 
@@ -2264,18 +2268,23 @@ class UpdateGitHubVersionClass (threading.Thread):
 		packageListLength = 0
 		
 		while self.threadRunning:
+			downloadMode = DbusIf.GetAutoDownloadMode ()
+
 			# do initial refreshes quickly
 			if forcedRefresh:
 				delay = FAST_GITHUB_REFRESH
-			# no packages set arbitrary, long delay
-			#	won't actually be used because some message will be pushed to the queue
-			#	but this prevents divide by zero
-			elif packageListLength == 0:
-				delay = SLOW_GITHUB_REFRESH
-			# otherwise set delay to complete scan of all versions in the slow refresh period
+			# otherwise set delay to complete scan of all versions in the selected refresh period
 			#	this prevents GitHub versions from going undefined if refreshes are happening
 			else:
-				delay = SLOW_GITHUB_REFRESH / packageListLength
+				if downloadMode == NORMAL_DOWNLOAD:
+					delay = NORMAL_GITHUB_REFRESH
+				elif downloadMode == HOURLY_DOWNLOAD:
+					delay = HOURLY_GITHUB_REFRESH
+				else:
+					delay = DAILY_GITHUB_REFRESH
+				#	this prevents divide by zero - value not actually used
+				if packageListLength != 0:
+					delay /= packageListLength
 			# queue gets STOP and REFRESH commands or priority package name
 			# empty queue signals it's time for a background update
 			# queue timeout is used to pace background updates
@@ -2338,18 +2347,16 @@ class UpdateGitHubVersionClass (threading.Thread):
 					if source != 'GUI':
 						doUpdate = True
 					# for GUI - refresh if no version or last refresh more than 30 seconds ago
+					# prevents unnecessary network traffic when navigating PackageManager menus
 					elif package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:
 						doUpdate = True
 				else:
 					logging.error ("can't fetch GitHub version - " + packageName + " not in package list")
 				DbusIf.UNLOCK ("UpdateGitHubVersion run 1")
 
-			doBackground = forcedRefresh or DbusIf.GetAutoDownloadMode () != AUTO_DOWNLOADS_OFF
-			# insure background updates will begin with fisrt package when they start again
-			if not doBackground:
-				gitHubVersionPackageIndex = 0
+			doBackground = forcedRefresh or downloadMode != AUTO_DOWNLOADS_OFF
 			# no priority update - do background update
-			elif not doUpdate:
+			if not doUpdate and doBackground:
 				DbusIf.LOCK ("UpdateGitHubVersion run 2")
 				packageListLength = len (PackageClass.PackageList)
 				# empty package list - no refreshes possible
@@ -2361,10 +2368,7 @@ class UpdateGitHubVersionClass (threading.Thread):
 					packageName = package.PackageName
 					user = package.GitHubUser
 					branch = package.GitHubBranch
-					# refresh if no version or last refresh more than 30 seconds ago
-					# prevents unnecessary network traffic when navigating PackageManager menus
-					if package.GitHubVersion == "" or time.time () > package.lastGitHubRefresh + 30:
-						doUpdate = True
+					doUpdate = True
 					gitHubVersionPackageIndex += 1
 				# reached end of list - all package Git Hub versions have been refreshed
 				if gitHubVersionPackageIndex >= packageListLength:
@@ -3651,7 +3655,7 @@ class MediaScanClass (threading.Thread):
 # persistent storage for mainLoop
 packageIndex = 0
 noActionCount = 0
-currentDownloadMode = AUTO_DOWNLOADS_OFF
+lastDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
 DeferredGuiEditAcknowledgement = None
 lastTimeSync = 0
@@ -3677,7 +3681,7 @@ def mainLoop ():
 	global noActionCount
 	global packageIndex
 	global noActionCount
-	global currentDownloadMode
+	global lastDownloadMode
 	global bootInstall
 	global lastTimeSync
 	startTime = time.time()
@@ -3710,15 +3714,16 @@ def mainLoop ():
 	actionMessage = ""
 	bootReinstallFile="/etc/venus/REINSTALL_PACKAGES"
 
-	# default values - changed below based on states
+	currentDownloadMode = DbusIf.GetAutoDownloadMode ()
 	emptyPackageList = False
-	scanForActions = True
+	checkPackages = True
 	autoInstall = False
+	autoDownload = False
 
 	# hold off all package processing if package list is empty
 	if len (PackageClass.PackageList) == 0:
 		emptyPackageList = True
-		scanForActions = False
+		checkPackages = False
 		packageIndex = 0
 
 	# if boot-time reinstall has been requiested by reinstallMods
@@ -3729,32 +3734,29 @@ def mainLoop ():
 			bootInstall = True
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
-		currentDownloadMode = AUTO_DOWNLOADS_OFF
 		autoInstall = True
 	elif WaitForGitHubVersions:
-		currentDownloadMode = AUTO_DOWNLOADS_OFF
-		scanForActions = False
+		checkPackages = False
 
 	# don't look for new actions if uninstalling all packages or uninstalling SetupHelper
 	elif MediaScan.AutoUninstall or SetupHelperUninstall:
-		currentDownloadMode = AUTO_DOWNLOADS_OFF
-
+		pass
 	# not doing something special - use dbus values
 	else:
+		autoDownload = currentDownloadMode != AUTO_DOWNLOADS_OFF
 		autoInstall = DbusIf.GetAutoInstall ()
-		# save mode before chaning so changes can be detected below
-		lastDownloadMode = currentDownloadMode
-		currentDownloadMode = DbusIf.GetAutoDownloadMode ()
+
 		# download mode changed
-		# restart at beginning of list and request GitHub version refresh
-		if currentDownloadMode != lastDownloadMode \
-				and ( currentDownloadMode == ONE_DOWNLOAD or lastDownloadMode == AUTO_DOWNLOADS_OFF ):
+		# restart at beginning of list and refresh all GitHub versions
+		if currentDownloadMode != lastDownloadMode and currentDownloadMode != AUTO_DOWNLOADS_OFF:
 			packageIndex = 0
-			scanForActions = False
+			checkPackages = False
 			UpdateGitHubVersion.SetPriorityGitHubVersion ('REFRESH')
+		# save mode so changes can be detected on next pass
+		lastDownloadMode = currentDownloadMode
 
 	# make sure a new scan starts at beginning of list
-	if not scanForActions:
+	if not checkPackages:
 		packageIndex = 0
 	# process one package per pass of mainloop
 	else:
@@ -3783,8 +3785,7 @@ def mainLoop ():
 
 		# disallow operations on this package if anything is pending
 		packageOperationOk = not package.DownloadPending and not package.InstallPending
-		if packageOperationOk and currentDownloadMode != AUTO_DOWNLOADS_OFF \
-					and DownloadGitHub.DownloadVersionCheck (package):
+		if packageOperationOk and autoDownload and DownloadGitHub.DownloadVersionCheck (package):
 			# don't allow install if download is needed - even if it has not started yet
 			packageOperationOk = False
 			actionMessage = "downloading " + packageName + " ..."
@@ -3810,7 +3811,7 @@ def mainLoop ():
 				actionMessage = "installing " + packageName + " ..."
 				PushAction ( command='install' + ':' + packageName, source='AUTO' )
 		DbusIf.UNLOCK ("mainLoop 1")
-	# end if scanForActions
+	# end if checkPackages
 
 	DbusIf.LOCK ("mainLoop 2")
 	actionsPending = False
@@ -3822,7 +3823,7 @@ def mainLoop ():
 		if package.DownloadPending or package.InstallPending:
 			actionsPending = True
 		# clear GitHub version if not refreshed in 10 minutes
-		elif package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + SLOW_GITHUB_REFRESH + 10:
+		elif package.GitHubVersion != "" and package.lastGitHubRefresh > 0 and time.time () > package.lastGitHubRefresh + NORMAL_GITHUB_REFRESH + 10:
 			package.SetGitHubVersion ("")
 
 		if package.ActionNeeded == REBOOT_NEEDED:

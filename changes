@@ -1,3 +1,7 @@
+v8.4:
+	Fixed: package install fails if it has older setup script
+		(for a while, packages could have their own helper files)
+
 v8.3:
 	added GitHub check frequency: 10 minutes, hourly, daily
 		reduces network bandwidth

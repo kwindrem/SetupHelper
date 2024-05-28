@@ -1244,6 +1244,7 @@ for package in $packageList; do
 		*)
 			logMessage "ERROR: invalid end action $endAction"
 	esac
+	logMessage ""
 done # for package
 
 # review all file sets and report any that only contain sym links across all packages

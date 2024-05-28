@@ -1,3 +1,6 @@
+v8.5:
+	fixed typo in version string (v8.4 was "v8.3=4")
+
 v8.4:
 	Fixed: package install fails if it has older setup script
 		(for a while, packages could have their own helper files)

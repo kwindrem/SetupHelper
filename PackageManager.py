@@ -2430,7 +2430,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 	#
 	# automatic downloads that fail are logged but otherwise not reported
 
-	def GitHubDownload (self, packageName= None, source=None):
+	def GitHubDownload (self, packageName=None, source=None):
 		if source == 'GUI':
 			where = 'Editor'
 		elif source == 'AUTO':
@@ -2440,41 +2440,51 @@ class DownloadGitHubPackagesClass (threading.Thread):
 
 		errorMessage = None
 		errorDetails = None
-
-		DbusIf.LOCK ("GitHubDownload - get GitHub user/branch")
-		package = PackageClass.LocatePackage (packageName)
-		gitHubUser = package.GitHubUser
-		gitHubBranch = package.GitHubBranch
-		DbusIf.UNLOCK ("GitHubDownload - get GitHub user/branch")
-
-		DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
 		downloadError = False
 
-		tempDirectory = "/data/PmDownloadTemp"
-		if not os.path.exists (tempDirectory):
-			os.mkdir (tempDirectory)
-
-		# create temp directory specific to this thread
-		tempArchiveFile = tempDirectory + "/temp.tar.gz"
-		# download archive
-		if os.path.exists (tempArchiveFile):
-			os.remove ( tempArchiveFile )
-
-		url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
-		try:
-			proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],
-								bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			_, stderr = proc.communicate()
-			stderr = stderr.decode ().strip ()
-			returnCode = proc.returncode
-		except:
-			errorMessage = "could not access archive on GitHub " + packageName
+		if packageName == None or packageName == "":
+			logging.error ("GitHubDownload: no package name specified")
 			downloadError = True
-		else:
-			if returnCode != 0:
-				errorMessage = "could not access " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub"
-				errorDetails = "returnCode" + str (returnCode) +  "stderr" + stderr
+
+		if not downloadError:
+			packagePath = "/data/" + packageName
+			tempPackagePath = packagePath + "-temp"
+
+			DbusIf.LOCK ("GitHubDownload - get GitHub user/branch")
+			package = PackageClass.LocatePackage (packageName)
+			gitHubUser = package.GitHubUser
+			gitHubBranch = package.GitHubBranch
+			DbusIf.UNLOCK ("GitHubDownload - get GitHub user/branch")
+
+			DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
+
+			tempDirectory = "/data/PmDownloadTemp"
+			if not os.path.exists (tempDirectory):
+				os.mkdir (tempDirectory)
+
+			# create temp directory specific to this thread
+			tempArchiveFile = tempDirectory + "/temp.tar.gz"
+			# download archive
+			if os.path.exists (tempArchiveFile):
+				os.remove ( tempArchiveFile )
+
+			url = "https://github.com/" + gitHubUser + "/" + packageName  + "/archive/" + gitHubBranch  + ".tar.gz"
+			try:
+				proc = subprocess.Popen ( ['wget', '--timeout=120', '-qO', tempArchiveFile, url ],
+									bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
+				_, stderr = proc.communicate()
+				stderr = stderr.decode ().strip ()
+				returnCode = proc.returncode
+			except:
+				errorMessage = "could not access archive on GitHub " + packageName
 				downloadError = True
+			else:
+				if returnCode != 0:
+					errorMessage = "could not access " + packageName + ' ' + gitHubUser + ' ' + gitHubBranch + " on GitHub"
+					errorDetails = "returnCode:" + str (returnCode)
+					if stderr != "":
+						errorDetails +=  " stderr:" + stderr
+					downloadError = True
 		if not downloadError:
 			try:
 				proc = subprocess.Popen ( ['tar', '-xzf', tempArchiveFile, '-C', tempDirectory ],
@@ -2503,8 +2513,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			# move unpacked archive to package location
 			# LOCK this section of code to prevent others
 			#	from accessing the directory while it's being updated
-			packagePath = "/data/" + packageName
-			tempPackagePath = packagePath + "-temp"
 			try:
 				if os.path.exists (tempPackagePath):
 					shutil.rmtree (tempPackagePath, ignore_errors=True)	# like rm -rf
@@ -2519,7 +2527,6 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				
 			except:
 				errorMessage = "couldn't update " + packageName
-				logging.error ( errorMessage )
 				downloadError = True
 			DbusIf.UNLOCK ("GitHubDownload - move package")
 

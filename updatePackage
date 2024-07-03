@@ -595,7 +595,6 @@ for package in $packageList; do
 			if $compatible && ! [ -e "$fileSet" ]; then
 				mkdir "$fileSet"
 				touch "$fileSet/NEW_FILE_SET"
-				logMessage "$package: $version new file set"
 			fi
 		done
 	fi
@@ -827,7 +826,7 @@ for package in $packageList; do
 		fi
 
 		# locate groups of file sets with matching stock(or .orig) files
-		(( start = 0 ));
+		(( start = 0 ))
 		while (( start < $allFileSetsLength )); do
 			# locate one group of file sets that will use the same replacement file
 			(( end = start )); (( to = -1 ))
@@ -938,7 +937,7 @@ for package in $packageList; do
 			done	# end locate block
 
 			if (( to == -1 )); then
-				logMessage "ERROR $package: $baseName no destination file set - can't reloate files"
+				logMessage "ERROR $package: $baseName no destination file set - can't relocate files"
 			else
 				toReplacement="$toFileSet/$baseName"
 				oldReplacement="$workingFiles/$oldReplacementVersion/$baseName"
@@ -961,7 +960,6 @@ for package in $packageList; do
 					fi
 					versionedFileExists=true
 				else
-					logMessage "ERROR $package $baseName: no replacement for $toVersion"
 					touch "$toReplacement.CHECK_REPLACEMENT"
 				fi
 				if ! $oldReplacementIsUseOrig ; then
@@ -1002,8 +1000,8 @@ for package in $packageList; do
 					# a second replacement is found - remove if matches, error if different
 					updateReplacements=true
 					if $replacementIsFile && $oldReplacementIsFile; then
-						if ! cmp "$replacement" "$toReplacement" ; then
-							logMessage "ERROR $package: $baseName $version second replacement differs - check replacements"
+						if ! cmp -s "$replacement" "$toReplacement" > /dev/null ; then
+							logMessage "ERROR $package: $baseName $version second replacement differs from $toVersion - check replacements"
 							touch "$replacement.CHECK_REPLACEMENT"
 							touch "$toReplacement.CHECK_REPLACEMENT"
 							updateReplacements=false
@@ -1033,7 +1031,6 @@ for package in $packageList; do
 	fi
 
     done  # for file
-
 
 	beginProgress "$package: final checks"
 	for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
@@ -1085,7 +1082,11 @@ for package in $packageList; do
 			fi
 			rm -Rf "$fileSet"
 		# do final checks on versioned files only
+		#	and for file sets that still exist
 		else
+			if [ -e "$fileSet/NEW_FILE_SET" ]; then
+				logMessage "$package: $version new file set"
+			fi
 			for file in ${fileList[@]} ; do
 				baseName=$(basename "$file")
 				# use alternate original if present in AlternateOriginals
@@ -1103,6 +1104,36 @@ for package in $packageList; do
 
 				replacement="$fileSet/$baseName"
 				orig="$fileSet/$baseName.orig"
+
+				# missing replacement, check all other file sets once more
+				if [ -f "$replacement.CHECK_REPLACEMENT" ]; then
+					stockFileSet="$stockFiles/$version"
+					if $useAltOrig ; then
+						stockFile1="$stockFileSet$altOrigFile"
+					else
+						stockFile1="$stockFileSet$file"
+					fi
+					for (( i2 = 0; i2 < $allFileSetsLength; i2++ )); do
+						if (( i2 == i1 )); then continue; fi
+						IFS=':' read version2 versionNumber2 <<< "${allFileSets[$i2]}"
+						fileSet2="$workingFiles/$version2"
+						if ! [ -e "$fileSet2" ] || [ -e "$fileSet2.INCOMPATIBLE_VERSION" ]; then continue; fi
+						replacement2="$fileSet2/$baseName"
+						if ! [ -f "$replacement2" ] || [ -L "$replacement2" ]; then continue; fi
+						orig2="$fileSet2/$baseName.orig"
+						if ! [ -e "$orig2" ]; then continue; fi
+						if cmp -s "$stockFile1" "$orig2" > /dev/null ; then
+							ln -sf "../$version2/$baseName" "$replacement"
+							rm -f "$replacement.CHECK_REPLACEMENT"
+							rm -f "$orig"
+							break
+						fi
+					done
+				fi
+				if [ -f "$replacement.CHECK_REPLACEMENT" ]; then
+					logMessage "ERROR $package $baseName: no replacement for $version"
+				fi
+
 
 				# validate sym link
 				symLinkReplacement=false
@@ -1126,6 +1157,7 @@ for package in $packageList; do
 						touch "$replacement.BAD_LINK"
 					fi
 				fi
+
 				# flag file set incomplete
 				if [ -f "$replacement.CHECK_REPLACEMENT" ] || [ -f "$replacement.NO_ORIG" ] \
 						|| [ -f "$replacement.BAD_LINK" ] ; then
@@ -1136,13 +1168,13 @@ for package in $packageList; do
 			# if all replacement files are in place, mark the file set COMPLETE
 			#	so _checkFileSets can skip all checks
 			# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
-			 if [ -f "$fileSet/INCOMPLETE" ]; then
+			if [ -f "$fileSet/INCOMPLETE" ]; then
 				rm -f "$fileSet/COMPLETE"
 			else
 				touch "$fileSet/COMPLETE"
 			fi
 			rm -f "$fileSet/NEW_FILE_SET"
-		fi
+		fi # do final checks for versioned ...
     done # for i1 (final checks)
 
 	if (( $packageErrors == 0 )); then

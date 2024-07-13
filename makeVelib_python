@@ -1,0 +1,238 @@
+#!/bin/bash
+
+
+
+# convert a version string to an integer to make comparisions easier
+#
+#	Note: copied from VersionResources
+#		but also includes code to report duplcates not in the VersionResources version
+
+function versionStringToNumber ()
+{
+	local version="$*"
+	local numberParts
+	local versionParts
+	local numberParts
+	local otherParts
+	local other
+	local number=0
+	local type='release'
+
+	# split incoming string into
+	# an array of numbers: major, minor, prerelease, etc
+	# and an array of other substrings
+	# the other array is searched for releasy type strings and the related offest added to the version number
+	
+	read -a numberParts <<< $(echo $version | tr -cs '0-9' ' ')
+	numberPartsLength=${#numberParts[@]}
+	if (( $numberPartsLength == 0 )); then
+		versionNumber=0
+		versionStringToNumberStatus="$version: invalid, missing major version"
+		return 1
+	fi
+	if (( $numberPartsLength >= 2 )); then
+		read -a otherParts <<< $(echo $version | tr -s '0-9' ' ')
+		for other in ${otherParts[@]}; do
+			case $other in
+				'b' | '~')
+					type='beta'
+					(( number += 60000 ))
+					break ;;
+				'a')
+					type='alpha'
+					(( number += 30000 ))
+					break ;;
+				'd')
+					type='develop'
+					break ;;
+			esac
+		done
+	fi
+
+	# if release all parts contribute to the main version number
+	#	and offset is greater than all prerelease versions
+	if [ "$type" == "release" ] ; then
+		(( number += 90000 ))
+	# if pre-release, last part will be the pre release part
+	#	and others part will be part the main version number
+	else
+		(( numberPartsLength-- ))
+		(( number += 10#${numberParts[$numberPartsLength]} ))
+	fi
+	# include core version number
+	(( number += 10#${numberParts[0]} * 10000000000000 ))
+	if (( numberPartsLength >= 2)); then
+		(( number += 10#${numberParts[1]} * 1000000000 ))
+	fi
+	if (( numberPartsLength >= 3)); then
+		(( number += 10#${numberParts[2]} * 100000 ))
+	fi
+
+	versionNumber=$number
+	versionStringToNumberStatus="$version:$number $type"
+	return 0
+}
+
+
+totalErrors=0
+totalWarnings=0
+packageErrors=0
+packageWarnings=0
+
+outputtingProgress=false
+
+
+function logMessage ()
+{
+	if $outputtingProgress ; then
+		clearProgress
+	fi
+    echo "$*"
+    if [[ "$*" == "ERROR"* ]]; then
+        ((totalErrors++))
+        ((packageErrors++))
+    elif [[ "$*" == "WARNING"* ]]; then
+        ((totalWarnings++))
+        ((packageWarnings++))
+    fi
+}
+
+function outputProgressTick ()
+{
+	if ! $outputtingProgress ; then
+		echo -en "$beginProgressString"
+	fi
+	echo -en "$1"
+	outputtingProgress=true
+}
+
+function clearProgress ()
+{
+	# start a new line if outputting ticks
+	if $outputtingProgress; then
+		echo
+		# echo -ne "\r\033[2K" #### erase line
+	fi
+	outputtingProgress=false
+}
+
+beginProgressString=""
+
+function beginProgress ()
+{
+	# erase the line but stay on it
+	if $outputtingProgress ; then
+		clearProgress
+	fi
+	if [ ! -z "$1" ]; then
+		beginProgressString="$1 "
+		echo -en "$beginProgressString"
+		
+		outputtingProgress=true
+	fi
+}
+
+
+
+#### script code begins here
+
+# attempt to locate SharedUtilities based on the location of this script
+#	(it is assumed to be in the SetupHelper directory)
+# also sets the package root directory based on this also
+# and also the stock files base directory
+#
+# if these are not correct, edit the lines below to set the appropriate values
+
+scriptDir="$( cd $(dirname "$0") >/dev/null 2>&1 ; /bin/pwd -P )"
+packageRoot="$( dirname $scriptDir )"
+stockFiles="$packageRoot/StockVenusOsFiles"
+pythonLibDir="opt/victronenergy/dbus-systemcalc-py/ext/velib_python"
+veLibFiles=( vedbus.py dbusmonitor.py settingsdevice.py ve_utils.py )
+
+#### set these as appropriate to your system if the values set above are not correct
+#### packageRoot=FILL_THIS_IN_AND_UNCOMMENT_LINE
+#### stockFiles=FILL_THIS_IN_AND_UNCOMMENT_LINE
+
+if [ ! -e "$packageRoot" ]; then
+	echo "unable to locate package root - can't continue"
+	exit
+elif [ ! -e "$stockFiles" ]; then
+	echo "unable to locate stock files - can't continue"
+	exit
+fi
+
+
+# make the version list from the directories in stock files
+# version lists are sorted so the most recent version is first
+tempList=()
+stockVersionList=($(ls -d "$stockFiles"/v[0-9]* 2> /dev/null))
+for entry in ${stockVersionList[@]} ; do
+    version=$(basename $entry)
+    versionFile="$stockFiles/$version/opt/victronenergy/version"
+	if [ -f "$versionFile" ]; then
+		realVersion=$(cat "$versionFile" | head -n 1)
+	else
+        logMessage "ERROR version file missing from stock files $version - can't continue"
+        exit
+	fi
+
+    if [ $version != $realVersion ]; then
+        logMessage "ERROR $version name does not mactch Venus $realVersion - can't continue"
+        exit
+    fi
+	if versionStringToNumber $version ; then
+		tempList+=("$version:$versionNumber")
+	else
+		logMessage "ERROR invalid version $versionStringToNumberStatus - not added to list"
+	fi
+done
+stockVersionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
+stockVersionListLength=${#stockVersionList[@]}
+
+if (( stockVersionListLength < 2 )); then
+	logMessage "fewer than 2 versions - nothing to compare"
+	exit
+fi
+
+if [ -e "$scriptDir/velib_python" ]; then
+	rm -rf "$scriptDir/velib_python"
+fi
+mkdir -p "$scriptDir/velib_python"
+
+for (( i1 = 0; i1 < $stockVersionListLength; i1++ )); do
+	newVersion=false
+	IFS=':' read version versionNumber <<< "${stockVersionList[$i1]}"
+
+	if (( i1  == 0 )); then
+		newVersion=true
+	else
+		for file in ${veLibFiles[@]} ; do
+			file1="$stockFiles/$version/$pythonLibDir/$file"
+			file2="$stockFiles/$previousVersion/$pythonLibDir/$file"
+			if ! cmp -s "$file1" "$file2" > /dev/null ; then
+				logMessage "    $file $previousVersion $version differ"
+				newVersion=true
+			fi
+		done
+	fi
+
+	if $newVersion ; then
+		if (( i1 == 0 ));then
+			velibDir="$scriptDir/velib_python/latest"
+			prevVelibDir="$scriptDir/velib_python/latest"
+		else
+			velibDir="$scriptDir/velib_python/$version"
+		fi
+		mkdir "$velibDir"
+		logMessage "new velib_python version $version"
+		for file in ${veLibFiles[@]} ; do
+			file1="$stockFiles/$version/$pythonLibDir/$file"
+			file2="$velibDir/$file"
+			cp -f "$file1" "$file2"
+		done
+		newVersion=false
+		previousVersion=$version
+		prevVelibDir="$velibDir"
+	fi
+	echo $version > "$prevVelibDir/oldestVersion"
+done

@@ -425,13 +425,19 @@ if [ "$globalEndAction" == "restore" ]; then
 		sourceFiles="$sourceDirectory/FileSets"
 		backupDirectory="$packageRoot/$package.backup"
 		backupFiles="$backupDirectory/FileSets"
+		sourceVeLib="$sourceDirectory/velib_python"
+		backupVeLib="$backupDirectory/velib_python"
 		if [ ! -d "$backupDirectory" ]; then
 			logMessage "WARNING $package: no backup found - package NOT restored"
 			continue
 		fi
 		logMessage "WARNING $package: restored from backup"
 		deleteNestedDirectories "$sourceFiles"
+		deleteNestedDirectories "$sourceVeLib"
 		mv "$backupFiles" "$sourceFiles"
+		if [ -e "$backupVeLib" ]; then
+			mv -f "$backupVeLib" "$sourceVeLib"
+		fi
 		deleteNestedDirectories $backupDirectory
 	done
 	exit
@@ -473,6 +479,7 @@ for entry in ${stockVersionList[@]} ; do
 	fi
 done
 stockVersionList=( $(echo ${tempList[@]} | tr ' ' '\n' | sort -t ':' -r -n -k 2 | uniq ) )
+stockVersionListLength=${#stockVersionList[@]}
 
 for package in $packageList; do
 	packageErrors=0
@@ -485,6 +492,8 @@ for package in $packageList; do
 	backupDirectory="$packageRoot/$package.backup"
 	backupFiles="$backupDirectory/FileSets"
 	versionIndependentFileSet="$workingFiles/VersionIndependent"
+	sourceVeLib="$sourceDirectory/velib_python"
+	workingVeLib="$workingDirectory/velib_python"
 
     if [ ! -d "$sourceDirectory" ] || [ ! -f "$sourceDirectory/version" ]; then
         logMessage "WARNING: $sourceDirectory - not a package directory - skipping"
@@ -557,6 +566,9 @@ for package in $packageList; do
 		if [ -d "$sourceFiles" ]; then
 			cp -pR "$sourceFiles" "$workingFiles"
 		fi
+		if [ -d "$sourceVeLib" ]; then
+			cp -pR "$sourceVeLib" "$workingVeLib"
+		fi
 	fi
 
 	# clean up flag files from a previous run
@@ -575,6 +587,52 @@ for package in $packageList; do
 	rm -f "$workingFiles"/*/*CHECK_VERSION_INDEPENDENT
 	rm -f "$workingFiles"/*CHECK_ALT_ORIG
 	rm -f "$workingFiles"/*/*CHECK_ALT_ORIG
+
+	# update velib_python
+	if [ -e "$workingVeLib" ]; then
+		beginProgress "updating velib_python"
+		pythonLibSoureDir="opt/victronenergy/dbus-systemcalc-py/ext/velib_python"
+		veLibFiles=( vedbus.py dbusmonitor.py settingsdevice.py ve_utils.py )
+		rm -rf "$workingVeLib"
+		mkdir "$workingVeLib"
+
+		for (( i1 = 0; i1 < $stockVersionListLength; i1++ )); do
+			newVersion=false
+			IFS=':' read version versionNumber <<< "${stockVersionList[$i1]}"
+
+			if (( i1  == 0 )); then
+				newVersion=true
+			else
+				for file in ${veLibFiles[@]} ; do
+					file1="$stockFiles/$version/$pythonLibSoureDir/$file"
+					file2="$stockFiles/$previousVersion/$pythonLibSoureDir/$file"
+					if ! cmp -s "$file1" "$file2" > /dev/null ; then
+						newVersion=true
+					fi
+				done
+			fi
+
+			if $newVersion ; then
+				outputProgressTick "."
+				if (( i1 == 0 ));then
+					velibDir="$workingVeLib/latest"
+					prevVelibDir="$workingVeLib/latest"
+				else
+					velibDir="$workingVeLib/$version"
+				fi
+				mkdir "$velibDir"
+				for file in ${veLibFiles[@]} ; do
+					file1="$stockFiles/$version/$pythonLibSoureDir/$file"
+					file2="$velibDir/$file"
+					cp -f "$file1" "$file2"
+				done
+				newVersion=false
+				previousVersion=$version
+				prevVelibDir="$velibDir"
+			fi
+			echo $version > "$prevVelibDir/oldestVersion"
+		done
+	fi
 
 	getFileLists "$workingFiles"
 
@@ -731,27 +789,7 @@ for package in $packageList; do
 						continue
 					fi
 
-					updatePatch=false
-					if [ -f "$patchFile" ]; then
-						origModTime=$( date -r "$patchOrig" '+%s' )
-						resultModTime=$( date -r "$patchResult" '+%s' )
-						patchModTime=$( date -r "$patchFile" '+%s' )
-						if (( origModTime > patchModTime )); then
-							updatePatch=true
-						elif (( resultModTime > patchModTime )); then
-							updatePatch=true
-						elif (( optionsModTime > patchModTime )); then
-							updatePatch=true
-						else
-							updatePatch=false
-						fi
-					else
-						logMessage "$package: creating $( basename $patchFile )"
-						updatePatch=true
-					fi
-					if $updatePatch ; then
-						diff $patchOptions "$patchOrig" "$patchResult" > "$patchFile"
-					fi
+					diff $patchOptions "$patchOrig" "$patchResult" > "$patchFile"
 				done
 			fi
 
@@ -794,7 +832,7 @@ for package in $packageList; do
 				if $foundPatch; then
 					replacementFile="$workingFiles/$version/$baseName"
 					if [ -e "$replacement" ] && ! [ -L "$replacement" ] || [ -e "$replacement.USE_ORIGINAL" ]; then
-						logMessage "WARNING $package: removing $baseName from $version"
+						logMessage "WARNING $package: removing $baseName from $version file set"
 						rm -f "$replacement"*
 					fi
 				else
@@ -1257,6 +1295,11 @@ for package in $packageList; do
 				mkdir "$backupDirectory"
 				if [ -d "$sourceFiles" ]; then
 					mv "$sourceFiles" "$backupFiles"
+				fi
+				sourceVeLib="$sourceDirectory/velib_python"
+				workingVeLib="$workingDirectory/velib_python"
+				if [ -d "$workingVeLib" ]; then
+					mv -f "$workingVeLib" "$sourceVeLib"
 				fi
 			else
 				logMessage "$package: $backupName unchanged"

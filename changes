@@ -1,3 +1,7 @@
+v8.7:
+	updatePackage: always rebuild patch files
+	provide version-dependent velib_phthon for this and other packages
+
 v8.6:
 	fixed: persistent download pending message after a download fails
 

@@ -383,12 +383,6 @@ else:
 	import Queue as queue
 	import gobject as GLib
 
-# add the path to our own packages for import
-# use an established Victron service to maintain compatiblity
-sys.path.insert(1, os.path.join('/opt/victronenergy/dbus-systemcalc-py', 'ext', 'velib_python'))
-from vedbus import VeDbusService
-from settingsdevice import SettingsDevice
-
 global DownloadGitHub
 global InstallPackages
 global AddRemove
@@ -401,6 +395,129 @@ global SystemReboot	# initialized/used in main, set in mainloop
 global GuiRestart	# initialized in main, set in PushAction and InstallPackage, used in mainloop
 global WaitForGitHubVersions # initialized in main, set in UpdateGitHubVersion used in mainLoop 
 global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
+
+
+# convert a version string to an integer to make comparisions easier
+# the Victron format for version numbers is: vX.Y~Z-large-W
+# the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
+# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
+#	large builds now have the same version number as the "normal" build
+#
+# the version string passed to this function allows for quite a bit of flexibility
+#	any alpha characters are permitted prior to the first digit
+#	up to 3 version parts PLUS a prerelease part are permitted
+#		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
+#	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
+#	any non-numeric character can be used to separate main versions
+#	special significance is assigned to single caracter separators between the numeric strings
+#		b or ~ indicates a beta release
+#		a indicates an alpha release
+#		d indicates an development release
+# 		these offset the pre-release number so that b/~ has higher numeric value than any a
+#			and a has higher value than d separator
+#
+# a blank version or one without at least one number part is considered invalid
+# alpha and beta seperators require at least two number parts
+#	if only one number part is found the prerelease seperator is IGNORED
+#
+#	returns the version number or 0 if string does not parse into needed sections
+
+def VersionToNumber (version):
+	version = version.replace ("large","L")
+	numberParts = re.split ('\D+', version)
+	otherParts = re.split ('\d+', version)
+	# discard blank elements
+	#	this can happen if the version string starts with alpha characters (like "v")
+	# 	of if there are no numeric digits in the version string
+	try:
+		while numberParts [0] == "":
+			numberParts.pop(0)
+	except:
+		pass
+
+	numberPartsLength = len (numberParts)
+
+	if numberPartsLength == 0:
+		return 0
+	versionNumber = 0
+	releaseType='release'
+	if numberPartsLength >= 2:
+		if 'b' in otherParts or '~' in otherParts:
+			releaseType = 'beta'
+			versionNumber += 60000
+		elif 'a' in otherParts:
+			releaseType = 'alpha'
+			versionNumber += 30000
+		elif 'd' in otherParts:
+			releaseType = 'develop'
+
+	# if release all parts contribute to the main version number
+	#	and offset is greater than all prerelease versions
+	if releaseType == 'release':
+		versionNumber += 90000
+	# if pre-release, last part will be the pre release part
+	#	and others part will be part the main version number
+	else:
+		numberPartsLength -= 1
+		versionNumber += int (numberParts [numberPartsLength])
+
+	# include core version number
+	versionNumber += int (numberParts [0]) * 10000000000000
+	if numberPartsLength >= 2:
+		versionNumber += int (numberParts [1]) * 1000000000
+	if numberPartsLength >= 3:
+		versionNumber += int (numberParts [2]) * 100000
+
+	return versionNumber
+
+
+# get venus version
+versionFile = "/opt/victronenergy/version"
+try:
+	file = open (versionFile, 'r')
+except:
+	VenusVersion = ""
+	VenusVersionNumber = 0
+else:
+	VenusVersion = file.readline().strip()
+	VenusVersionNumber = VersionToNumber (VenusVersion)
+	file.close()
+
+# add the path to our own packages for import
+# use an established Victron service to maintain compatiblity
+setupHelperVeLibPath = "/data/SetupHelper/velib_python"
+veLibPath = ""
+if os.path.exists ( setupHelperVeLibPath ):
+	for libVersion in os.listdir ( setupHelperVeLibPath ):
+		# use 'latest' for newest versions even if not specifically checked against this verison when created
+		if libVersion == "latest":
+			newestVersionNumber = VersionToNumber ( "v9999.9999.9999" )
+		else:
+			newestVersionNumber = VersionToNumber ( libVersion )
+		oldestVersionPath = os.path.join (setupHelperVeLibPath, libVersion, "oldestVersion" )
+		if os.path.exists ( oldestVersionPath ):
+			try:
+				fd = open (oldestVersionPath, 'r')
+				oldestVersionNumber = VersionToNumber ( fd.readline().strip () )
+				fd.close()
+			except:
+				oldestVersionNumber = 0
+		else:
+			oldestVersionNumber = 0
+		if VenusVersionNumber >= oldestVersionNumber and VenusVersionNumber <= newestVersionNumber:
+			veLibPath = os.path.join (setupHelperVeLibPath, libVersion)
+			break
+
+# no SetupHelper velib - use one in systemcalc
+if veLibPath == "":
+	veLibPath = os.path.join('/opt/victronenergy/dbus-systemcalc-py', 'ext', 'velib_python')
+
+logging.warning ("using " + veLibPath + " for velib_python")
+sys.path.insert(1, veLibPath)
+
+from vedbus import VeDbusService
+from settingsdevice import SettingsDevice
+
 
 #	PushAction
 #
@@ -561,82 +678,6 @@ def PushAction (command=None, source=None):
 	else:
 		return False
 # end PushAction
-
-
-# convert a version string to an integer to make comparisions easier
-# the Victron format for version numbers is: vX.Y~Z-large-W
-# the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
-# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
-#	large builds now have the same version number as the "normal" build
-#
-# the version string passed to this function allows for quite a bit of flexibility
-#	any alpha characters are permitted prior to the first digit
-#	up to 3 version parts PLUS a prerelease part are permitted
-#		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
-#	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
-#	any non-numeric character can be used to separate main versions
-#	special significance is assigned to single caracter separators between the numeric strings
-#		b or ~ indicates a beta release
-#		a indicates an alpha release
-#		d indicates an development release
-# 		these offset the pre-release number so that b/~ has higher numeric value than any a
-#			and a has higher value than d separator
-#
-# a blank version or one without at least one number part is considered invalid
-# alpha and beta seperators require at least two number parts
-#	if only one number part is found the prerelease seperator is IGNORED
-#
-#	returns the version number or 0 if string does not parse into needed sections
-
-def VersionToNumber (version):
-	version = version.replace ("large","L")
-	numberParts = re.split ('\D+', version)
-	otherParts = re.split ('\d+', version)
-	# discard blank elements
-	#	this can happen if the version string starts with alpha characters (like "v")
-	# 	of if there are no numeric digits in the version string
-	try:
-		while numberParts [0] == "":
-			numberParts.pop(0)
-	except:
-		pass
-
-	numberPartsLength = len (numberParts)
-
-	if numberPartsLength == 0:
-		return 0
-	versionNumber = 0
-	releaseType='release'
-	if numberPartsLength >= 2:
-		if 'b' in otherParts or '~' in otherParts:
-			releaseType = 'beta'
-			versionNumber += 60000
-		elif 'a' in otherParts:
-			releaseType = 'alpha'
-			versionNumber += 30000
-		elif 'd' in otherParts:
-			releaseType = 'develop'
-
-
-
-	# if release all parts contribute to the main version number
-	#	and offset is greater than all prerelease versions
-	if releaseType == 'release':
-		versionNumber += 90000
-	# if pre-release, last part will be the pre release part
-	#	and others part will be part the main version number
-	else:
-		numberPartsLength -= 1
-		versionNumber += int (numberParts [numberPartsLength])
-
-	# include core version number
-	versionNumber += int (numberParts [0]) * 10000000000000
-	if numberPartsLength >= 2:
-		versionNumber += int (numberParts [1]) * 1000000000
-	if numberPartsLength >= 3:
-		versionNumber += int (numberParts [2]) * 100000
-
-	return versionNumber
 
 
 #	LocatePackagePath
@@ -1197,17 +1238,23 @@ class DbusIfClass:
 		self.DbusSettings = SettingsDevice(bus=dbus.SystemBus(), supportedSettings=settingsList,
 								timeout = 30, eventCallback=None )
 
-		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
+		# check firmware version and delay dbus service registration for v3.40~38 and beyond
+		global VenusVersionNumber
+		global VersionToNumber
+		versionThreshold = VersionToNumber ("v3.40~28")
+		if VenusVersionNumber >= versionThreshold:
+			self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus(), register=False)
+			delayedRegistration = True
+		else:
+			self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
+			delayedRegistration = False
+		
 		self.DbusService.add_mandatory_paths (
 							processname = 'PackageManager', processversion = 1.0, connection = 'none',
 							deviceinstance = 0, productid = 1, productname = 'Package Manager',
 							firmwareversion = 1, hardwareversion = 0, connected = 1)
-		self.DbusService.add_path ( '/PmStatus', "", writeable = True )
 		self.DbusService.add_path ( '/MediaUpdateStatus', "", writeable = True )
 		self.DbusService.add_path ( '/GuiEditStatus', "", writeable = True )
-
-		global Platform
-		self.DbusService.add_path ( '/Platform', Platform )
 
 		self.DbusService.add_path ( '/GuiEditAction', "", writeable = True,
 										onchangecallback = self.handleGuiEditAction )
@@ -1237,6 +1284,13 @@ class DbusIfClass:
 		self.DbusService.add_path ( '/BackupSettingsFileExist', 0, writeable = True )
 		self.DbusService.add_path ( '/BackupSettingsLocalFileExist', 0, writeable = True )
 		self.DbusService.add_path ( '/BackupProgress', 0, writeable = True )
+
+		# do these last because the GUI uses them to check if PackageManager is running
+		self.DbusService.add_path ( '/PmStatus', "", writeable = True )
+		global Platform
+		self.DbusService.add_path ( '/Platform', Platform )
+		if delayedRegistration:
+			self.DbusService.register ()
 
 
 	#	RemoveDbusService
@@ -4004,20 +4058,6 @@ def main():
 	global PythonVersion
 	if PythonVersion < (3, 0):
 		GLib.threads_init()
-
-	# get venus version
-	global VenusVersion
-	global VenusVersionNumber
-	global VersionToNumber
-	versionFile = "/opt/victronenergy/version"
-	try:
-		file = open (versionFile, 'r')
-	except:
-		VenusVersion = ""
-	else:
-		VenusVersion = file.readline().strip()
-		file.close()
-	VenusVersionNumber = VersionToNumber (VenusVersion)
 
 	# get platform
 	global Platform

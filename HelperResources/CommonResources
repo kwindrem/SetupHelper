@@ -541,6 +541,7 @@ updateActiveFile ()
 	if ! [ -f "$activeFile" ] || ! cmp -s "$sourceFile" "$activeFile" ; then
 		backupActiveFile "$activeFile"
 		cp "$sourceFile" "$activeFile"
+		chmod +r "$activeFile"
 		if [[ -x "$activeFile.orig" ]]; then
 			chmod +x "$activeFile"
 		fi

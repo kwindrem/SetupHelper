@@ -537,16 +537,22 @@ updateActiveFile ()
 	# update the active file if needed
 	# patched files have already incorporated current active file content
 	# 	so nothing diffrerent here
-	doUpdate=false
 	if ! [ -f "$activeFile" ] || ! cmp -s "$sourceFile" "$activeFile" ; then
 		backupActiveFile "$activeFile"
 		cp "$sourceFile" "$activeFile"
-		chmod +r "$activeFile"
-		if [[ -x "$activeFile.orig" ]]; then
-			chmod +x "$activeFile"
-		fi
 		updateRestartFlags "$activeFile"
 		thisFileUpdated=true
+	fi
+
+	# insure active file has proper permissions
+	if [ -f "$activeFile" ]; then
+		chmod +r "$activeFile"
+		if [[ -x "$activeFile.orig" ]] || [[ -x "$sourceFile" ]] ; then
+			chmod +x "$activeFile"
+		fi
+	fi
+
+	if $thisFileUpdated; then
 		return 0
 	else
 		return 1

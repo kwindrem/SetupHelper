@@ -1,3 +1,6 @@
+v8.9:
+	fixed: further changes for the remote GUI issue
+
 v8.8:
 	fixed: GuiMods web GUI (v1) broken (patched file permissions incorrect)
 

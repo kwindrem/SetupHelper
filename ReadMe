@@ -22,6 +22,13 @@ The SetupHelper package provides:
     Restart or initialize PackageManager
     Restart the GUI
 
+NOTE: Support for firmware prior to v3.10 has been dropped starting with SetupHelper v8.10
+	if you are running older versions, change the branch/tag to preV3.10support
+	for any packages you wish to run on that firmware
+
+	While this branch will remain active, there will be no features added to it
+	and only serious bug fixes will be applied.
+
 
 SetupHelper v8 adds the ability for multiple packages to modify the same file
 	Packages must be written to "patch" a file rather than "replace" it

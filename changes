@@ -1,3 +1,7 @@
+v8.10:
+	moved velib_python in SetupHelper to a single version
+	dropping support for firmware earlier than v3.10
+
 v8.9:
 	fixed: further changes for the remote GUI issue
 

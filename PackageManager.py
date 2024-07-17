@@ -368,20 +368,13 @@ import dbus
 import time
 import re
 import glob
+import queue
+from gi.repository import GLib
+# add the path to our own packages for import
+sys.path.insert(1, "/data/SetupHelper/velib_python")
+from vedbus import VeDbusService
+from settingsdevice import SettingsDevice
 
-# accommodate both Python 2 (prior to v2.80) and 3
-# note subprocess.run and subprocess.DEVNULL do not exist in python 2
-#	so subprocess.Popen and subprocess.PIPE and subprocess.communicate ()
-#	are used in all subprodess calls even if process output is not needed
-#	or if it is not necessary to wait for the command to finish
-
-PythonVersion = sys.version_info
-if PythonVersion >= (3, 0):
-	import queue
-	from gi.repository import GLib
-else:
-	import Queue as queue
-	import gobject as GLib
 
 global DownloadGitHub
 global InstallPackages
@@ -482,42 +475,6 @@ else:
 	VenusVersion = file.readline().strip()
 	VenusVersionNumber = VersionToNumber (VenusVersion)
 	file.close()
-
-# add the path to our own packages for import
-# use an established Victron service to maintain compatiblity
-setupHelperVeLibPath = "/data/SetupHelper/velib_python"
-veLibPath = ""
-if os.path.exists ( setupHelperVeLibPath ):
-	for libVersion in os.listdir ( setupHelperVeLibPath ):
-		# use 'latest' for newest versions even if not specifically checked against this verison when created
-		if libVersion == "latest":
-			newestVersionNumber = VersionToNumber ( "v9999.9999.9999" )
-		else:
-			newestVersionNumber = VersionToNumber ( libVersion )
-		oldestVersionPath = os.path.join (setupHelperVeLibPath, libVersion, "oldestVersion" )
-		if os.path.exists ( oldestVersionPath ):
-			try:
-				fd = open (oldestVersionPath, 'r')
-				oldestVersionNumber = VersionToNumber ( fd.readline().strip () )
-				fd.close()
-			except:
-				oldestVersionNumber = 0
-		else:
-			oldestVersionNumber = 0
-		if VenusVersionNumber >= oldestVersionNumber and VenusVersionNumber <= newestVersionNumber:
-			veLibPath = os.path.join (setupHelperVeLibPath, libVersion)
-			break
-
-# no SetupHelper velib - use one in systemcalc
-if veLibPath == "":
-	veLibPath = os.path.join('/opt/victronenergy/dbus-systemcalc-py', 'ext', 'velib_python')
-
-logging.warning ("using " + veLibPath + " for velib_python")
-sys.path.insert(1, veLibPath)
-
-from vedbus import VeDbusService
-from settingsdevice import SettingsDevice
-
 
 #	PushAction
 #
@@ -1241,13 +1198,7 @@ class DbusIfClass:
 		# check firmware version and delay dbus service registration for v3.40~38 and beyond
 		global VenusVersionNumber
 		global VersionToNumber
-		versionThreshold = VersionToNumber ("v3.40~28")
-		if VenusVersionNumber >= versionThreshold:
-			self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus(), register=False)
-			delayedRegistration = True
-		else:
-			self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus())
-			delayedRegistration = False
+		self.DbusService = VeDbusService ('com.victronenergy.packageManager', bus = dbus.SystemBus(), register=False)
 		
 		self.DbusService.add_mandatory_paths (
 							processname = 'PackageManager', processversion = 1.0, connection = 'none',
@@ -1289,8 +1240,8 @@ class DbusIfClass:
 		self.DbusService.add_path ( '/PmStatus', "", writeable = True )
 		global Platform
 		self.DbusService.add_path ( '/Platform', Platform )
-		if delayedRegistration:
-			self.DbusService.register ()
+
+		self.DbusService.register ()
 
 
 	#	RemoveDbusService
@@ -4055,9 +4006,6 @@ def main():
 
 	# Have a mainloop, so we can send/receive asynchronous calls to and from dbus
 	DBusGMainLoop(set_as_default=True)
-	global PythonVersion
-	if PythonVersion < (3, 0):
-		GLib.threads_init()
 
 	# get platform
 	global Platform

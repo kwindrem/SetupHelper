@@ -876,9 +876,15 @@ for package in $packageList; do
 			oldReplacementVersion="-"
 			oldReplacementIsFile=false
 			oldReplacementIsUseOrig=false
+			blockIsUnused=true
 			for (( i1 = start; i1 < $allFileSetsLength; i1++ )); do
 				IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
 				fileSet="$workingFiles/$version"
+				if [ -e "$fileSet/INCOMPATIBLE_VERSION" ] || [ -e "$fileSet/UNUSED_FILE_SET" ]; then
+					fileSetUnused=true
+				else
+					fileSetUnused=false
+				fi
 				replacement="$fileSet/$baseName"
 				stockFileSet="$stockFiles/$version"
 				orig="$fileSet/$baseName.orig"
@@ -939,6 +945,10 @@ for package in $packageList; do
 					break
 				fi
 
+				if ! $fileSetUnused ; then
+					blockIsUnused=false
+				fi
+
 				# save version of old replacement files for next loop
 				if $replacementIsFile ; then
 					if ! $oldReplacementIsFile || [ "$oldReplacementVersion" == "-" ]; then
@@ -958,24 +968,16 @@ for package in $packageList; do
 				# first compatible file set - move replacements here
 				# unused file sets are permitted for the destination file set
 				# but if a used file set is later found, it is preferred
-				if [ -e "$fileSet/INCOMPATIBLE_VERSION" ]; then
-					updateTo=false
-				elif (( to == -1 )); then
-					updateTo=true
-				elif ! [ -e "$fileSet/UNUSED_FILE_SET" ] && [ -e "$toFileSet/UNUSED_FILE_SET" ]; then
-					updateTo=true
-				else
-					updateTo=false
-				fi
-				if $updateTo ; then
+				if (( to == -1 )) && ! $fileSetUnused; then
 					(( to = i1 ))
 					toFileSet="$fileSet"
 					toVersion=$( basename "$toFileSet" )
 				fi
 			done	# end locate block
-
 			if (( to == -1 )); then
-				logMessage "ERROR $package: $baseName no destination file set - can't relocate files"
+				if ! $blockIsUnused; then
+					logMessage "ERROR $package: $baseName no destination file set for block $startVersion $endVersion - can't relocate files"
+				fi
 			else
 				toReplacement="$toFileSet/$baseName"
 				oldReplacement="$workingFiles/$oldReplacementVersion/$baseName"
@@ -1099,29 +1101,40 @@ for package in $packageList; do
 				break
 			fi
 		done
-		# LINKS_ONLY is not used for anything but helps identify file sets
-		#	that don't contain real files
+		# LINKS_ONLY is not used for anything but helps identify file sets that don't contain real files
 		if ! $replacementFilesExist ; then
 			touch "$fileSet/LINKS_ONLY"
 		fi
 
+		fileSetInUse=true
 		# remove file sets for incompatible Venus OS versions
 		if [ -e "$fileSet/INCOMPATIBLE_VERSION" ]; then
-			if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
-				logMessage "WARNING $package: not compatible with Venus $version - file set removed"
+			fileSetInUse=false
+			if $replacementFilesExist ; then
+				logMessage "WARNING $package: $version not compatible with Venus $version but file set not empty"
+			else
+				if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
+					logMessage "WARNING $package: not compatible with Venus $version - file set removed"
+				fi
+				rm -Rf "$fileSet"
 			fi
-			rm -Rf "$fileSet"
 		# remove empty unused file sets
 		elif [ -f "$fileSet/UNUSED_FILE_SET" ]; then
-			# log removal of a previous file set if not created with this run
-			# if it was created with this run, delete it silently
-			if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
-				logMessage "WARNING $package: $version - removing unused file set"
+			fileSetInUse=false
+			if $replacementFilesExist ; then
+				logMessage "WARNING $package: $version no longer used but file set not empty"
+			else
+				# log removal of a previous file set if not created with this run
+				# if it was created with this run, delete it silently
+				if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
+					logMessage "WARNING $package: $version - removing unused file set"
+				fi
+				rm -Rf "$fileSet"
 			fi
-			rm -Rf "$fileSet"
+		fi
 		# do final checks on versioned files only
 		#	and for file sets that still exist
-		else
+		if [ -e "$fileSet" ] && $fileSetInUse; then
 			if [ -e "$fileSet/NEW_FILE_SET" ]; then
 				logMessage "$package: $version new file set"
 			fi
@@ -1172,7 +1185,6 @@ for package in $packageList; do
 					logMessage "ERROR $package $baseName: no replacement for $version"
 				fi
 
-
 				# validate sym link
 				symLinkReplacement=false
 				badLink=false
@@ -1181,18 +1193,17 @@ for package in $packageList; do
 					# resolive symlink then check to make sure that file is valid
 					linkedFile=$( realpath "$replacement" 2> /dev/null )
 					if [ -z "$linkedFile" ]; then
-						badLink=true
+						logMessage "ERROR $package: $baseName $version no linked file $linkedFile"
+						touch "$replacement.BAD_LINK"
 					else
 						linkedFileSet=$( dirname "$linkedFile" )
 						if [ -z "$linkedFileSet" ]; then
-							badLink=true
+							logMessage "ERROR $package: $baseName $version no linked file set"
+							touch "$replacement.BAD_LINK"
 						elif [ -f "$linkedFileSet/UNUSED_FILE_SET" ] || [ -f "$linkedFileSet/INCOMPATIBLE_VERSION" ]; then
-							badLink=true
+							logMessage "ERROR $package: $baseName $version links to unused file set $linkedFileSet"
+							touch "$replacement.BAD_LINK"
 						fi
-					fi
-					if $badLink ; then
-						logMessage "ERROR $package: $baseName $version bad link"
-						touch "$replacement.BAD_LINK"
 					fi
 				fi
 

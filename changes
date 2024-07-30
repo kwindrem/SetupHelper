@@ -1,3 +1,6 @@
+v8.13:
+	fixed: crash when installing packages (introduced in v8.11)
+
 v8.12:
 	readded blind install files
 

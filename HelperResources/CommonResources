@@ -1206,14 +1206,14 @@ endScript ()
 			if yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): " ; then
 				restartGuiV1Service
 				deferGuiRestart=false
-				restartGui=ralse
+				restartGui=false
 			fi
 		else
 			# GUI restart NOT deferred - do it now
 			if ! $deferGuiRestart ; then
 				restartGuiV1Service
 				deferGuiRestart=false
-				restartGui=ralse
+				restartGui=false
 			fi
 		fi
 	fi

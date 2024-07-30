@@ -138,6 +138,7 @@ qmlDir=/opt/victronenergy/gui/qml
 
 installFailed=false
 installExitReason=$EXIT_ERROR
+uninstallExitReason=$EXIT_ERROR
 installFailMessage=""
 installPreChecks=true
 installFailCount=0
@@ -145,12 +146,14 @@ uninstallFailed=false
 
 setInstallFailed ()
 {
+	local reason
+
 	(( installFailCount += 1 ))
 	if [ ! -z "$1" ]; then
-		installExitReason=$1
+		reason=$1
 	# no reson specified - use the generaic error exit code
 	else
-		installExitReason=EXIT_ERROR
+		reason=EXIT_ERROR
 	fi
 	message="${@:2}"
 	if [ ! -z "$message" ]; then
@@ -165,8 +168,10 @@ setInstallFailed ()
 	fi
 
 	if [ $scriptAction == 'UNINSTALL' ]; then
+		uninstallExitReason=$reason
 		uninstallFailed=true
 	else
+		installExitReason=$reason
 		installFailed=true
 	fi
 	if ! $userInteraction && [ $scriptAction == 'INSTALL' ]; then

@@ -537,22 +537,15 @@ updateActiveFile ()
 	# update the active file if needed
 	# patched files have already incorporated current active file content
 	# 	so nothing diffrerent here
+	doUpdate=false
 	if ! [ -f "$activeFile" ] || ! cmp -s "$sourceFile" "$activeFile" ; then
 		backupActiveFile "$activeFile"
 		cp "$sourceFile" "$activeFile"
-		updateRestartFlags "$activeFile"
-		thisFileUpdated=true
-	fi
-
-	# insure active file has proper permissions
-	if [ -f "$activeFile" ]; then
-		chmod +r "$activeFile"
-		if [[ -x "$activeFile.orig" ]] || [[ -x "$sourceFile" ]] ; then
+		if [[ -x "$activeFile.orig" ]]; then
 			chmod +x "$activeFile"
 		fi
-	fi
-
-	if $thisFileUpdated; then
+		updateRestartFlags "$activeFile"
+		thisFileUpdated=true
 		return 0
 	else
 		return 1
@@ -1030,13 +1023,11 @@ restartGuiV1Service ()
 {
 	# gui is the older service that runs GUI v1 only
 	if [ -e "/service/gui" ]; then
-		logMessage "restarting GUI V1 (/service/gui)"
 		svc -t "/service/gui"
 	# restart GUI if NOT running v2 or can't determine if GUI v1 or v2 is selected
 	elif [ -e "/service/start-gui" ]; then
-		local guiVersion="$(dbus-send --system --print-reply --dest=com.victronenergy.settings /Settings/Gui/RunningVersion com.victronenergy.BusItem.GetValue | grep variant | awk '{print $3}')"
+		guiVersion="$(dbus-send --system --print-reply --dest=com.victronenergy.settings /Settings/Gui/RunningVersion com.victronenergy.BusItem.GetValue | grep variant | awk '{print $3}')"
 		if (( $guiVersion != 2 )); then
-			logMessage "restarting GUI V1 (/service/start-gui)"
 			svc -t "/service/start-gui"
 		fi
 	fi
@@ -1052,9 +1043,8 @@ restartGuiV2Service ()
 {
 	# restart GUI if NOT running v1 or can't determine if GUI v1 or v2 is selected
 	if [ -e "/service/start-gui" ]; then
-		local guiVersion="$(dbus-send --system --print-reply --dest=com.victronenergy.settings /Settings/Gui/RunningVersion com.victronenergy.BusItem.GetValue | grep variant | awk '{print $3}')"
+		guiVersion="$(dbus-send --system --print-reply --dest=com.victronenergy.settings /Settings/Gui/RunningVersion com.victronenergy.BusItem.GetValue | grep variant | awk '{print $3}')"
 		if (( $guiVersion != 1 )); then
-			logMessage "restarting GUI V2 (/service/start-gui)"
 			svc -t "/service/start-gui"
 		fi
 	fi
@@ -1170,90 +1160,83 @@ endScript ()
 			exit $EXIT_SUCCESS
 		elif ! [ $scriptAction == 'INSTALL' ] && ! [ $scriptAction == 'UNINSTALL' ]; then
 			setInstallFailed $EXIT_ERROR "unexpected script action $scriptAction - did not install or uninstall"
-			exit $EXIT_ERROR
 		fi
 	fi
 
-	# check for reboot and service restarts
+	# check for reboot or restarts
 	if $rebootNeeded ; then
 		if $userInteraction ; then
 			if yesNoPrompt "Reboot system now (y) or do it manually later (n): " ; then
-				deferReboot=false
+				logMessage "rebooting ..."
+				reboot
 			else
 				logMessage "system must be rebooted to finish installation and activate components"
+				exit $EXIT_REBOOT
 			fi
+		else
+			logMessage "completed - reboot needed"
+			exit $EXIT_REBOOT
 		fi
 	fi
-
-	# restart services if a reboot won't happen below
-	if ! $rebootNeeded || $deferReboot ; then
-		if $restartGeneratorService ; then
-			logMessage "restarting generator service"
-			svc -t /service/dbus-generator-starter
-		fi
-		if $restartSystemCalc ; then
-			logMessage "restarting systemcalc service"
-			svc -t /service/dbus-systemcalc-py
-		fi
-		if $restartDigitalinputs ; then
-			logMessage "restarting digital inputs service"
-			svc -t /service/dbus-digitalinputs
-		fi
+	if $restartGeneratorService ; then
+		logMessage "restarting generator service"
+		svc -t /service/dbus-generator-starter
+	fi
+	if $restartSystemCalc ; then
+		logMessage "restarting systemcalc service"
+		svc -t /service/dbus-systemcalc-py
+	fi
+	if $restartDigitalinputs ; then
+		logMessage "restarting digital inputs service"
+		svc -t /service/dbus-digitalinputs
 	fi
 	#### TODO: add gui v2
 	if $restartGui ; then
 		if $userInteraction ; then
 			if yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): " ; then
+				logMessage "completed - restarting GUI"
 				restartGuiV1Service
-				deferGuiRestart=false
-				restartGui=ralse
+				if $installFailed || $uninstallFailed ; then
+					exit $installExitReason
+				else
+					exit $EXIT_SUCCESS
+				fi
+			else
+				echo "GUI must be restarted to activate changes"
+				exit $EXIT_RESTART_GUI
 			fi
 		else
+			if $deferGuiRestart ; then
+				logMessage "completed - GUI restart needed"
+				exit $EXIT_RESTART_GUI
 			# GUI restart NOT deferred - do it now
-			if ! $deferGuiRestart ; then
+			else
+				logMessage "completed - restarting GUI"
 				restartGuiV1Service
-				deferGuiRestart=false
-				restartGui=ralse
+				if $installFailed || $uninstallFailed ; then
+					exit $installExitReason
+				else
+					exit $EXIT_SUCCESS
+				fi
 			fi
 		fi
 	fi
 
-	local exitCode=$EXIT_SUCCESS
+	# if installation was attempted but failed, exit without checking anything else
 	if $installFailed ; then
 		if [ $scriptAction == 'UNINSTALL' ]; then
-			if $uninstallFailed ; then
-				logMessage "CRITICAL: install failed with error $installExitReason"
-				logMessage "CRITICAL: uninstall also failed with error $uninstallExitReason - package state unknown"
-				exitCode=$uninstallExitReason
-			else
-				logMessage "install failed - package has been successfully uninstalled"
-				exitCode=$installExitReason
-			fi
+			logMessage "complete - package has been uninstalled"
 		else
-			logMessage "install failed during prechecks - no changes were made"
-			exitCode=$installExitReason
+			logMessage "complete - no changes were made"
 		fi
-	elif $uninstallFailed ; then
-		logMessage "CRITICAL: uninstall failed - package state unknown"
-		exitCode=$installExitReason
-	elif $rebootNeeded ; then
-		if $deferReboot ; then
-			logMessage "reboot needed to complete operaiton"
-			exitCode=$EXIT_REBOOT
-		else
-			logMessage "rebooting ..."
-			reboot
-		fi
-	elif $restartGui && $deferGuiRestart ; then
-		echo "GUI must be restarted to activate changes"
-		exitCode=$EXIT_RESTART_GUI
+		exit $installExitReason
 	# install/uninstall succeeded
+	elif $uninstallFailed ; then
+		logMessage "complete - uninstall failed !!"
 	else
 		logMessage "complete - no errors"
-		exitCode=$EXIT_SUCCESS
+		exit $EXIT_SUCCESS
 	fi
-
-	exit $exitCode
 } # endScript ()
 
 ######## this code is executed in-line when CommonResources is sourced

@@ -1,3 +1,6 @@
+v8.12:
+	readded blind install files
+
 v8.11:
 	improved install/uninstall error handling in endScript ()
 	fixed: GUI and other service restarts not always happening

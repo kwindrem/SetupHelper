@@ -1201,7 +1201,8 @@ endScript ()
 		fi
 	fi
 	#### TODO: add gui v2
-	if $restartGui ; then
+	# restart GUI if not doing a reboot below
+	if $restartGui && ! $rebootNeeded && ! $deferReboot; then
 		if $userInteraction ; then
 			if yesNoPrompt "Restart the GUI now (y) or issue a do it manually later (n): " ; then
 				restartGuiV1Service
@@ -1432,22 +1433,6 @@ getFileLists "$pkgFileSets"
 #	updateActiveFile always checks this location first for a replacement before checking file sets
 # tempFileDir is removed in the exit trap above but it is in volatile storage so will be removed on boot anyway
 tempFileDir=$( mktemp -d )
-
-# patch files previously used to patch a file are stored in /etc/venus
-# so they track the selected root fs and are erased when Venus OS is updated
-previousPatchesRoot="/etc/venus/previousPatches"
-previousPatchesDir="$previousPatchesRoot/$packageName"
-if ! [ -e "$previousPatchesDir" ]; then
-	mkdir -p "$previousPatchesDir"
-fi
-# relocate previous patch files
-oldPreviousPatchesDir="$setupOptionsDir/previousPatches"
-if [ -e "$oldPreviousPatchesDir" ]; then
-	logMessage "relocating previous patches"
-	mv "$oldPreviousPatchesDir"/* "$previousPatchesDir"
-	rm -rf "$oldPreviousPatchesDir"
-fi
-unset oldPreviousPatchesDir
 
 # do install pre-checks - skip if uninstalling
 if [ $scriptAction != 'UNINSTALL' ]; then
@@ -1680,6 +1665,22 @@ fi
 #	then check to make sure there is sufficient space before allowing installs
 
 updateRootToReadWrite
+
+# patch files previously used to patch a file are stored in /etc/venus
+# so they track the selected root fs and are erased when Venus OS is updated
+previousPatchesRoot="/etc/venus/previousPatches"
+previousPatchesDir="$previousPatchesRoot/$packageName"
+if ! [ -e "$previousPatchesDir" ]; then
+	mkdir -p "$previousPatchesDir"
+fi
+# relocate previous patch files
+oldPreviousPatchesDir="$setupOptionsDir/previousPatches"
+if [ -e "$oldPreviousPatchesDir" ]; then
+	logMessage "relocating previous patches"
+	mv "$oldPreviousPatchesDir"/* "$previousPatchesDir"
+	rm -rf "$oldPreviousPatchesDir"
+fi
+unset oldPreviousPatchesDir
 
 # done with pre checks
 #	prior to this no system mofications have been made

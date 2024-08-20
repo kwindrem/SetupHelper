@@ -1,3 +1,8 @@
+v8.15:
+	fixed: GUI restart doesn't always occur after install
+	fixed: previouis patches file creation fails on first install
+		because root fs was stil read only
+
 v8.14:
 	fixed: crash when installing packages (introduced in v8.11)
 

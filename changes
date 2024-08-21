@@ -1,3 +1,6 @@
+v8.16:
+	fixed: no previous patch file error created in v8.15
+
 v8.15:
 	fixed: GUI restart doesn't always occur after install
 	fixed: previouis patches file creation fails on first install

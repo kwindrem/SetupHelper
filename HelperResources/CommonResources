@@ -1434,6 +1434,11 @@ getFileLists "$pkgFileSets"
 # tempFileDir is removed in the exit trap above but it is in volatile storage so will be removed on boot anyway
 tempFileDir=$( mktemp -d )
 
+# patch files previously used to patch a file are stored in /etc/venus
+# so they track the selected root fs and are erased when Venus OS is updated
+previousPatchesRoot="/etc/venus/previousPatches"
+previousPatchesDir="$previousPatchesRoot/$packageName"
+
 # do install pre-checks - skip if uninstalling
 if [ $scriptAction != 'UNINSTALL' ]; then
 
@@ -1668,8 +1673,6 @@ updateRootToReadWrite
 
 # patch files previously used to patch a file are stored in /etc/venus
 # so they track the selected root fs and are erased when Venus OS is updated
-previousPatchesRoot="/etc/venus/previousPatches"
-previousPatchesDir="$previousPatchesRoot/$packageName"
 if ! [ -e "$previousPatchesDir" ]; then
 	mkdir -p "$previousPatchesDir"
 fi

@@ -32,7 +32,7 @@ rebootNeeded=false
 runAgain=false
 filesUpdated=false
 restartGui=false
-restartGenerator=false
+restartGeneratorService=false
 restartSystemCalc=false
 restartDigitalinputs=false
 
@@ -370,7 +370,7 @@ updateRestartFlags ()
 {
 	# flag indicating any file update occurred
 	filesUpdated=true
-
+echo $1
 	case $1 in
 		/opt/victronenergy/gui*)
 			restartGui=true

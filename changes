@@ -1,3 +1,7 @@
+v8.17:
+	fixed: adding dbus setting didn't accommodate values starting in --
+	fixed: generator service was restarting unnecessarily when installing packages
+
 v8.16:
 	fixed: no previous patch file error created in v8.15
 

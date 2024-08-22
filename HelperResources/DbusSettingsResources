@@ -50,7 +50,7 @@ updateDbusStringSetting ()
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":\"\"} ]" &> /dev/null
     fi
 
-    dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null
+	dbus -y com.victronenergy.settings "$1" SetValue -- "$2" &> /dev/null
 }
 
 
@@ -68,7 +68,7 @@ updateDbusIntSetting ()
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":0} ]" &> /dev/null
     fi
 
-    dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null
+    dbus -y com.victronenergy.settings "$1" SetValue -- "$2" &> /dev/null
 }
 
 
@@ -86,7 +86,7 @@ updateDbusRealSetting ()
         dbus -y com.victronenergy.settings / AddSettings "%[ {\"path\":\"$1\", \"default\":0.0} ]" &> /dev/null
     fi
 
-    dbus -y com.victronenergy.settings "$1" SetValue "$2" &> /dev/null
+    dbus -y com.victronenergy.settings "$1" SetValue -- "$2" &> /dev/null
 }
 
 

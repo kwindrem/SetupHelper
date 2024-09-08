@@ -1,3 +1,6 @@
+v8.18:
+	fixed: errors when installing RemoteGPIO
+
 v8.17:
 	fixed: adding dbus setting didn't accommodate values starting in --
 	fixed: generator service was restarting unnecessarily when installing packages

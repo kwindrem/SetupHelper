@@ -1181,6 +1181,7 @@ endScript ()
 				deferReboot=false
 			else
 				logMessage "system must be rebooted to finish installation and activate components"
+				deferReboot=true
 			fi
 		fi
 	fi

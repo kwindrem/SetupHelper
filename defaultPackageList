@@ -21,6 +21,7 @@ TailscaleGX           kwindrem      latest
 RpiTemperature        TimD1981      latest
 BatteryAggregator     pulquero      latest
 dbus-i2c              pulquero      latest
+dbus-pi               pulquero      latest
 DCSystemAggregator    pulquero      latest
 gatt-exec-server      pulquero      latest
 FroniusSmartmeter     SirUli        main

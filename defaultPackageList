@@ -23,6 +23,7 @@ BatteryAggregator     pulquero      latest
 dbus-i2c              pulquero      latest
 DCSystemAggregator    pulquero      latest
 gatt-exec-server      pulquero      latest
+dbus-pi               pulquero      latest
 FroniusSmartmeter     SirUli        main
 venus-os_ngrok        mr-manuel     latest
 RemoteGPIO            Lucifer06     main

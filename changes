@@ -1,3 +1,7 @@
+v8.20:
+	add support for v3.50~22 (HTML style sheet in different location)
+	add dbus-pi package to defaults list
+
 v8.19:
 	fixed: system reboots after user chooses to reboot later
 

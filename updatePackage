@@ -799,7 +799,7 @@ for package in $packageList; do
 			patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
 			for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 				IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
-				stockFile="$stockFiles/$version/$file"
+				stockFile="$stockFiles/$version$file"
 				replacement="$workingFiles/$version/$baseName"
 				if ! [ -f "$stockFile" ]; then
 					continue

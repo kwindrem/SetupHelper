@@ -370,7 +370,7 @@ updateRestartFlags ()
 {
 	# flag indicating any file update occurred
 	filesUpdated=true
-echo $1
+
 	case $1 in
 		/opt/victronenergy/gui*)
 			restartGui=true
@@ -460,9 +460,12 @@ updateActiveFile ()
 		return 1
 	fi
 
-	# if the location of the active file must exist
-	if [ ! -e "$(dirname "$activeFile")" ]; then
-		setInstallFailed $EXIT_FILE_SET_ERROR "path to $activeFile does not exist"
+	# the location of the active file must exist
+	#### TODO: accommodate moved style sheet or skip file (not an error) if active does not exist ?????????
+	local pathToActive=$(dirname "$activeFile")
+	if [ ! -e "$pathToActive" ]; then
+		logMessage "WARNING path to $activeFile does not exist - skiping patch"
+		######### setInstallFailed $EXIT_FILE_SET_ERROR "path to $activeFile does not exist"
 		return 1
 	fi
 
@@ -1555,7 +1558,8 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 			rm -f "$currentPatchFile"
 
 			if ! [ -e "$activeFile" ] ; then
-				patchErrors+=( "$baseName no active file for patch" )
+				#### TODO: ??? patchErrors+=( "$baseName no active file for patch" )
+				logMessage "WARNING: $baseName no active file for patch - skipping"
 				continue
 			fi
 

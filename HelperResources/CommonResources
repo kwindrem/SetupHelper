@@ -461,11 +461,9 @@ updateActiveFile ()
 	fi
 
 	# the location of the active file must exist
-	#### TODO: accommodate moved style sheet or skip file (not an error) if active does not exist ?????????
 	local pathToActive=$(dirname "$activeFile")
 	if [ ! -e "$pathToActive" ]; then
-		logMessage "WARNING path to $activeFile does not exist - skiping patch"
-		######### setInstallFailed $EXIT_FILE_SET_ERROR "path to $activeFile does not exist"
+		logMessage "path to $activeFile does not exist - skiping patch"
 		return 1
 	fi
 
@@ -491,9 +489,13 @@ updateActiveFile ()
 		# then in FileSets (previous location of version-indepencent files)
         elif [ -e "$pkgFileSets/$baseName" ]; then
             sourceFile="$pkgFileSets/$baseName"
-		# nothing found - can't continue
 		else
-			setInstallFailed $EXIT_FILE_SET_ERROR "no soure file for $baseName"
+			# if directory for file exists but no sourceFile - can't continue
+			if [ -e $( dirname "$activeFile" ) ]; then
+				setInstallFailed $EXIT_FILE_SET_ERROR "no soure file for $activeFile"
+			else
+				logMessage "enclosing directory for $activeFile not found - skipping update"
+			fi
 			return 1
         fi
     fi
@@ -1558,8 +1560,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 			rm -f "$currentPatchFile"
 
 			if ! [ -e "$activeFile" ] ; then
-				#### TODO: ??? patchErrors+=( "$baseName no active file for patch" )
-				logMessage "WARNING: $baseName no active file for patch - skipping"
+				logMessage "no active file $activeFile - skipping patch"
 				continue
 			fi
 
@@ -1579,16 +1580,19 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 			fi
 
 			patchOk=false
+			skipPatch=false
 
 			if $thisPackageInList; then
-				# only this package modified active file
-				# ignore any previous patch and patch .orig file
 				if ! $otherPackagesInList ; then
+					# only this package modified active file
+					# ignore any previous patch and patch .orig file
 					if [ -e "$activeFile.orig" ]; then
 						cp "$activeFile.orig" "$tempActiveFile"
 						patchOk=true
+					# use active file if no .orig exists
 					else
-						patchErrors+=( "$baseName no .orig file for patch" )
+						cp "$activeFile" "$tempActiveFile"
+						patchOk=true
 					fi
 				# this and others have modified the active file
 				# attempt to remove the previous patch for this package
@@ -1635,7 +1639,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 					patchErrors+=( "$baseName patch unsuccesful" )
 					rm -f "$forwardPatched"
 				fi
-			else
+			elif ! $skipPatch ; then
 				patchErrors+=( "$baseName no patch source" )
 			fi
 		done # for activeFile

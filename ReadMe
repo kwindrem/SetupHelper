@@ -112,7 +112,7 @@ By far, the easiest way to install SetupHelper is the "blind install"
 Another way to install SetupHelper is to use the following from the command line of the GX device:
 
 	wget -qO - https://github.com/kwindrem/SetupHelper/archive/latest.tar.gz | tar -xzf - -C /data
-	mv /data/SetupHelper-latest /data/SetupHelper
+	mv -f /data/SetupHelper-latest /data/SetupHelper
 	/data/SetupHelper/setup
 
 Once SetupHelper is installed, updates to it and other packages can be performed through the GUI

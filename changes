@@ -1,3 +1,6 @@
+v8.21:
+	fixed: patch error for some files if package is reinstalled
+
 v8.20:
 	add support for v3.50~22 (HTML style sheet in different location)
 	add dbus-pi package to defaults list

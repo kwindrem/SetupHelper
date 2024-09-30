@@ -1,3 +1,8 @@
+v8.22:
+	fixed: missing log file and directories are not created
+		until the PackageManager service starts
+		so messages logged before that are not present in the log file
+
 v8.21:
 	fixed: patch error for some files if package is reinstalled
 

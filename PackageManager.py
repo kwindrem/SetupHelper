@@ -452,13 +452,15 @@ def VersionToNumber (version):
 	#	and others part will be part the main version number
 	else:
 		numberPartsLength -= 1
-		versionNumber += int (numberParts [numberPartsLength])
+		if numberParts [numberPartsLength] != "":
+			versionNumber += int (numberParts [numberPartsLength])
 
 	# include core version number
-	versionNumber += int (numberParts [0]) * 10000000000000
-	if numberPartsLength >= 2:
+	if numberPartsLength >= 1 and numberParts [0] != "":
+		versionNumber += int (numberParts [0]) * 10000000000000
+	if numberPartsLength >= 2 and numberParts [1] != "":
 		versionNumber += int (numberParts [1]) * 1000000000
-	if numberPartsLength >= 3:
+	if numberPartsLength >= 3 and numberParts [2] != "":
 		versionNumber += int (numberParts [2]) * 100000
 
 	return versionNumber

@@ -570,7 +570,6 @@ for package in $packageList; do
 			cp -pR "$sourceVeLib" "$workingVeLib"
 		fi
 	fi
-
 	# clean up flag files from a previous run
 	rm -f "$workingFiles"/*/INCOMPATIBLE_VERSION
 	rm -f "$workingFiles"/*/UNUSED_FILE_SET
@@ -841,7 +840,6 @@ for package in $packageList; do
 			done
 		done # for file in fileListPatched
 	fi	# check patch files
-
 	beginProgress "$package: updating file sets"
 
 	# process only versioned files
@@ -876,14 +874,15 @@ for package in $packageList; do
 			oldReplacementVersion="-"
 			oldReplacementIsFile=false
 			oldReplacementIsUseOrig=false
-			blockIsUnused=true
+			addOrigToFileSet=false
+			blockIsUsed=false
 			for (( i1 = start; i1 < $allFileSetsLength; i1++ )); do
 				IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
 				fileSet="$workingFiles/$version"
 				if [ -e "$fileSet/INCOMPATIBLE_VERSION" ] || [ -e "$fileSet/UNUSED_FILE_SET" ]; then
-					fileSetUnused=true
+					fileSetUsed=false
 				else
-					fileSetUnused=false
+					fileSetUsed=true
 				fi
 				replacement="$fileSet/$baseName"
 				stockFileSet="$stockFiles/$version"
@@ -903,11 +902,17 @@ for package in $packageList; do
 				elif [ -f "$replacement.USE_ORIGINAL" ]; then
 					useOrig=true
 				fi
+				# skip this version if parent directory does not exist
+				if ! [ -e $( dirname "$stockFile" ) ]; then
+					fileSetUsed=false
+				fi
 				if (( i1 == start )); then
 					startVersion=$version
 				fi
 			
-				if [ -e "$stockFile" ]; then
+				if ! $fileSetUsed ; then
+					thisOrig=""
+				elif [ -e "$stockFile" ]; then
 					thisOrig="$stockFile"
 				# error if file set exists but no stock file
 				elif [ -e "$stockFileSet" ]; then
@@ -931,13 +936,15 @@ for package in $packageList; do
 				fi
 				includeInBlock=false
 				# nothing to compare - include in same block
-				if [ -z "$compareReference" ] || [ -z "$thisOrig" ]; then
-					includeInBlock=true
-				elif [ "$thisOrig" == "$compareReference" ]; then
-					includeInBlock=true
-				# orig exists and DOES match others in block
-				elif cmp -s "$thisOrig" "$compareReference" > /dev/null ; then
-					includeInBlock=true
+				if $fileSetUsed ; then
+					if [ -z "$compareReference" ] || [ -z "$thisOrig" ]; then
+						includeInBlock=true
+					elif [ "$thisOrig" == "$compareReference" ]; then
+						includeInBlock=true
+					# orig exists and DOES match others in block
+					elif cmp -s "$thisOrig" "$compareReference" > /dev/null ; then
+						includeInBlock=true
+					fi
 				fi
 
 				# start a new block
@@ -945,8 +952,8 @@ for package in $packageList; do
 					break
 				fi
 
-				if ! $fileSetUnused ; then
-					blockIsUnused=false
+				if $fileSetUsed ; then
+					blockIsUsed=true
 				fi
 
 				# save version of old replacement files for next loop
@@ -955,11 +962,14 @@ for package in $packageList; do
 						oldReplacementVersion=$version
 						oldReplacementIsFile=true
 						oldReplacementIsUseOrig=false
+						addOrigToFileSet=true
 					fi
 				elif $useOrig && [ "$oldReplacementVersion" == "-" ]; then
 					oldReplacementVersion=$version
 					oldReplacementIsFile=false
 					oldReplacementIsUseOrig=true
+					# retain .orig so that SetupHelper can create USE_ORIGINAL flag files for missing file sets
+					addOrigToFileSet=true
 				fi
 
 				(( end = i1 ))
@@ -968,14 +978,14 @@ for package in $packageList; do
 				# first compatible file set - move replacements here
 				# unused file sets are permitted for the destination file set
 				# but if a used file set is later found, it is preferred
-				if (( to == -1 )) && ! $fileSetUnused; then
+				if (( to == -1 )) && $fileSetUsed; then
 					(( to = i1 ))
 					toFileSet="$fileSet"
 					toVersion=$( basename "$toFileSet" )
 				fi
 			done	# end locate block
 			if (( to == -1 )); then
-				if ! $blockIsUnused; then
+				if $blockIsUsed; then
 					logMessage "ERROR $package: $baseName no destination file set for block $startVersion $endVersion - can't relocate files"
 				fi
 			else
@@ -999,10 +1009,10 @@ for package in $packageList; do
 						mv "$oldReplacement" "$toReplacement"
 					fi
 					versionedFileExists=true
-				else
+				elif [ -e $( dirname "$toReplacement" ) ]; then
 					touch "$toReplacement.CHECK_REPLACEMENT"
 				fi
-				if ! $oldReplacementIsUseOrig ; then
+				if $addOrigToFileSet ; then
 					if [ -f "$toStockFile" ]; then
 						cp "$toStockFile" "$toReplacement.orig"
 					elif [ -f "$oldReplacement.orig" ]; then
@@ -1032,9 +1042,11 @@ for package in $packageList; do
 						useOrig=true
 					fi
 
-					if $useOrig && ! $oldReplacementIsUseOrig ; then
-						logMessage "WARNING $package: $baseName has replacement - USE_ORIGINAL removed"
-						rm -f "$replacement.USE_ORIGINAL"
+					if $useOrig ; then
+						if ! $oldReplacementIsUseOrig ; then
+							logMessage "WARNING $package: $baseName has replacement - USE_ORIGINAL removed"
+							rm -f "$replacement.USE_ORIGINAL"
+						fi
 					fi
 
 					# a second replacement is found - remove if matches, error if different
@@ -1050,7 +1062,7 @@ for package in $packageList; do
 					if $updateReplacements ; then
 						rm -f "$replacement"*
 						if $oldReplacementIsUseOrig; then
-							touch "$toReplacement.USE_ORIGINAL"
+							touch "$replacement.USE_ORIGINAL"
 						# links are created even if replacement does not exist
 						else
 							ln -sf "../$toVersion/$baseName" "$replacement"
@@ -1182,7 +1194,19 @@ for package in $packageList; do
 					done
 				fi
 				if [ -f "$replacement.CHECK_REPLACEMENT" ]; then
-					logMessage "ERROR $package $baseName: no replacement for $version"
+					enclosingDir=$( dirname "$stockFile1" )
+					if [ -e "$enclosingDir" ]; then
+						dirName=$( basename "$enclosingDir" )
+						logMessage "ERROR $package "$dirName"/$baseName: no replacement for $version"
+						# grab a copy of the orig file to make creating the replacement easier
+						if ! [ -e "$replacement.orig" ]; then	
+							if [ -e "$stockFile1" ]; then
+								cp "$stockFile1" "$replacement.orig"
+							else
+								logMessage "ERROR $package $"dirName"/$baseName: no stock file for $version"
+							fi
+						fi
+					fi
 				fi
 
 				# validate sym link

@@ -461,9 +461,8 @@ updateActiveFile ()
 	fi
 
 	# the location of the active file must exist
-	local pathToActive=$(dirname "$activeFile")
-	if [ ! -e "$pathToActive" ]; then
-		logMessage "path to $activeFile does not exist - skiping patch"
+	if [ ! -e $(dirname "$activeFile") ]; then
+		logMessage "path to $activeFile does not exist - skiping update"
 		return 1
 	fi
 
@@ -784,6 +783,11 @@ checkFileSets ()
 		else
 			activeFile=$file
         fi
+		if ! [ -e $( dirname "$activeFile" ) ]; then
+			logMessage "no parent directory $activeFile - skipping checks"
+			continue
+		fi
+
         # package already installed, use .orig file for comparisons
         if [ -f "$activeFile.orig" ]; then
             activeFile="$activeFile.orig"

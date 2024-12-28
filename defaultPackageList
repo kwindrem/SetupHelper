@@ -10,7 +10,6 @@
 # Package             GitHubUser    Tag/branch/version
 SetupHelper           kwindrem      latest
 GuiMods               kwindrem      latest
-ExtTransferSwitch     kwindrem      latest
 ShutdownMonitor       kwindrem      latest
 VeCanSetup            kwindrem      latest
 RpiDisplaySetup       kwindrem      latest

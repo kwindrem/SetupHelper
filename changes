@@ -1,3 +1,9 @@
+v8.23:
+	add code to updatePackage and CommonResources to handle directory renames
+		(e.g., dbus-generator-starter to dbus-generator)
+	fixed: PackageManager crash if version string contains invalid characters
+	updatePackage: fixed: USE_ORIGINAL flag files not created in some cases
+
 v8.22:
 	fixed: missing log file and directories are not created
 		until the PackageManager service starts

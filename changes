@@ -1,3 +1,6 @@
+v8.24:
+	8.23 did not have the blind install files
+
 v8.23:
 	add code to updatePackage and CommonResources to handle directory renames
 		(e.g., dbus-generator-starter to dbus-generator)

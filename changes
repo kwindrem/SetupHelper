@@ -1,3 +1,7 @@
+v8.25:
+	changed ReadMe to a markup document
+	included PackageDevelopmentGuidelines.md in the package (previously on DropBox)
+
 v8.24:
 	8.23 did not have the blind install files
 

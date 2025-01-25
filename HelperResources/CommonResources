@@ -1536,6 +1536,20 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		done
 	fi
 
+	# create patched files for all qml files for the change to QtQuick 2
+	versionStringToNumber "v3.60~18"
+	if (( $venusVersionNumber >= $versionNumber )); then
+		logMessage "patching QtQuick 1.1 to QtQuick 2 in all .qml replacements"
+		for file in ${fileListVersionIndependent[@]};  do
+			baseName=$( basename "$file" )
+			if ! [[ "$baseName" == *.qml ]]; then continue; fi
+			sourceFile="$versionIndependentFileSet/$baseName"
+			if ! [ -f "$sourceFile" ]; then continue; fi
+			if (( $(grep -c "QtQuick 1.1" "$sourceFile") == 0 )); then continue; fi
+			sed -e 's/QtQuick 1.1/QtQuick 2/' "$sourceFile" > "$tempFileDir/$baseName"
+		done
+	fi
+
 	# create the forward and reverse patched files
 	# used during the actual install and to test if the patch/reverse patch will succeed
 	# done here so PackageManager knows if this will be possible before starting the install

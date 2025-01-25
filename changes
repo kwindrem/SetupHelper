@@ -1,3 +1,6 @@
+v8.27:
+	support the change to QtQuick 2 first used in v3.60~18
+
 v8.26:
 	added link to IncludeHelpers so that old packages can find correct file to source
 

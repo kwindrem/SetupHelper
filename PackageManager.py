@@ -1954,6 +1954,18 @@ class PackageClass:
 				self.SetIncompatible ("incompatible with " + VenusVersion)
 				compatible = False
 				doConflictChecks = False
+			elif os.path.exists (packageDir + "/validFirmwareVersions"):
+				with open(packageDir + "/validFirmwareVersions") as f:
+					lines = f.readlines ()
+					versionPresent = False
+					for line in lines:
+						if line.strip() == VenusVersion:
+							versionPresent = True
+							break
+					if not versionPresent:
+						self.SetIncompatible ("incompatible with " + VenusVersion)
+						compatible = False
+						doConflictChecks = False
 
 		# check to see if command line is needed for install
 		# the optionsRequired flag in the package directory indicates options must be set before a blind install

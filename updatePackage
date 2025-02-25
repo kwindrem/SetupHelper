@@ -438,6 +438,10 @@ if [ "$globalEndAction" == "restore" ]; then
 		if [ -e "$backupVeLib" ]; then
 			mv -f "$backupVeLib" "$sourceVeLib"
 		fi
+		#### TODO: delayed implementaiton 
+		####if [ -e "$backupDirectory/validFirmwareVersions" ]; then
+		####	mv -f "$backupDirectory/validFirmwareVersions" "$sourceDirectory/validFirmwareVersions"
+		####fi
 		deleteNestedDirectories $backupDirectory
 	done
 	exit
@@ -494,6 +498,7 @@ for package in $packageList; do
 	versionIndependentFileSet="$workingFiles/VersionIndependent"
 	sourceVeLib="$sourceDirectory/velib_python"
 	workingVeLib="$workingDirectory/velib_python"
+	backupVeLib="$backupDirectory/velib_python"
 
     if [ ! -d "$sourceDirectory" ] || [ ! -f "$sourceDirectory/version" ]; then
         logMessage "WARNING: $sourceDirectory - not a package directory - skipping"
@@ -533,9 +538,9 @@ for package in $packageList; do
 	fi
 	if [ -f "$sourceDirectory/firstCompatibleVersion" ]; then
 		firstCompatibleVersion=$(cat "$sourceDirectory/firstCompatibleVersion")
-	# limit packages to v2.71 and newer
+	# limit packages to v3.10 and newer
 	else
-		firstCompatibleVersion='v2.71'
+		firstCompatibleVersion='v3.10'
 	fi
 	if versionStringToNumber $firstCompatibleVersion ; then
 		firstVersionNumber=$versionNumber
@@ -586,6 +591,15 @@ for package in $packageList; do
 	rm -f "$workingFiles"/*/*CHECK_VERSION_INDEPENDENT
 	rm -f "$workingFiles"/*CHECK_ALT_ORIG
 	rm -f "$workingFiles"/*/*CHECK_ALT_ORIG
+
+	#### TODO: delayed implementaiton # create valid firmware version list
+	####rm -f "$workingDirectory/validFirmwareVersions"
+	####for (( i1 = 0; i1 < $stockVersionListLength; i1++ )); do
+	####	IFS=':' read version versionNumber <<< "${stockVersionList[$i1]}"
+	####	if (( versionNumber >= firstCompatibleVersionNumber )) && (( versionNumber < obsoleteVersionNumber )) ; then
+	####		echo $version >> "$workingDirectory/validFirmwareVersions"
+	####	fi
+	####done
 
 	# update velib_python
 	if [ -e "$workingVeLib" ]; then
@@ -1332,10 +1346,14 @@ for package in $packageList; do
 					mv "$sourceFiles" "$backupFiles"
 				fi
 				sourceVeLib="$sourceDirectory/velib_python"
-				workingVeLib="$workingDirectory/velib_python"
-				if [ -d "$workingVeLib" ]; then
-					mv -f "$workingVeLib" "$sourceVeLib"
+				backupVeLib="$backupDirectory/velib_python"
+				if [ -d "$sourceVeLib" ]; then
+					mv -f "$sourceVeLib" "$backupVeLib"
 				fi
+				#### TODO: delayed implementaiton 
+				####if [ -e "$sourceDirectory/validFirmwareVersions" ]; then
+				####	mv -f "$sourceDirectory/validFirmwareVersions" "$backupDirectory/validFirmwareVersions"
+				####fi
 			else
 				logMessage "$package: $backupName unchanged"
 			fi
@@ -1349,6 +1367,15 @@ for package in $packageList; do
 				logMessage "$package: removing HelperResources"
 				deleteNestedDirectories "$sourceDirectory/HelperResources"
 			fi
+			sourceVeLib="$sourceDirectory/velib_python"
+			workingVeLib="$backupDirectory/velib_python"
+			if [ -d "$workingVeLib" ]; then
+				mv -f "$workingVeLib" "$sourceVeLib"
+			fi
+			#### TODO: delayed implementaiton 
+			####if [ -e "$workingDirectory/validFirmwareVersions" ]; then
+			####	mv -f "$workingDirectory/validFirmwareVersions" "$sourceDirectory/validFirmwareVersions"
+			####fi
 			deleteNestedDirectories "$workingDirectory"
 			;;
 		*)

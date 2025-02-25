@@ -1,3 +1,7 @@
+v8.28: (pending)
+	remove venus-os_ngrok from default package list
+	first compatible version is now v3.10
+
 v8.27:
 	support the change to QtQuick 2 first used in v3.60~18
 

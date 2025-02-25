@@ -775,10 +775,15 @@ If present **firstCompatibleVersion** identifies the first version that
 IS compatible with this package. E.g., if firstCompatibleVersion
 contains v8.0 and the current Venus OS version is v7.2, the package
 can't be installed.
+If **firstCompatibleVersion** is not present, SetupHelper uses v3.10 as the first compatible version.
 
 Note that if both **firstCompatibleVersion** and **obsoleteVersion** are
 included in the package directory, the obsoleteVersion must be greater
 than firstCompatibleVersion.
+
+If present **validFirmwareVersions** identifies all versions which have been
+tested as compatible with the package. It is a list of Venus OS versions, one per line.
+If this file is present, **firstCompatibleVersion** and **obsoleteVersion** are redundant.
 
 If the file **raspberryPiOnly** exists in the package directory, the
 platform (aka 'machine') MUST be raspberrypi2 or raspberrypi4. If not,

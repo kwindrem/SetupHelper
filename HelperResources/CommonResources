@@ -1463,18 +1463,36 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		firstCompatibleVersion=$(cat "$scriptDir/firstCompatibleVersion")
 	# no first compatible version specified - use the default
 	else
-		firstCompatibleVersion='v2.71'
+		firstCompatibleVersion='v3.10'
 	fi
+	if [ -f "$scriptDir/obsoleteVersion" ]; then
+		obsoleteVersion=$(cat "$scriptDir/obsoleteVersion")
+		versionStringToNumber $obsoleteVersion
+		obsoleteVersionNumber=$versionNumber
+	else
+		obsoleteVersionNumber=9999999999999999
+	fi
+
 	versionStringToNumber $firstCompatibleVersion
 	firstCompatibleVersionNumber=$versionNumber
 	if (( $venusVersionNumber < $firstCompatibleVersionNumber )); then
 		setInstallFailed $EXIT_INCOMPATIBLE_VERSION "$venusVersion before first compatible $firstCompatibleVersion"
-	elif [ -f "$scriptDir/obsoleteVersion" ]; then
-		obsoleteVersion=$(cat "$scriptDir/obsoleteVersion")
-		versionStringToNumber $obsoleteVersion
-		obsoleteVersionNumber=$versionNumber
-		if (( $venusVersionNumber >= $obsoleteVersionNumber )); then
+	elif (( $venusVersionNumber >= $obsoleteVersionNumber )); then
 			setInstallFailed $EXIT_INCOMPATIBLE_VERSION "$venusVersion after last compatible $obsoleteVersion"
+	# validate firmware version if valid firmware version file exists
+	elif [ -e "$scriptDir/validFirmwareVersions" ]; then
+		incompatibleVersion=false
+		if ! grep -xq "$venusVersion" "$scriptDir/validFirmwareVersions" ; then
+			incompatibleVersion=true
+		fi
+		# user can override this from command line (for testing new versions mainly)
+		if $incompatibleVersion && $userInteraction ; then
+			if yesNoPrompt "$venusVersion not in the valid firmware list proceed any way (y/n)? " ; then 
+				incompatibleVersion=false
+			fi
+		fi
+		if $incompatibleVersion ; then
+			setInstallFailed $EXIT_INCOMPATIBLE_VERSION "$venusVersion not in valid firmware list"
 		fi
 	fi
 

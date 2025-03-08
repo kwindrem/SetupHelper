@@ -1589,16 +1589,17 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		patchErrors=()
 		for activeFile in ${fileListPatched[@]}; do
 			baseName=$( basename $activeFile )
-			tempActiveFile="$tempFileDir/$baseName"
+			tempActiveFile="$tempFileDir/$baseName.tmp"
+			forwardPatched="$tempFileDir/$baseName.patchedForInstall"
 			currentPatchFile="$tempFileDir/$baseName.currentPatch"
 			previousPatchFile="$previousPatchesDir/$baseName.patch"
-
-			rm -f "$currentPatchFile"
 
 			if ! [ -e "$activeFile" ] ; then
 				logMessage "no active file $activeFile - skipping patch"
 				continue
 			fi
+
+			rm -f "$currentPatchFile"
 
 			# check for this and other packages in .package list
 			packageList="$activeFile.package"
@@ -1656,7 +1657,6 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 				# the first one that successfully creates a forward AND reverse patch is used
 				# .patchedForInstall provides the patched file for updateActiveFile
 				patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
-				forwardPatched="$tempActiveFile.patchedForInstall"
 				for patchFile in ${patchFiles[@]};do
 					if $patch --forward -o "$forwardPatched" "$tempActiveFile" "$patchFile" &> /dev/null ; then
 						# forward patch succeeded - test reverse patch (both must succeed)

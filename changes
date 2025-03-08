@@ -1,4 +1,7 @@
-v8.28: (pending)
+v8.29:
+	fixed: active file not always updated by a patched file - SILENTLY !
+
+v8.28:
 	remove venus-os_ngrok from default package list
 	first compatible version is now v3.10
 

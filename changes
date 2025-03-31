@@ -1,3 +1,7 @@
+v8.30:
+	fixed: generator service not restarted
+		(moved from dbus-generator-starter to dbus-generator)
+
 v8.29:
 	fixed: active file not always updated by a patched file - SILENTLY !
 

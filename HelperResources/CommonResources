@@ -376,7 +376,7 @@ updateRestartFlags ()
 			restartGui=true
 			return;;
 		#### TODO: add gui-v2
-		/opt/victronenergy/dbus-generator-starter/*)
+		/opt/victronenergy/dbus-generator*/*)
 			restartGeneratorService=true
 			return;;
 		/opt/victronenergy/dbus-systemcalc-py/*)
@@ -1199,7 +1199,12 @@ endScript ()
 	if ! $rebootNeeded || $deferReboot ; then
 		if $restartGeneratorService ; then
 			logMessage "restarting generator service"
-			svc -t /service/dbus-generator-starter
+			if [ -e "svc -t /service/dbus-generator" ]; then
+				svc -t /service/dbus-generator
+			fi
+			if [ -e "svc -t /service/dbus-generator-starter" ]; then
+				svc -t /service/dbus-generator-starter
+			fi
 		fi
 		if $restartSystemCalc ; then
 			logMessage "restarting systemcalc service"
@@ -1678,6 +1683,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 			elif ! $skipPatch ; then
 				patchErrors+=( "$baseName no patch source" )
 			fi
+			rm -f "$tempActiveFile"
 		done # for activeFile
 
 		# save errors in patchErrors file

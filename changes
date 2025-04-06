@@ -1,3 +1,7 @@
+v8.31:
+	fixed: installedFileList not being created which may leave modified files after uninstall
+	fixed: .NO_ORIG files not removed when uninstalling
+
 v8.30:
 	fixed: generator service not restarted
 		(moved from dbus-generator-starter to dbus-generator)

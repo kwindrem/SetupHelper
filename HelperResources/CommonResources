@@ -516,8 +516,8 @@ updateActiveFile ()
 	fi
 
 	# add file to installed files list (used by uninstallAll)
-	if [ -e "$installedFilesList" ] \
-			&& (( $( grep -c "$activeFile" "$installedFilesList" ) == 0 )); then
+	if ! [ -e "$installedFilesList" ] \
+			|| (( $( grep -c "$activeFile" "$installedFilesList" ) == 0 )); then
 		echo "$activeFile" >> "$installedFilesList"
 	fi
 
@@ -672,6 +672,7 @@ restoreActiveFile ()
 			thisFileUpdated=true
 		elif [ -f "$activeFile.NO_ORIG" ]; then
 			rm -f "$activeFile"
+			rm -f "$activeFile.NO_ORIG"
 			thisFileUpdated=true
 		fi
 

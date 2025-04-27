@@ -2,7 +2,7 @@
 
 # this script is called from /data/rcS.local during system boot
 # it checks to see the PackageManager service is installed and if not,
-#	will install the PackageManager service
+#	will install ONLY the PackageManager service
 #
 # the REINSTALL_PACKAGES flag file is then set so that
 #	when PackageManger runs, it will do boot-time reinstall checks for all packages

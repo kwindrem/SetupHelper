@@ -1,3 +1,7 @@
+v8.32:
+	fixed: packages reinstalled at boot time with Auto Install off
+		should only install if not currently installed and not manually uninstalled
+
 v8.31:
 	fixed: installedFileList not being created which may leave modified files after uninstall
 	fixed: .NO_ORIG files not removed when uninstalling

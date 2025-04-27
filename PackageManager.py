@@ -3760,7 +3760,6 @@ def mainLoop ():
 			bootInstall = True
 			packageIndex = 0
 			logging.warning ("starting boot-time reinstall")
-		autoInstall = True
 	elif WaitForGitHubVersions:
 		checkPackages = False
 
@@ -3828,6 +3827,9 @@ def mainLoop ():
 			# auto install OK (not manually uninstalled) and versions are different
 			elif package.AutoInstallOk and package.PackageVersionNumber != package.InstalledVersionNumber:
 				if autoInstall:
+					installOk = True
+				# do boot-time install only if the package is not installed
+				elif bootInstall and package.InstalledVersion == "":
 					installOk = True
 				elif os.path.exists ("/data/" + packageName + "/AUTO_INSTALL"):
 					installOk = True

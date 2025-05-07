@@ -1,3 +1,8 @@
+v8.33:
+	fixed: boot-time reinstall flag removal failure caused PackageManager to crash
+		if the flag could not be removed
+		this would only happen if the file or partition did not have write permission
+
 v8.32:
 	fixed: packages reinstalled at boot time with Auto Install off
 		should only install if not currently installed and not manually uninstalled

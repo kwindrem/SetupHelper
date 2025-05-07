@@ -3683,6 +3683,7 @@ packageIndex = 0
 noActionCount = 0
 lastDownloadMode = AUTO_DOWNLOADS_OFF
 bootInstall = False
+ignoreBootInstall = False
 DeferredGuiEditAcknowledgement = None
 lastTimeSync = 0
 
@@ -3709,6 +3710,7 @@ def mainLoop ():
 	global noActionCount
 	global lastDownloadMode
 	global bootInstall
+	global ignoreBootInstall
 	global lastTimeSync
 	startTime = time.time()
 
@@ -3754,7 +3756,8 @@ def mainLoop ():
 
 	# if boot-time reinstall has been requiested by reinstallMods
 	#	override modes and initiate auto install of all packages
-	elif os.path.exists (bootReinstallFile):
+	# ignore the boot reinstall flag if it's been done once and the flag removal failed
+	elif os.path.exists (bootReinstallFile) and not ignoreBootInstall:
 		# beginning of boot install - reset package index to insure a complete scan
 		if not bootInstall:
 			bootInstall = True
@@ -3799,7 +3802,15 @@ def mainLoop ():
 				logging.warning ("boot-time reinstall complete")
 				bootInstall = False
 				if os.path.exists (bootReinstallFile):
-					os.remove (bootReinstallFile)
+					try:
+						os.remove (bootReinstallFile)
+					except FileNotFoundError:
+						pass
+					except:
+						# log the error and continue
+						# set flag so we don't repeat the reinstall if the flag removal fails (until next boot)
+						ignoreBootInstall = True
+						logging.critical ("could not remove the boot time reinstall flag: /etc/venus/REINSTALL_PACKAGES")
 
 		package = PackageClass.PackageList [packageIndex]
 		packageName = package.PackageName

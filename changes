@@ -1,3 +1,7 @@
+v8.34
+	fixed: PackageManager Edit menu: buttons on bottom row sometimes missing
+	fixed: syntax warning nv firmware 3.60 - warning only, everything working
+
 v8.33:
 	fixed: boot-time reinstall flag removal failure caused PackageManager to crash
 		if the flag could not be removed

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#!/usr/bin/env python
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -417,8 +418,8 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 
 def VersionToNumber (version):
 	version = version.replace ("large","L")
-	numberParts = re.split ('\D+', version)
-	otherParts = re.split ('\d+', version)
+	numberParts = re.split (r'\D+', version)
+	otherParts = re.split (r'\d+', version)
 	# discard blank elements
 	#	this can happen if the version string starts with alpha characters (like "v")
 	# 	of if there are no numeric digits in the version string
@@ -4027,7 +4028,7 @@ def main():
 		if installedVersion ==  "":
 			installedVersion = "unknown"
 
-	logging.warning (">>>> PackageManager " + installedVersion + " starting")
+	logging.warning ("420 PackageManager " + installedVersion + " starting")
 
 	from dbus.mainloop.glib import DBusGMainLoop
 

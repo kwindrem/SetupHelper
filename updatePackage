@@ -1137,7 +1137,7 @@ for package in $packageList; do
 		if [ -e "$fileSet/INCOMPATIBLE_VERSION" ]; then
 			fileSetInUse=false
 			if $replacementFilesExist ; then
-				logMessage "WARNING $package: $version not compatible with Venus $version but file set not empty"
+				logMessage "WARNING $package: $version not compatible with Venus $version but file set not empty - not removed"
 			else
 				if [ ! -f "$fileSet/NEW_FILE_SET" ]; then
 					logMessage "WARNING $package: not compatible with Venus $version - file set removed"
@@ -1148,7 +1148,7 @@ for package in $packageList; do
 		elif [ -f "$fileSet/UNUSED_FILE_SET" ]; then
 			fileSetInUse=false
 			if $replacementFilesExist ; then
-				logMessage "WARNING $package: $version no longer used but file set not empty"
+				logMessage "WARNING $package: $version no longer used but file set not empty - not removed"
 			else
 				# log removal of a previous file set if not created with this run
 				# if it was created with this run, delete it silently

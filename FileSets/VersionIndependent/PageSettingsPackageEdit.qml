@@ -339,7 +339,7 @@ MbPage {
 		{
 			id: cancelButton
 			width: 85
-			anchors { right: parent.right; bottom: statusMessage.bottom }
+			anchors { right: gitHubBranch.right; bottom: statusMessage.bottom }
 			description: ""
 			value: ( actionPending || showDetails ) ? qsTr("Cancel") : (editError ? qsTr("OK") : qsTr("Later"))
 			onClicked: cancelEdit ()
@@ -360,20 +360,65 @@ MbPage {
 		{
 			id: showDetailsButton
 			width: 150
-			anchors { right: parent.right; bottom: statusMessage.bottom}
+			anchors { right: gitHubBranch.right; bottom: statusMessage.bottom}
 			description: ""
 			value: qsTr("Show Details")
 			onClicked: showDetails = true
 			writeAccessLevel: User.AccessInstaller
 			show: navigate && detailsExist && ! ( editError || actionPending || waitForAction || showActionNeeded || showDetails)
 		}
-
+		Text
+		{
+			id: statusMessage
+			width:
+			{
+				var smWidth = root.width
+				if (cancelButton.show)
+					smWidth -= cancelButton.width
+				if (confirmButton.show)
+					smWidth -= confirmButton.width
+				if (showDetailsButton.show)
+					smWidth -= showDetailsButton.width
+				return smWidth
+			}
+			height: Math.max (paintedHeight, 35)
+			wrapMode: Text.WordWrap
+			horizontalAlignment: Text.AlignLeft
+			anchors { left: gitHubBranch.left; leftMargin: 5; top: gitHubBranch.bottom }
+			font.pixelSize: 12
+			color: isSetupHelper && requestedAction == 'uninstall' ? "red" : root.style.textColor
+			text:
+			{
+				if (showDetails)
+				{
+					if (detailsResolvable)
+						return ( incompatibleDetails + qsTr ("\nResolve conflicts?") )
+					else
+						return ( incompatibleDetails )
+				}
+				else if (actionPending)
+				{
+					if (isSetupHelper && requestedAction == 'uninstall')
+						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
+					else
+						return (requestedAction + " " + packageName + " ?")
+				}
+				else if (editStatus.valid && editStatus.value != "")
+					return ( editStatus.value )
+				else if (showActionNeeded)
+					return ( actionNeeded ) 
+				else if (incompatible)
+					return ( incompatibleReason )
+				else
+					return localError
+			}
+		}
 		// bottom row of buttons
 		MbOK
 		{
 			id: previousButton
 			width: 100
-			anchors { left: parent.left; top: statusMessage.bottom; topMargin: 5  }
+			anchors { left: gitHubBranch.left; top: statusMessage.bottom; topMargin: 5  }
 			description: ""
 			value: qsTr("Previous")
 			onClicked: previousIndex ()
@@ -415,59 +460,12 @@ MbPage {
 		{
 			id: uninstallButton
 			width: 105
-			anchors { right: parent.right; top: statusMessage.bottom; topMargin: 5 }
+			anchors { right: gitHubBranch.right; top: statusMessage.bottom; topMargin: 5 }
 			description: ""
 			value: installedValid ? qsTr("Uninstall") : qsTr("Remove")
 			onClicked: installedValid ? uninstall () : remove ()
 			opacity: ! editError && navigate ? 1.0 : 0.2
 			writeAccessLevel: User.AccessInstaller
-		}
-		// at bottom so it's not in the middle of hard button cycle
-		Text
-		{
-			id: statusMessage
-			width:
-			{
-				var smWidth = root.width
-				if (cancelButton.show)
-					smWidth -= cancelButton.width
-				if (confirmButton.show)
-					smWidth -= confirmButton.width
-				if (showDetailsButton.show)
-					smWidth -= showDetailsButton.width
-				return smWidth
-			}
-			height: Math.max (paintedHeight, 35)
-			wrapMode: Text.WordWrap
-			horizontalAlignment: Text.AlignLeft
-			anchors { left: parent.left; leftMargin: 5; top: gitHubBranch.bottom }
-			font.pixelSize: 12
-			color: isSetupHelper && requestedAction == 'uninstall' ? "red" : root.style.textColor
-			text:
-			{
-				if (showDetails)
-				{
-					if (detailsResolvable)
-						return ( incompatibleDetails + qsTr ("\nResolve conflicts?") )
-					else
-						return ( incompatibleDetails )
-				}
-				else if (actionPending)
-				{
-					if (isSetupHelper && requestedAction == 'uninstall')
-						return qsTr ("WARNING: SetupHelper is required for these menus - uninstall anyway ?")
-					else
-						return (requestedAction + " " + packageName + " ?")
-				}
-				else if (editStatus.valid && editStatus.value != "")
-					return ( editStatus.value )
-				else if (showActionNeeded)
-					return ( actionNeeded ) 
-				else if (incompatible)
-					return ( incompatibleReason )
-				else
-					return localError
-			}
 		}
 		// dummy item to allow scrolling to show last button line when status message has many lines
 		MbItemText

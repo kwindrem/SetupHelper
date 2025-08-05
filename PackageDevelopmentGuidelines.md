@@ -274,11 +274,6 @@ passing control to the body of the setup script.
  **uninstall** indicates the prompts should be skipped and the package
  uninstalled.
 
-- **force** overrides the version checks normally performed with
-- **reinstall** and causes an install without user prompting. This
-  option has been depreciated as **install** has the same behavior as
-- **reinstall force**
-
 - **auto** silences all console messages. Progress of the setup is
   logged. Without the **auto** option progress is also written to the
   console.
@@ -466,14 +461,27 @@ necessary during an uninstall to restore the system to factory.
 
 `removeService FooService`
 
-**logMessage** is a function that creates an entry in the SetupHelper
-log file: /var/log/PackageManager/current (the same file used by
-PackageManager.py). Logging is encouraged as it helps debug systems in
+**logMessage** is a function that will log anything of interest.
+Messages are either sent to stdout or to the PackageManager log file:
+log file: /var/log/PackageManager/current.
+Logging is encouraged as it helps debug systems in
 the field (and while developing the package). Without the **auto**
 option on the call to the setup script, these messages are also output
 to the console.
 
-`logMessage "this text will end up in the SetupHelper log"`
+To conform to Victron guidelines, messages are sent to stdout in
+all but a few unavoidable situations:
+running the script in **auto** from the command line (discouraged)
+**reinstallMods** or **blindInstall** **blindUninstall**.
+
+When scripts are run from PackageManager, stdout is collected
+and forwarded to the log using python's logging.info () method.
+This way, a the informaiton is persistant for debugging.
+
+When scripts are run from the command line, any messages
+appear on the console but are **NOT logged**.
+
+`logMessage "this text will end up in the log"`
 
 **endScript** Function to finish up, prompt the user (if not
 reinstalling) and exit the script. (Details are described below.)

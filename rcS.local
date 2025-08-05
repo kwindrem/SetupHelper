@@ -3,4 +3,4 @@
 # SetupHelper reinstall
 if [ -f /data/SetupHelper/reinstallMods ]; then
 	nohup /data/SetupHelper/reinstallMods > /dev/null &
-fi
+fi	#end SetupHelper reinstall

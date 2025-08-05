@@ -1,1 +1,3 @@
 # dummy file to prevent failure with older package setup scripts
+
+# logging is now in EssentialResources

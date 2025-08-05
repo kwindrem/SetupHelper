@@ -33,6 +33,9 @@ The SetupHelper package provides:
 
 # Changes
 
+**SetupHelper v9**
+	- changes to logging to comform to Victron rules (see below)
+
 **SetupHelper v8**
   - adds the ability for multiple packages to modify the same file
   
@@ -69,6 +72,23 @@ The SetupHelper package provides:
 	
 	  The new sourcing mechanism can be found in the file `SetupHelper/HelperResources/forSetupScript`.
 
+# Logging
+
+Victron Energy has requested all packages refrain from writing to a log file in order to prevent
+runaway processes (e.g., services that crash and restart constantly) filling available space on /data.
+
+Therefore, when a setup script is run from the console, messages appear on the console
+but **are not logged**
+
+When the script is run from PackageManager, PackageManager forwards the script's messages to its log file.
+
+There are a few situations where a script will write directly to the PackageManager log file:
+
+- **reinstallMods** is called from rcS.local to reinstall PackageManager after a firmware update
+
+- **blind install**  and **blind uninstall**
+
+
 # Helper resources
 
 Other packages use "helper resources" provided by SetupHelper
@@ -81,7 +101,7 @@ More information about Setup Helper and how to create packages that use it can b
 
 By far, the easiest way to install SetupHelper is the "blind install" which requires no command-line interaction.
 
-1. Download `venus-data.tgz` from the SetupHelper GitHub [repo](https://github.com/kwindrem/SetupHelper/raw/main/venus-data.tgz).
+1. Download `venus-data-SetupHelperInstall.tgz` from the SetupHelper GitHub [repo](https://github.com/kwindrem/SetupHelper/raw/main/venus-data-SetupHelperInstall.tgz).
 > [!NOTE]
 > Mac OS and Safari are set by default to unzip packages.
 > The Open "safe" files after downloading (bottom of Safari Preferences General)
@@ -91,38 +111,30 @@ By far, the easiest way to install SetupHelper is the "blind install" which requ
 3. place the media in the GX device (Cerbo, CCGX, etc)
 4. reboot the GX device and allow the system to display the GUI
 
-   - if you are running Venus OS v2.90 and beyond:
         - you should find the Package Manager menu at the bottom of the Settings menu
-        - you should remove the media at this point
-            
+
+5. **REMOVE THE MEDIA** from the GX device after you see the GUI displayed
+
           Mechanisms are in place to prevent reinstallation, but removal is still a good idea!
-
-*If you are running Venus OS **prior to v2.90**, perform these additional steps:*
-
-5. reboot the GX device a second time
-6. WHILE the GX device is booting, **REMOVE THE MEDIA** from the GX device *to prevent the next reboot from starting the process all over again.* Failure to do so could disable reinstalls following a Venus OS firmware update !!!
 
 You should find the Package Manager menu at the bottom of the Settings menu
 
-> [!CAUTION]
-> Prior to v2.90, this mechanism overwrites /data/rcS.local !!!!
-> If you are using rcS.local to perform boot-time activities,
-> /data/rcS.local must be recreated following this "blind" install
-> 
-> Note that SetupHelper also uses /data/rcS.local for
-> reinstallation following a firmware update so use caution in
-> recreating rcS.local.
         
 
 Another way to install SetupHelper is to use the following from the command line of the GX device:
 
 ```bash
 wget -qO - https://github.com/kwindrem/SetupHelper/archive/latest.tar.gz | tar -xzf - -C /data
-mv -f /data/SetupHelper-latest /data/SetupHelper
+rm -rf /data/SetupHelper
+mv /data/SetupHelper-latest /data/SetupHelper
 /data/SetupHelper/setup
 ```
 
-Once SetupHelper is installed, updates to it and other packages can be performed through the GUI using the PackageManager menus.
+You can also use the above procedure to install other packages. 
+Simply substiture SetupHelper with the package name (e.g., GuiMods) in the above commands.
+However, using the PackageManager menus is by far easier.
+
+Once SetupHelper is installed, updates to it and other packages can be performed through the Classic UI using the PackageManager menus.
 
 > [!CAUTION]
 >  Package Manager allows uninstalling SetupHelper.
@@ -222,15 +234,15 @@ It is unlikely, but some users have reported a package install leaving their sys
 A blind uninstall mechanism is provided to recover a system with an unresponsive GUI (white screen) or no ssh/terminal access.
 This will run all package setup scripts to uninstall that package from system files.
 
-In addition to uninstalling all packages, the blind uninstall can optionally reinstall VenusOS. To do so, include a `.swu` file for the platform and desired firmware version on the removable media containing the blind uninstall `venus-data.tar.gz` file.
+In addition to uninstalling all packages, the blind uninstall can optionally reinstall VenusOS.
+To do so, include a `.swu` file for the platform and desired firmware version on the SAME removable media
 
-The archive for this is named `venus-data.UninstallPackages.tar.gz`.
+The archive for this is named `venus-data.UninstallAllPackages.tar.gz`.
 
-  1. Copy `venus-data.UninstallPackages.tar.gz` to a USB memory stick or SD card
-  2. Rename the copy to `venus-data.tar.gz`
-  3. Plug the removable media into the GX device
-  4. Reboot, wait 2 minutes and reboot a second time
-  5. When the system automatically reboots after the second manual one, remove the media.
+  1. Copy `venus-data.UninstallAllPackages.tar.gz` to a USB memory stick or SD card
+  2. Plug the removable media into the GX device
+  3. Reboot, wait 2 minutes and reboot a second time
+  4. When the system automatically reboots after the second manual one, remove the media.
      You should eventually see the GUI on the local display if there is one
      or be able to connect via remote console.
 
@@ -241,8 +253,8 @@ The archive for this is named `venus-data.UninstallPackages.tar.gz`.
 
 Note that a firmware update can take several minutes to complete but will eventually reboot.
 
-When the blind uninstall finishes, `venus-data-tar.gz` file on the removable media
-is renamed to `venus-data.UninstallPackages.tar.gz` so that the blind install will run only once.
+When the blind uninstall finishes, `venus-data.UninstallAllPackages.tar.gz` file on the removable media
+is renamed (adding .XXX) so that the blind install will run only once.
 This renaming is necessary to prevent a loop where the system uninstalls and reboots.
 
 # System automatic configuration and package installation:

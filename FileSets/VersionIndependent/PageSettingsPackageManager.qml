@@ -38,7 +38,7 @@ MbPage {
 				if (mediaStatus.valid && mediaStatus.value != "")
 					return mediaStatus.value
 				else if (showControls)
-					return pmStatus
+					return pmStatusItem.value
 				else
 					return lastStatus
 			}

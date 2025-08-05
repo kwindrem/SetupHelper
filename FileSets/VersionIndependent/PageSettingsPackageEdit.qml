@@ -273,10 +273,10 @@ MbPage {
 			id: packageNameBox
 			text: packageName + " versions"
 		}
-		MbRowSmall
+		Row
 		{
-			description: " "
 			height: 25
+			leftPadding: 7; rightPadding: 5; spacing: 1
 			Text
 			{
 				text: "GitHub:"
@@ -287,11 +287,11 @@ MbPage {
 			{
 				id: gitHubVersion
 				item { bind: getServiceBind("GitHubVersion") }
-				height: 25; width: 105
+				height: 25; width: 112
 			}
 			Text
 			{
-				text: qsTr ("stored:")
+				text: qsTr (" stored:")
 				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				font.pixelSize: 10
 			}
@@ -299,11 +299,11 @@ MbPage {
 			{
 				id: packageVersion
 				item { bind: getServiceBind("PackageVersion") }
-				height: 25; width: 105
+				height: 25; width: 112
 			}
 			Text
 			{
-				text: qsTr ("installed:")
+				text: qsTr (" installed:")
 				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				horizontalAlignment: Text.AlignRight
 				font.pixelSize: 10
@@ -313,7 +313,7 @@ MbPage {
 				id: installedVersion
 				item { bind: getServiceBind("InstalledVersion") }
 				height: 25
-				width: 105
+				width: 112
 			}
 		}
 		MbEditBox

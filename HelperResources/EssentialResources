@@ -26,11 +26,6 @@ installedFilesDir="/etc/venus/installedModifications"
 installedFilesList="$installedFilesDir/installedFiles"-$packageName
 installedServicesList="$installedFilesDir/installedServices"-$packageName
 
-
-# obsolete - use installedVersion
-installedFlagPrefix="/etc/venus/inInstalled-"
-installedFlag="$installedFlagPrefix"$packageName
-
 # set up pointers to package files
 #	based on the actual package for compatibility with older packages
 pkgFileSets="$scriptDir/FileSets"
@@ -50,17 +45,25 @@ servicesDir="$scriptDir/services"
 # logToConsole to false AFTER sourcing EssentialResources
 logToConsole=true
 
+runFromPm=false
+
 # write a message to log file and console
 
 logMessage ()
 {
-    # to console
-    if $logToConsole ; then
+	# send to stdout if running from PackageManager
+	#	it will include the message in its log file
+	if $runFromPm ; then
+		echo "$shortScriptName: $*"
+	# to console
+    elif $logToConsole ; then
         echo "$*"
+    # to PackageManager log file if no other choices
+    #	NOTE: PackageManager's logger service will manage the log file size
+    #		however if it is not running /data could eventually fill up
+	else
+		echo "$shortScriptName: $*" | tai64n >> $logFile
     fi
-
-    # to setup helper log
-	echo "$shortScriptName: $*" | tai64n >> $logFile
 }
 
 # create log file and directory tree if it does not exist yet
@@ -72,12 +75,10 @@ if ! [ -e "$logDir" ]; then
 	logMessage "creating log file and directory"
 fi
 
+# remove old log file if it still exists
 oldLogFile="/var/log/SetupHelper"
 if [ -e "$oldLogFile" ]; then
-	if (( $( tail -5 "$oldLogFile" | grep -c "WARNING: this log file no longer used" ) == 0 )); then
-		echo "WARNING: this log file no longer used" >> "$oldLogFile"
-		echo "      SetupHelper now logged to /var/log/PackageManager/current" >> "$oldLogFile"
-	fi
+	rm -rf "$oldLogFile"
 fi
 
 
@@ -157,16 +158,15 @@ setInstallFailed ()
 	else
 		reason=EXIT_ERROR
 	fi
-	message="${@:2}"
-	if [ ! -z "$message" ]; then
-		installFailMessage="$message"
-		logMessage "ERROR: $message"
-		# if not running from console, output error to stderr
-		if ! $logToConsole ; then
-			echo "$message" >&2
+	installFailMessage="${@:2}"
+	if [ ! -z "$installFailMessage" ]; then
+		# output error to stderr if run from PackageManager
+		if $runFromPm ; then
+			echo "$installFailMessage" >&2
+		# otherwise output to log (and/or stdout/console)
+		else
+			logMessage "ERROR: $installFailMessage"
 		fi
-	else
-		installFailMessage=""
 	fi
 
 	if [ $scriptAction == 'UNINSTALL' ]; then
@@ -201,7 +201,7 @@ fi
 #	arbitrary minimum size of 3 MB
 # this needs to be called before root fs mods are made.
 #	CommonResources calls this but if you source a subset of helper resources
-#	that script needs to find a place to call updateRootToRW
+#	that script needs to find a place to call updateRootToReadWrite
 
 updateRootToReadWrite ()
 {
@@ -221,22 +221,18 @@ updateRootToReadWrite ()
 			elif [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
 				/opt/victronenergy/swupdate-scripts/resize2fs.sh
 				availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-				logMessage "remounting read-write root and resizing - $availableSpace MB now available"
+				logMessage "remounting root read-write and resizing - $availableSpace MB now available"
 			fi
 			# check to see if remount was successful
 			if (( $(mount | grep ' / ' | grep -c 'rw') == 0 )); then
 				setInstallFailed $EXIT_ROOT_FULL "ERROR: unable to remount root read-write - can't continue"
 			fi
 		# root already read-write, attempt to resize if space is limited (CCGX can't resize)
-		elif (( $availableSpace < $rootMinimumSize )); then
-			if [ "$machine" == "ccgx" ]; then
-				logMessage "can't resize root on CCGX"
-			else
-				if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
-					/opt/victronenergy/swupdate-scripts/resize2fs.sh
-					availableSpace=$(df -m / | tail -1 | awk '{print $4}')
-					logMessage "resized root - $availableSpace MB now available"
-				fi
+		elif (( $availableSpace < $rootMinimumSize )) && [ "$machine" != "ccgx" ]; then
+			if [ -f /opt/victronenergy/swupdate-scripts/resize2fs.sh ]; then
+				/opt/victronenergy/swupdate-scripts/resize2fs.sh
+				availableSpace=$(df -m / | tail -1 | awk '{print $4}')
+				logMessage "resized root - $availableSpace MB now available"
 			fi
 		fi
 	fi

@@ -14,10 +14,10 @@ fi
 logMessage ()
 {
 	echo "blindUninstall: $*"
-	echo "blindUninstall: $*" | tai64n >> "$logDir"
+	echo "blindUninstall: $*" | tai64n >> "$logFile"
 }
 
-logMessage "--- starting blind uninstall - all packages will be uninstalled"
+logMessage "--- starting blind uninstall"
 
 # check to see if Venus OS will be reinstalled - actuall reinstall will be done later
 swCheckOutput=$(/opt/victronenergy/swupdate-scripts/check-updates.sh -offline -force -check)
@@ -30,20 +30,13 @@ else
 fi
 
 packages=$(ls -d /data/*)
+# run the script to anything that looks like a package (version and setup files)
 for package in $packages; do
-	if [ ! -f "$package/version" ]; then
-		continue
+	if [ -f "$package/version" ] && [ -f "$package/setup" ]; then
+		packageName=$(basename $package)
+		logMessage "uninstalling $packageName"
+		"$package/setup" uninstall deferReboot deferGuiRestart auto
 	fi
-	packageName=$(basename $package)
-	# if not reinstalling Venus OS, uninstall package
-	if ! $reinstallVenusOs ; then
-		if [ -f /etc/venus/installedVersion-$packageName ]; then
-			logMessage "uninstalling $packageName"
-			"$package/setup" uninstall deferReboot deferGuiRestart auto
-		fi
-	fi
-	# make sure PackageManager does not auto install package
-	touch "$package/DO_NOT_AUTO_INSTALL"
 done
 
 # remove all installed info in case some were missed in loop above
@@ -53,10 +46,10 @@ rm -rf "/etc/venus/installedModifications"
 # rename archive on removable media to prevent blindInstall from running again
 drives=$(ls /run/media/)
 for drive in $drives ; do
-	archive="/run/media/$drive/venus-data.tar.gz"
+	archive="/run/media/$drive/venus-data-UninstallAllPackages.tgz"
 	if [ -f "$archive" ]; then
-		logMessage "renaming venus-data.tar.gz so blindUninstall won't run again"
-		mv $archive "/run/media/$drive/venus-data.UninstallPackages.tar.gz"
+		logMessage "renaming venus-data-UninstallAllPackages.tgz so blindUninstall won't run again"
+		mv "$archive" "$archive.XXX"
 	fi
 done
 

@@ -546,11 +546,12 @@ def PushAction (command=None, source=None):
 	elif action == 'install' or action == 'uninstall' or action == 'check':
 		DbusIf.LOCK ("PushAction 2")
 		package = PackageClass.LocatePackage (packageName)
-		# SetupHelper uninstall is processed later as PackageManager exists
+		# flag SetupHelper uninstall for later
 		if packageName == "SetupHelper" and action == 'uninstall':
 			global SetupHelperUninstall
 			SetupHelperUninstall = True
-		elif package != None:
+
+		if package != None:
 			package.InstallPending = True
 			theQueue = InstallPackages.InstallQueue
 			queueText = "Install"
@@ -588,7 +589,7 @@ def PushAction (command=None, source=None):
 	elif action == 'reboot':
 		global SystemReboot
 		SystemReboot = True
-		logging.warning ( "received Reboot request from " + source)
+		logging.info ( "received Reboot request from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( message=action  + " pending " + packageName, where='Editor' )
 		# set the flag - reboot is done in main_loop
@@ -597,7 +598,7 @@ def PushAction (command=None, source=None):
 		# set the flag - reboot is done in main_loop
 		global GuiRestart
 		GuiRestart = True
-		logging.warning ( "received GUI restart request from " + source)
+		logging.info ( "received GUI restart request from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( "GUI restart pending " + packageName, where='Editor' )
 		return True
@@ -605,7 +606,7 @@ def PushAction (command=None, source=None):
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global InitializePackageManager
 		InitializePackageManager = True
-		logging.warning ( "received PackageManager INITIALIZE request from " + source)
+		logging.info ( "received PackageManager INITIALIZE request from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( "PackageManager INITIALIZE pending " + packageName, where='Editor' )
 		return True
@@ -613,7 +614,7 @@ def PushAction (command=None, source=None):
 		# set the flag - Initialize will quit the main loop, then work is done in main
 		global RestartPackageManager
 		RestartPackageManager = True
-		logging.warning ( "received PackageManager RESTART request from " + source)
+		logging.info ( "received PackageManager RESTART request from " + source)
 		if source == 'GUI':
 			DbusIf.UpdateStatus ( "PackageManager restart pending " + packageName, where='Editor' )
 		return True
@@ -1251,7 +1252,7 @@ class DbusIfClass:
 	#  deletes the dbus service
 
 	def RemoveDbusService (self):
-		logging.warning ("shutting down com.victronenergy.packageManager dbus service")
+		logging.info ("shutting down com.victronenergy.packageManager dbus service")
 		self.DbusService.__del__()
 	
 # end DbusIf
@@ -1684,7 +1685,7 @@ class PackageClass:
 
 		# new packageName is unique, OK to add it
 		if package == None:
-			DbusIf.UpdateStatus ( message="adding " + packageName, where='Editor', logLevel=WARNING )
+			DbusIf.UpdateStatus ( message="adding " + packageName, where='Editor', logLevel=INFO )
 
 			section = len(cls.PackageList)
 			cls.PackageList.append( PackageClass ( section, packageName = packageName ) )
@@ -1711,7 +1712,7 @@ class PackageClass:
 
 		else:
 			if source == 'GUI':
-				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=WARNING )
+				DbusIf.UpdateStatus ( message=packageName + " already exists - choose another name", where=reportStatusTo, logLevel=INFO )
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			else:
 				DbusIf.UpdateStatus ( message=packageName + " already exists", where=reportStatusTo, logLevel=WARNING )
@@ -1747,7 +1748,7 @@ class PackageClass:
 			if packageName == "SetupHelper":
 				DbusIf.UpdateStatus ( message="REMOVING SetupHelper" + packageName, where='Editor', logLevel=CRITICAL )
 			else:
-				DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=WARNING )
+				DbusIf.UpdateStatus ( message="removing " + packageName, where='Editor', logLevel=INFO )
 		# no package name specified, so this is a call from system initialization - messages to log only
 		elif packageIndex != None:
 			guiRequestedRemove = False
@@ -1755,7 +1756,7 @@ class PackageClass:
 			if name == None or name == "":
 				logging.error ( "RemovePackage: removing package without a name" )
 			else:
-				logging.warning ( "RemovePackage: removing " + name )
+				logging.info ( "RemovePackage: removing " + name )
 		# neither package name nor package instance passed - can't do anything
 		else:
 			logging.error ( "RemovePackage: no package info passed - nothing done" )
@@ -2019,9 +2020,9 @@ class PackageClass:
 				if len (dependencyErrors) > 0:
 					for dependency in dependencyErrors:
 						(dependencyPackage, dependencyRequirement) = dependency
-						logging.warning (packageName + " requires " + dependencyPackage + " to be " + dependencyRequirement)
+						logging.info (packageName + " requires " + dependencyPackage + " to be " + dependencyRequirement)
 				else:
-					logging.warning ("dependency conflicts for " + packageName + " have been resolved")
+					logging.info ("dependency conflicts for " + packageName + " have been resolved")
 
 			# check for file conflicts with prevously installed packages
 			# each line in all file lists are checked to see if the <active file>.package contains a different package name
@@ -2074,10 +2075,10 @@ class PackageClass:
 				self.FileConflicts = fileConflicts
 				if len (fileConflicts) > 0:
 					for (otherPackage, dependency, file) in fileConflicts:
-						logging.warning ("to install " + packageName + ", " + otherPackage + " must not be installed (" + file + ")" )
+						logging.info ("to install " + packageName + ", " + otherPackage + " must not be installed (" + file + ")" )
 						conflicts.append ( ( otherPackage, dependency ) )
 				else:
-					logging.warning ("file conflicts for " + packageName + " have been resolved")
+					logging.info ("file conflicts for " + packageName + " have been resolved")
 
 			details = ""
 			if len (conflicts) > 0:
@@ -2118,9 +2119,9 @@ class PackageClass:
 							patchFailure = line.strip()
 							details += patchFailure + "\n"
 							logging.warning (packageName + " patch check error: " + patchFailure + " ")
-						self.SetIncompatible ("patch error", details,)
+						self.SetIncompatible ("patch error", details )
 					else:
-						logging.warning (packageName + " patch check reported no errors")
+						logging.info (packageName + " patch check reported no errors")
 
 			# make sure script checks are run once at boot
 			#	(eg patched errors, but there are others)
@@ -2476,7 +2477,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 			gitHubBranch = package.GitHubBranch
 			DbusIf.UNLOCK ("GitHubDownload - get GitHub user/branch")
 
-			DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=WARNING )
+			DbusIf.UpdateStatus ( message="downloading " + packageName, where=where, logLevel=INFO )
 
 			tempDirectory = "/data/PmDownloadTemp"
 			if not os.path.exists (tempDirectory):
@@ -2560,7 +2561,7 @@ class DownloadGitHubPackagesClass (threading.Thread):
 				# update basic flags then request install
 				if installAfter:
 					package.UpdateVersionsAndFlags ()
-					logging.warning ("install after download requested for " + packageName)
+					logging.info ("install after download requested for " + packageName)
 					PushAction ( command='install' + ':' + packageName, source=source )
 				# no install after, do full version/flag update
 				else:
@@ -2730,8 +2731,6 @@ class InstallPackagesClass (threading.Thread):
 
 	def InstallPackage ( self, packageName=None, source=None , action='install' ):
 
-		global SetupHelperUninstall
-
 		# refresh versions, then check to see if an install is possible
 		DbusIf.LOCK ("InstallPackage")
 		package = PackageClass.LocatePackage (packageName)
@@ -2749,11 +2748,11 @@ class InstallPackagesClass (threading.Thread):
 			# uninstall sets the uninstall flag file to prevent auto install
 			if action == 'uninstall':
 				package.SetAutoInstallOk (False)
-				logging.warning (packageName + " was manually uninstalled - auto install for that package will be skipped")
+				logging.info (packageName + " was manually uninstalled - auto install for that package will be skipped")
 			# manual install removes the flag file
 			elif action == 'install':
 				package.SetAutoInstallOk (True)
-				logging.warning (packageName + " was manually installed - allowing auto install for that package")
+				logging.info (packageName + " was manually installed - allowing auto install for that package")
 		elif source == 'AUTO':
 			sendStatusTo = 'PmStatus'
 
@@ -2789,12 +2788,18 @@ class InstallPackagesClass (threading.Thread):
 
 		DbusIf.UNLOCK ("InstallPackage normal")
 
-		DbusIf.UpdateStatus ( message=action + "ing " + packageName, where=sendStatusTo, logLevel=WARNING )
+		DbusIf.UpdateStatus ( message=action + "ing " + packageName, where=sendStatusTo, logLevel=INFO )
 		try:
 			proc = subprocess.Popen ( [ setupFile, action, 'runFromPm' ],
-										bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE )
-			_, stderr = proc.communicate ()
-			stderr = stderr.decode ().strip ()
+										bufsize=100000, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True )
+			proc.wait ()
+			# forward stdout lines from setup script to console/log file
+			for line in proc.stdout:
+				logging.info ( line.strip () )
+			# collect stderr lines for possible use later
+			stderr = ""
+			for line in proc.stderr:
+				stderr += line
 			returnCode = proc.returncode
 			setupRunFail = False
 		except:
@@ -2816,29 +2821,29 @@ class InstallPackagesClass (threading.Thread):
 		elif returnCode == EXIT_REBOOT:
 			package.ActionNeeded = REBOOT_NEEDED
 			if source == 'GUI':
-				logging.warning ( packageName + " " + action + " REBOOT needed but handled by GUI")
+				logging.info ( packageName + " " + action + " REBOOT needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
 			# auto install triggers a reboot by setting the global flag - reboot handled in main_loop
 			else:
-				logging.warning ( packageName + " " + action + " REBOOT pending")
+				logging.info ( packageName + " " + action + " REBOOT pending")
 				global SystemReboot
 				SystemReboot = True
 		elif returnCode == EXIT_RESTART_GUI:
 			package.ActionNeeded = GUI_RESTART_NEEDED
 			if source == 'GUI':
-				logging.warning ( packageName + " " + action + " GUI restart needed but handled by GUI")
+				logging.info ( packageName + " " + action + " GUI restart needed but handled by GUI")
 				DbusIf.UpdateStatus ( message="", where=sendStatusTo )
 				DbusIf.AcknowledgeGuiEditAction ( "" )
 			# auto install triggers a GUI restart by setting the global flag - restart handled in main_loop
 			else:
-				logging.warning ( packageName + " " + action + " GUI restart pending")
+				logging.info ( packageName + " " + action + " GUI restart pending")
 				global GuiRestart
 				GuiRestart = True
 		elif returnCode == EXIT_RUN_AGAIN:
 			if source == 'GUI':
 				DbusIf.UpdateStatus ( message=packageName + " run install again to complete install",
-											where=sendStatusTo, logLevel=WARNING )
+											where=sendStatusTo, logLevel=INFO )
 				DbusIf.AcknowledgeGuiEditAction ( 'ERROR' )
 			else:
 				DbusIf.UpdateStatus ( message=packageName + " setup must be run again",
@@ -2871,7 +2876,7 @@ class InstallPackagesClass (threading.Thread):
 			if setupRunFail:
 				logLevel = ERROR
 			else:
-				logLevel = WARNING
+				logLevel = INFO
 			DbusIf.UpdateStatus ( message=packageName + " " + action + " failed - " + errorMessage,
 					where=sendStatusTo, logLevel=logLevel )
 			if source == 'GUI':
@@ -2943,16 +2948,16 @@ class InstallPackagesClass (threading.Thread):
 					DbusIf.UpdateStatus ( message=dependencyPackage + " not available - can't install",
 								where='Editor', logLevel=WARNING )
 				elif not packageIsStored and packageIsOnGitHub:
-					logging.warning ("ResolveConflicts: downloading and installing" + dependencyPackage + " so that " + packageName + " can be installed" )
+					logging.info ("ResolveConflicts: downloading and installing" + dependencyPackage + " so that " + packageName + " can be installed" )
 					PushAction ( command='download' + ':' + dependencyPackage, source=source )
 					# download will trigger install when it finished
 					requiredPackage.InstallAfterDownload = True
 				else:
-					logging.warning ("ResolveConflicts: installing " + dependencyPackage + " so that " + packageName + " can be installed" )
+					logging.info ("ResolveConflicts: installing " + dependencyPackage + " so that " + packageName + " can be installed" )
 					PushAction ( command='install' + ':' + dependencyPackage, source=source )
 
 			elif not packageMustBeInstalled and packageIsInstalled:
-				logging.warning ("ResolveConflicts: uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
+				logging.info ("ResolveConflicts: uninstalling " + dependencyPackage + " so that " + packageName + " can be installed" )
 				PushAction ( command='uninstall' + ':' + dependencyPackage, source=source )
 
 		DbusIf.UNLOCK ("ResolveConflicts")
@@ -3121,7 +3126,7 @@ class MediaScanClass (threading.Thread):
 			unpackedVersion = VersionToNumber (fd.readline().strip())
 			fd.close ()
 		if packageVersion == unpackedVersion:
-			logging.warning ("transferPackages: " + packageName + " versions are the same - skipping transfer")
+			logging.info ("transferPackages: " + packageName + " versions are the same - skipping transfer")
 			shutil.rmtree (tempDirectory)
 			DbusIf.UpdateStatus ( message="", where='Media')
 			return False
@@ -3129,7 +3134,7 @@ class MediaScanClass (threading.Thread):
 		# move unpacked archive to package location
 		# LOCK this critical section of code to prevent others
 		#	from accessing the directory while it's being updated
-		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=WARNING )
+		DbusIf.UpdateStatus ( message="transfering " + packageName + " from SD/USB", where='Media', logLevel=INFO )
 		tempPackagePath = packagePath + "-temp"
 		DbusIf.LOCK ("transferPackage") 
 		if os.path.exists (tempPackagePath):
@@ -3286,7 +3291,7 @@ class MediaScanClass (threading.Thread):
 			except:
 				logging.error ("settings backup - overlays write failure")
 		
-		logging.warning ("settings backup completed - " + str(settingsCount) + " settings, " + str (overlayCount) + " logos, "
+		logging.info ("settings backup completed - " + str(settingsCount) + " settings, " + str (overlayCount) + " logos, "
 							+ logsWritten )
 
 
@@ -3348,7 +3353,7 @@ class MediaScanClass (threading.Thread):
 											bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 							proc.commiunicate ()	# output ignored
 							parameterExists = True
-							logging.warning ("settingsRestore: creating " + path)
+							logging.info ("settingsRestore: creating " + path)
 						except:
 							logging.error ("settingsRestore: settings create failed for " + path)
 
@@ -3390,7 +3395,7 @@ class MediaScanClass (threading.Thread):
 				except:
 					logging.error ("settingsRestore: options restore failed")
 		
-		logging.warning ("settings restore completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
+		logging.info ("settings restore completed - " + str(settingsCount) + " settings and " + str (overlayCount) + " overlays")
 
 
 	#	Media Scan run (the thread)
@@ -3763,12 +3768,12 @@ def mainLoop ():
 		if not bootInstall:
 			bootInstall = True
 			packageIndex = 0
-			logging.warning ("starting boot-time reinstall")
+			logging.info ("starting boot-time reinstall")
 	elif WaitForGitHubVersions:
 		checkPackages = False
 
 	# don't look for new actions if uninstalling all packages or uninstalling SetupHelper
-	elif MediaScan.AutoUninstall or SetupHelperUninstall:
+	elif MediaScan.AutoUninstall or SetupHelperUninstall or RestartPackageManager:
 		pass
 	# not doing something special - use dbus values
 	else:
@@ -3800,7 +3805,7 @@ def mainLoop ():
 				currentDownloadMode = AUTO_DOWNLOADS_OFF
 			# end of boot install
 			if bootInstall:
-				logging.warning ("boot-time reinstall complete")
+				logging.info ("boot-time reinstall complete")
 				bootInstall = False
 				if os.path.exists (bootReinstallFile):
 					try:
@@ -3893,9 +3898,7 @@ def mainLoop ():
 		noActionCount += 1
 
 	# wait for two complete passes with nothing happening
-	# 	before triggering reboot, GUI restart or initializing PackageManager Settings
-	#	or ininstalling packages
-	# these actions are all handled in main () after mainLoop () exits
+	#	before checking to see if mainLoop should quit
 	if noActionCount >= 2:
 		if SystemReboot or InitializePackageManager or GuiRestart\
 				 or RestartPackageManager or MediaScan.AutoUninstall or SetupHelperUninstall:
@@ -3938,18 +3941,14 @@ def mainLoop ():
 # used to bypass package list, and other processing
 #
 # do not use once package list has been set up
-#
-# SetupHelper uninstall is deferred and handled
-#	during PackageManager exit
 
-def	directUninstall (packageName):
+def	directUninstall (packageName ):
 	global SetupHelperUninstall
 	global SystemReboot
 	global GuiRestart
 
 	if packageName == "SetupHelper":
 		SetupHelperUninstall = True
-		return
 
 	packageDir = "/data/" + packageName
 	setupFile = packageDir + "/setup"
@@ -3957,8 +3956,15 @@ def	directUninstall (packageName):
 		if os.path.isdir (packageDir) and os.path.isfile (setupFile) \
 				and os.access(setupFile, os.X_OK):
 			proc = subprocess.Popen ( [ setupFile, 'uninstall', 'runFromPm' ],
-						bufsize=-1, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-			proc.commiunicate ()	# output ignored
+						bufsize=100000, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True )
+			proc.wait ()
+			# forward stdout and stderr lines from setup script to console/log file
+			#	note: all stdout lines will be output first, then all stderr lines
+			#		so won't be in cronological order !
+			for line in proc.stdout:
+				logging.info ( line.strip () )
+			for line in proc.stderr:
+				logging.error ( line.strip () )
 			returnCode = proc.returncode
 	except:
 		logging.critical ("could not uninstall " + packageName)
@@ -4013,7 +4019,7 @@ def main():
 	SetupHelperUninstall = False
 
 	# set logging level to include info level entries
-	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.WARNING )
+	logging.basicConfig( format='%(levelname)s:%(message)s', level=logging.INFO )
 
 	# fetch installed version
 	installedVersionFile = "/etc/venus/installedVersion-SetupHelper"
@@ -4028,7 +4034,7 @@ def main():
 		if installedVersion ==  "":
 			installedVersion = "unknown"
 
-	logging.warning ("420 PackageManager " + installedVersion + " starting")
+	logging.info ("PackageManager " + installedVersion + " starting")
 
 	from dbus.mainloop.glib import DBusGMainLoop
 
@@ -4125,7 +4131,7 @@ def main():
 				if os.path.exists (flagFile):
 					os.remove (flagFile)
 					if os.path.exists ("/etc/venus/installedVersion-" + packageName):
-						logging.warning ( "uninstalling " + packageName + " prior to forced remove" )
+						logging.info ( "uninstalling " + packageName + " prior to forced remove" )
 						directUninstall (packageName)
 					# now remove the package from list
 					logging.warning ( "forced remove of " + packageName )
@@ -4180,18 +4186,18 @@ def main():
 		message = "UNINSTALLING ALL PACKAGES & REBOOTING ..."
 		logging.warning (">>>> UNINSTALLING ALL PACKAGES & REBOOTING...")
 	elif SetupHelperUninstall:
-		message = "UNINSTALLING SetupHelper ..."
-		logging.critical (">>>> UNINSTALLING SetupHelper ...")
+		message = "SetupHelper UNINSTALLED"
+		logging.critical (">>>> SetupHelper UNINSTALLED")
 	elif InitializePackageManager:
 		if SystemReboot:
 			message = "initializing and REBOOTING ..."
-			logging.warning (">>>> initializing PackageManager and REBOOTING SYSTEM")
+			logging.info (">>>> initializing PackageManager and REBOOTING SYSTEM")
 		else:
-			logging.warning (">>>> initializing PackageManager ...")
+			logging.info (">>>> initializing PackageManager ...")
 			message = "initializing and restarting PackageManager ..."
 	elif SystemReboot:
 		message = "REBOOTING SYSTEM ..."
-		logging.warning (">>>> REBOOTING SYSTEM")
+		logging.info (">>>> REBOOTING SYSTEM")
 	elif GuiRestart:
 		message = "restarting GUI and Package Manager..."
 	elif ShutdownPackageManager:
@@ -4202,7 +4208,7 @@ def main():
 	DbusIf.UpdateStatus ( message=message, where='Editor' )
 
 	# stop threads, remove service from dbus
-	logging.warning ("stopping threads")
+	logging.info ("stopping threads")
 	UpdateGitHubVersion.StopThread ()
 	DownloadGitHub.StopThread ()
 	InstallPackages.StopThread ()
@@ -4235,36 +4241,28 @@ def main():
 			directUninstall (path)
 		SystemReboot = True
 
-	# tell supervise not to restart PackageManager when this program exits
-	if SystemReboot or SetupHelperUninstall:
-		logging.warning ("setting PackageManager to not restart")
+	if SystemReboot:
 		try:
+			# insure PackageManager service does not restart when reboot is needed
 			proc = subprocess.Popen ( [ 'svc', '-o', '/service/PackageManager' ] )
+			# TODO: add -k for debugging - outputs message but doesn't reboot
+			proc = subprocess.Popen ( "nohup sleep 5; shutdown -r now PackageManager is REBOOTING SYSTEM ... &", shell=True )
 		except:
-			logging.critical ("svc command failed")
-
-	# remaining tasks are handled in packageManagerEnd.sh because
-	#	SetupHelper uninstall needs to be done after PackageManager.py exists
-	#	and the reboot/GUI restart (if any) needs to be done after that.
-	if SystemReboot or SetupHelperUninstall or GuiRestart:
-		command = [ '/data/SetupHelper/packageManagerEnd.sh' ]
-		if SetupHelperUninstall:
-			command.append ("shUninstall")
-		if SystemReboot:
-			command.append ("reboot")
-		elif GuiRestart:
-			command.append ("guiRestart")
-
-		# this runs in the background and will CONTINUE after PackageManager.py exits below
+			logging.critical ("system reboot command failed")
+	elif GuiRestart:
+		if os.path.exists ("/service/start-gui" ):
+			command = [ 'svc', '-t', '/service/start-gui' ]
+		else:
+			command = [ 'svc', '-t', '/service/gui' ]
 		try:
-			logging.warning ("finishing up in packageManagerEnd.sh")
 			proc = subprocess.Popen ( command )
 		except:
-			logging.critical ("packageManagerEnd.sh failed")
+			logging.critical ("GUI restart failed")
 
-	logging.warning (">>>> PackageManager exiting")
 
-# Always run our main loop so we can process updates
+	logging.info (">>>> PackageManager exiting")
+
+#### Initial entry point for program
 main()
 
 

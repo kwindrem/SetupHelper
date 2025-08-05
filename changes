@@ -1,3 +1,9 @@
+v9.0:
+	rewrite to insure logging is all done via multilog
+		therefore, NO LOGGING when setup scripts are run from command line !!!!!!!
+	updated blind install/uninstall
+	removed support for firmware prior to v3.00 in various places
+
 v8.34
 	fixed: PackageManager Edit menu: buttons on bottom row sometimes missing
 	fixed: syntax warning nv firmware 3.60 - warning only, everything working

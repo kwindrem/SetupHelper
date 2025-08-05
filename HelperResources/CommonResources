@@ -1139,7 +1139,7 @@ endScript ()
 				chmod +x "$rcLocal"
 			elif  [ $(grep -c "SetupHelper" "$rcLocal") == 0 ]; then
 				logMessage "adding SetupHelper reinstall script to $rcLocal"
-				sed -e '2d' "$scriptDir/rcS.local" >> $rcLocal
+				sed -e '1,2d' "$scriptDir/rcS.local" >> $rcLocal
 			fi
 		fi
 	fi
@@ -1326,7 +1326,6 @@ fi
 
 # collect command line options
 reinstall=false
-force=false
 deferReboot=false
 deferGuiRestart=false
 userInteraction=true
@@ -1335,9 +1334,6 @@ while [ $# -gt 0 ]; do
 	case $1 in
 		"reinstall")
 			reinstall=true
-			;;
-		"force")
-			force=true
 			;;
 		"deferReboot")
 			deferReboot=true
@@ -1357,7 +1353,7 @@ while [ $# -gt 0 ]; do
 			;;
 		"runFromPm")
 			runFromPm=true
-			logToConsole=false
+			logToConsole=false 
 			userInteraction=false
 			deferReboot=true
 			deferGuiRestart=true
@@ -1376,6 +1372,11 @@ done
 
 # do after logToConsole is enabled/disabled abvove
 logMessage "--- starting setup script $packageVersion action: $scriptAction"
+if ! $runFromPm && $logToConsole ; then
+	echo
+	echo "messages are NOT written to log file - only to console"
+	echo
+fi
 
 # packages that require options to proceed unattended
 # must include the optionsRequried flag file in their package directory
@@ -1413,10 +1414,8 @@ fi
 # called from reinstallMods at boot time
 if $reinstall ; then
     runningAtBoot=true
-    if $force ; then
-        scriptAction='INSTALL'
 	# not installed, do it now
-    elif (( installedVersionNumber == 0 )); then
+    if (( installedVersionNumber == 0 )); then
         scriptAction='INSTALL'
 	# check versions and install only if package version is newer than installed version
 	else
@@ -1547,31 +1546,33 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	checkPackageDependencies
 
 	# create patched files for files with VisibleItemModel for older Venus OS versions
-	versionStringToNumber "v3.00~14"
-	if (( $venusVersionNumber < $versionNumber )); then
-		logMessage "patching VisibleItemModel to VisualItemModel in all .qml replacements"
-		for file in ${fileListVersionIndependent[@]};  do
-			baseName=$( basename "$file" )
-			if ! [[ "$baseName" == *.qml ]]; then continue; fi
-			sourceFile="$versionIndependentFileSet/$baseName"
-			if ! [ -f "$sourceFile" ]; then continue; fi
-			if (( $(grep -c "VisibleItemModel" "$sourceFile") == 0 )); then continue; fi
-			sed -e 's/VisibleItemModel/VisualItemModel/' "$sourceFile" > "$tempFileDir/$baseName"
-		done
-	fi
+	if ! $installFailed ; then
+		versionStringToNumber "v3.00~14"
+		if (( $venusVersionNumber < $versionNumber )); then
+			logMessage "patching VisibleItemModel to VisualItemModel in all .qml replacements"
+			for file in ${fileListVersionIndependent[@]};  do
+				baseName=$( basename "$file" )
+				if ! [[ "$baseName" == *.qml ]]; then continue; fi
+				sourceFile="$versionIndependentFileSet/$baseName"
+				if ! [ -f "$sourceFile" ]; then continue; fi
+				if (( $(grep -c "VisibleItemModel" "$sourceFile") == 0 )); then continue; fi
+				sed -e 's/VisibleItemModel/VisualItemModel/' "$sourceFile" > "$tempFileDir/$baseName"
+			done
+		fi
 
-	# create patched files for all qml files for the change to QtQuick 2
-	versionStringToNumber "v3.60~18"
-	if (( $venusVersionNumber >= $versionNumber )); then
-		logMessage "patching QtQuick 1.1 to QtQuick 2 in all .qml replacements"
-		for file in ${fileListVersionIndependent[@]};  do
-			baseName=$( basename "$file" )
-			if ! [[ "$baseName" == *.qml ]]; then continue; fi
-			sourceFile="$versionIndependentFileSet/$baseName"
-			if ! [ -f "$sourceFile" ]; then continue; fi
-			if (( $(grep -c "QtQuick 1.1" "$sourceFile") == 0 )); then continue; fi
-			sed -e 's/QtQuick 1.1/QtQuick 2/' "$sourceFile" > "$tempFileDir/$baseName"
-		done
+		# create patched files for all qml files for the change to QtQuick 2
+		versionStringToNumber "v3.60~18"
+		if (( $venusVersionNumber >= $versionNumber )); then
+			logMessage "patching QtQuick 1.1 to QtQuick 2 in all .qml replacements"
+			for file in ${fileListVersionIndependent[@]};  do
+				baseName=$( basename "$file" )
+				if ! [[ "$baseName" == *.qml ]]; then continue; fi
+				sourceFile="$versionIndependentFileSet/$baseName"
+				if ! [ -f "$sourceFile" ]; then continue; fi
+				if (( $(grep -c "QtQuick 1.1" "$sourceFile") == 0 )); then continue; fi
+				sed -e 's/QtQuick 1.1/QtQuick 2/' "$sourceFile" > "$tempFileDir/$baseName"
+			done
+		fi
 	fi
 
 	# create the forward and reverse patched files
@@ -1591,7 +1592,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	#	rather than reverse patching the active file
 	#	this maintains compatibility with packages installed with older versions of SetupHelper
 
-	if ! $installFailed && ! [ -z "$fileListPatched" ];then
+	if ! $installFailed && ! [ -z "$fileListPatched" ]; then
 		patchErrors=()
 		for activeFile in ${fileListPatched[@]}; do
 			baseName=$( basename $activeFile )

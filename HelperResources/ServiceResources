@@ -8,14 +8,6 @@
 # ONLY if there are changes, then the service and/or the logger will be restarted.
 # This leaves other files managed by supervise untouched.
 #
-# in Venus OS between v2.80~10 and v2.90~2, services are stored in /opt/victronenergy/service
-#	which is overlayed onto /service
-# the FS overlay also maintains a "working directory": $overlayWorkDir in this script
-# all services need to be added there rather than /service
-# Note: service calls (eg svc) are still made on /service/...
-# there is an unknown interaction between /service and the overlay source
-# so code here operates on both directories
-#
 # in Venus OS starting with v2.90~3, /service is mounted as a tmpfs (RAM disk)
 # /opt/victronenergy/service is copied to /service ONLY at boot time
 # so new services need to be copied to /opt/victronenergy/service for boot processing
@@ -41,28 +33,15 @@
 #	https://cr.yp.to/daemontools/svstat.html
 #	https://cr.yp.to/daemontools/svok.html
 
-victronServicesDir="/opt/victronenergy/service"
-overlayWorkDir="/run/overlays/service"
-serviceDir="$victronServicesDir"
-serviceUsesFsOverlay=false
-serviceMountedTmpfs=false
+# storage for services
+#	/service is the location where services run from
+#	and is mounted as a temp FS
+#
+# contents of serviceDir is copied to /service during boot
+#	but at no other time, so when services are added
+#	they need to be copied to both locations
+serviceDir="/opt/victronenergy/service"
 
-versionStringToNumber "v2.90~3"
-tmpfsStartVersion=$versionNumber
-versionStringToNumber "v2.80~10"
-overlayStartVersion=$versionNumber
-versionStringToNumber $venusVersion
-
-# service is mounted tmpfs
-if (( $versionNumber >= $tmpfsStartVersion )) ; then
-	serviceMountedTmpfs=true
-# service uses a file system overlay
-elif (( $versionNumber >= $overlayStartVersion )) ; then
-    serviceUsesFsOverlay=true
-# service is writable in place
-else
-    serviceDir="/service"
-fi
 
 # check to see if services manager is running
 svscanIsUp ()
@@ -93,6 +72,10 @@ serviceIsUp ()
 #
 # removeService cleanly removes the service
 #
+# When uninstalling from within PackageManager,
+#	the PackageManager service is only removed from servicesDir and from installedServicesList
+#	the copy in /services is marked so it will not run again after PackageManager exits
+
 
 removeService ()
 {
@@ -101,15 +84,28 @@ removeService ()
         return
     fi
 	local serviceName="$1"
+	
+	local shutdownService=true
+	if [ "$serviceName" == "PackageManager" ] && $runFromPm ; then
+		shutdownService=false
+	fi
 
     if [ -e "$serviceDir/$serviceName" ]; then
         logMessage "removing $serviceName service"
+		# set flag so PackageManager won't restart after a reboot
+		if ! $shutdownService ; then
+			logMessage "$serviceName service will remain running but will not run again"
+			touch "/service/$serviceName/down"
+			# if PackageManager is running, mark it so it will not restart when it exits
+			if serviceIsUp $serviceName ; then
+				svc -o "/service/$serviceName"
+			fi
 		# stop the service if it is currently running
-		if serviceIsUp $serviceName ; then
-			svc -d "/service/$1"
+		elif serviceIsUp $serviceName ; then
+			svc -d "/service/$serviceName"
 		fi
-		if serviceIsUp "$serviceName/log" ; then
-			svc -d "/service/$1/log"
+		if $shutdownService && serviceIsUp "$serviceName/log" ; then
+			svc -d "/service/$serviceName/log"
 		fi
 
 		# supervise processes may hang around after removing the service so save info and kill them after removal
@@ -125,17 +121,15 @@ removeService ()
 
 		# remove the service directory
 		rm -rf "$serviceDir/$serviceName"
-		# when /service is mounted as tmpfs, the service needs to be removed from /service also
-		if $serviceMountedTmpfs && [ -d "/service/$serviceName" ]; then
-			rm -rf "/service/$serviceName"
-		# removing the service in the overlayed service directory doesn't remove it from /service
-		# it needs to be removed from the overlay work directory also
-		elif $serviceUsesFsOverlay && [ -d "$overlayWorkDir/$serviceName" ] ; then
-			rm -rf "$overlayWorkDir/$serviceName"
-		fi
 
-		# now kill the supervise processes
-		if ! [ -z $pids ]; then
+		# /service is mounted as tmpfs so the service needs to be removed from /service also
+		# when uninstalling SetupHelper from withing PackageManager, do NOT delete the running service !
+		#	(after the next reboot, /service/PackageManager won't becopied from serviceDir)
+		#	(logger remains running until the next boot)
+		if $shutdownService ; then
+			rm -rf "/service/$serviceName"
+
+			# also kill the supervise processes
 			kill $pids
 		fi
     fi
@@ -218,13 +212,20 @@ installService ()
 	echo "$serviceName" >> "$installedServicesList"
 
     # service not yet installed, COPY service's directory (run files) to the service directory(s)
+	rm -rf "$serviceDir/$serviceName"
+	cp -R "$servicePath" "$serviceDir/$serviceName"
+	local loggerOk=false
+	if [ -e "$serviceDir/$serviceName/log" ] && ! [ -e "$serviceDir/$serviceName/log/down" ]; then
+		loggerOk=true
+	else
+		logMessage "$serviceName logger disabled (down flag) or does not exist"
+		loggerOk=false
+	fi
+
     if [ ! -e "/service/$serviceName" ]; then
         logMessage "installing $serviceName service"
+		cp -R "$servicePath" "/service/$serviceName"
 
-        cp -R "$servicePath" "$serviceDir/$serviceName"
-		if $serviceMountedTmpfs && [ -d "/service" ] ; then
-			cp -R "$servicePath" "/service/$serviceName"
-		fi
 		# if down flag is NOT set, check every second for service to start automatically
 		# then start it here if it is not running after 10 seconds
 		if [ -f "$serviceDir/$serviceName/down" ]; then
@@ -234,9 +235,15 @@ installService ()
 		else
 			local delayCount=10
 			local serviceRunning=false
+			local loggerRunning=false
 			while (( $delayCount > 0 )); do
 				if serviceIsUp $serviceName ; then
 					serviceRunning=true
+				fi
+				if serviceIsUp $serviceName/log ; then
+					loggerRunning=true
+				fi
+				if $serviceRunning && ( $loggerRunning || ! $loggerOk ); then
 					break
 				fi
 				# only report wait once
@@ -246,45 +253,60 @@ installService ()
 				sleep 1
 				(( delayCount-- ))
 			done
+			if $loggerOk ; then
+				if $loggerRunning ; then
+					logMessage "$serviceName logger running"
+				else
+					logMessage "starting $serviceName logger"
+					svc -u "/service/$serviceName/log"
+				fi
+			fi
 			if $serviceRunning; then
-				logMessage "service $serviceName running"
+				logMessage "$serviceName service is running"
 			else
 				logMessage "starting $serviceName service"
 				svc -u "/service/$serviceName"
-				if [ -e "/service/$serviceName/log" ] && ! serviceIsUp "$serviceName/log" ; then
-					svc -u "/service/$serviceName/log"
-				fi
 			fi
 		fi
 
     # service already installed - only copy changed files, then restart service if it is running
     else
-        if [ -f "$servicePath/run" ]; then
-            cmp -s "$servicePath/run" "$serviceDir/$serviceName/run" > /dev/null
+        if [ -f "/service/$serviceName/log/run" ]; then
+            cmp -s "$servicePath/log/run" "/service/$serviceName/log/run" > /dev/null
             if (( $? != 0 )); then
-				logMessage "updating $serviceName run file"
-                cp "$servicePath/run" "$serviceDir/$serviceName/run"
-				if $serviceMountedTmpfs ; then
-					cp "$servicePath/run" "/service/$serviceName/run"
-				fi
+				logMessage "updating $serviceName logger run file"
+				cp "$servicePath/log/run" "/service/$serviceName/log/run"
             fi
-			if serviceIsUp $serviceName ; then
-				svc -t "/service/$serviceName"
+			if [ -e "$servicePath/log/down" ]; then
+				svc -d "/service/$serviceName/log"
+			else
+				rm -f "/service/$serviceName/log/down"
+				if serviceIsUp "$serviceName/log" ; then
+					echo "restarting $serviceName logger"
+					svc -t "/service/$serviceName/log"
+				else
+					logMessage "starting $serviceName logger"
+					svc -u "/service/$serviceName/log"
+				fi
 			fi
         fi
-		# log needs to be handled separtely including a restart
-        if [ -f "$servicePath/log/run" ]; then
-            cmp -s "$servicePath/log/run" "$serviceDir/$serviceName/log/run" > /dev/null
+        if [ -f "/service/$serviceName/run" ]; then
+            cmp -s "$servicePath/run" "/service/$serviceName/run" > /dev/null
             if (( $? != 0 )); then
-				logMessage "updating $serviceName log/run file"
-                cp "$servicePath/log/run" "$serviceDir/$serviceName/log/run"
-				if $serviceMountedTmpfs ; then
-					cp "$servicePath/log/run" "/service/$serviceName/log/run"
+				logMessage "updating $serviceName run file"
+				cp "$servicePath/run" "/service/$serviceName/run"
+            fi
+			if [ -e "$servicePath/down" ]; then
+				svc -d "/service/$serviceName"
+			else
+				rm -f "/service/$serviceName/down"
+				if serviceIsUp $serviceName ; then
+					echo "restarting $serviceName service"
+					svc -t "/service/$serviceName"
+				else
+					logMessage "starting $serviceName service"
+					svc -u "/service/$serviceName"
 				fi
-			fi
-			if serviceIsUp "$serviceName/log" ; then
-				logMessage "restarting $serviceName logger"
-				svc -t "/service/$serviceName/log"
 			fi
         fi
     fi

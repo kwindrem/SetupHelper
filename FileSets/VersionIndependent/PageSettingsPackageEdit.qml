@@ -276,7 +276,14 @@ MbPage {
 		Row
 		{
 			height: 25
-			leftPadding: 7; rightPadding: 5; spacing: 1
+			spacing: 1
+			// leftPadding: 7; rightPadding: 5; can't use in earlier Qt versions
+			// use dummy text field for left spacing instead
+			Text
+			{
+				text: "  "
+				font.pixelSize: 10
+			}
 			Text
 			{
 				text: "GitHub:"

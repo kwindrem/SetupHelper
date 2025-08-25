@@ -1,3 +1,6 @@
+v9.1:
+	fixed: can't access package editor menu on firmware prior to v3.6 (regression in v9.0)
+
 v9.0:
 	rewrite to insure logging is all done via multilog
 		therefore, NO LOGGING when setup scripts are run from command line !!!!!!!

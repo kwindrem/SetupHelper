@@ -3977,7 +3977,7 @@ def	directUninstall (packageName ):
 
 # signal handler for TERM and CONT
 # this is needed to allow pending operations to finish before PackageManager exits
-# TERM sets RestartPackageManager which causes mainLoop to exit and therefor main to complete
+# TERM sets RestartPackageManager which causes mainLoop to exit and therefore main to complete
 # TERM, then CONT is issued by supervise when shutting down the service
 # CONT handler differentiates a restart vs service down for logging purposes
 

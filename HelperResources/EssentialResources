@@ -176,15 +176,16 @@ setInstallFailed ()
 		installExitReason=$reason
 		installFailed=true
 	fi
-	if ! $userInteraction && [ $scriptAction == 'INSTALL' ]; then
-		# during "pre-checks" failures occur before any system mofifications
-		#	EXIT NOW - DO NOT RETURN TO THE CALLER !!!!!
-		if $installPreChecks ; then
-			exit $installExitReason
+	if [ $scriptAction == 'INSTALL' ]; then
 		# after "pre-checks" system mofifications may already have occured
 		#	so an uninstall needs to follow the install
-		else
+		if ! $installPreChecks ; then
 			scriptAction='UNINSTALL'
+
+		# during "pre-checks" failures occur before any system mofifications
+		#	if no user interaction EXIT NOW - DO NOT RETURN TO THE CALLER !!!!!
+		elif ! $userInteraction ; then
+			exit $installExitReason
 		fi
 	fi
 }

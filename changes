@@ -1,3 +1,7 @@
+v9.2:
+	fixed: install failure during manual install does not force an uninstall
+	add support for v3.70~71
+
 v9.1:
 	fixed: can't access package editor menu on firmware prior to v3.6 (regression in v9.0)
 

@@ -490,10 +490,12 @@ updateActiveFile ()
             sourceFile="$pkgFileSets/$baseName"
 		else
 			# if directory for file exists but no sourceFile - can't continue
-			if [ -e $( dirname "$activeFile" ) ]; then
-				setInstallFailed $EXIT_FILE_SET_ERROR "no soure file for $activeFile"
-			else
+			if ! [ -e $( dirname "$activeFile" ) ]; then
 				logMessage "enclosing directory for $activeFile not found - skipping update"
+			elif ! [ -e "$activeFile" ]; then
+				logMessage "no replacement or active file $activeFile - skipping update"
+			else
+				setInstallFailed $EXIT_FILE_SET_ERROR "no soure file for $activeFile"
 			fi
 			return 1
         fi

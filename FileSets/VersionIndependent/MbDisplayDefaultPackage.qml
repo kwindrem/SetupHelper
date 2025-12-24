@@ -16,7 +16,7 @@ MbItem {
     VBusItem { id: packageName; bind: getServiceBind ("PackageName") }
 
 
-	onClicked: rootWindow.pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageAdd.qml", {defaultIndex: defaultIndex})
+	onClicked: pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageAdd.qml", {defaultIndex: defaultIndex})
 
 
 	function getServiceBind(param)

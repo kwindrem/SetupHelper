@@ -583,6 +583,7 @@ for package in $packageList; do
 	rm -f "$workingFiles"/*/LINKS_ONLY
 	rm -f "$workingFiles"/*/*.NO_ORIG
 	rm -f "$workingFiles"/*/*.CHECK_REPLACEMENT
+	rm -f "$workingFiles"/*/*.CHECK_PATCH
 	rm -f "$workingFiles"/*/*.BAD_LINK
 	rm -f "$workingFiles"/*/NEW_FILE_SET
 	rm -f "$workingFiles"/*VERSIONED_AND_INDEPENDENT_EXIST
@@ -670,8 +671,7 @@ for package in $packageList; do
 		done
 	fi
 
-	# add the package's existing file sets NOT in the stock versions
-	#	and mark them unused
+	# add the package's existing file sets NOT in the stock versions and mark them unused
 	# replacement files will not be moved to these unused file sets
 	sourceFileSets=($(ls -d "$workingFiles"/v[0-9]* 2> /dev/null))
 	tempList=(${stockVersionList[@]})
@@ -793,7 +793,7 @@ for package in $packageList; do
 			if [ "$patchOptions" == "MANUAL" ]; then
 				logMessage "WARNING $package: $baseName patch options set to MANUAL - skipping patch update"
 			else
-				patchOrigFiles=( $( ls "$patchSourceDir/$baseName"*.orig ) )
+				patchOrigFiles=( $( ls "$patchSourceDir/$baseName"*.orig 2> /dev/null ) )
 				for patchOrig in ${patchOrigFiles[@]}; do
 					patchResult="${patchOrig/.orig/}"
 					patchFile="${patchOrig/.orig/.patch}"
@@ -807,15 +807,21 @@ for package in $packageList; do
 			fi
 
 			# test each patch on all versions - need one to succeed for each version
-			#	both foward and reverse patchs must succeed
+			#	both foward and reverse patches must succeed
 			# 	and reverse patch result must match stock file
-			patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch ) )
+			patchFiles=( $( ls "$patchSourceDir/$baseName"*.patch 2> /dev/null ) )
 			for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 				IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
 				stockFile="$stockFiles/$version$file"
 				replacement="$workingFiles/$version/$baseName"
 				if ! [ -f "$stockFile" ]; then
 					continue
+				# check for case mismatch (main vs Main is NOT a match)
+				else
+					result=$( find $( dirname "$stockFile" ) -name $( basename "$stockFile" ) )
+					if [ "$result" == "" ]; then
+						continue
+					fi
 				fi
 				foundPatch=false
 				for patchFile in ${patchFiles[@]}; do
@@ -843,13 +849,20 @@ for package in $packageList; do
 				#	they won't be looked at below since fileList won't include them
 				#	checks above insure there the same file is not in multiple file lists
 				if $foundPatch; then
-					replacementFile="$workingFiles/$version/$baseName"
 					if [ -e "$replacement" ] && ! [ -L "$replacement" ] || [ -e "$replacement.USE_ORIGINAL" ]; then
 						logMessage "WARNING $package: removing $baseName from $version file set"
 						rm -f "$replacement"*
 					fi
 				else
-					logMessage "ERROR: $packageName no patch file for $baseName $version"
+					logMessage "ERROR $package: $version no patch file for $baseName"
+					origFile="$patchSourceDir/$baseName-$version".orig
+					if ! [ -e "$origFile" ]; then
+						logMessage "  adding $baseName-$version.orig - replacement must be created manually"
+						cp "$stockFile" "$origFile"
+					fi
+					touch "$patchSourceDir/$baseName-$version".CHECK_REPLACEMENT
+					touch "$patchSourceDir/$baseName-$version".CHECK_PATCH
+					touch "$patchSourceDir/INCOMPLETE"
 				fi
 			done
 		done # for file in fileListPatched
@@ -1032,7 +1045,7 @@ for package in $packageList; do
 					elif [ -f "$oldReplacement.orig" ]; then
 						mv "$oldReplacement.orig" "$toReplacement.orig"
 					else
-						logMessage "ERROR $package $baseName: no original for $toVersion"
+						logMessage "ERROR $package: $baseName no original for $toVersion"
 						touch "$toReplacement.NO_ORIG"
 					fi
 				fi
@@ -1112,7 +1125,7 @@ for package in $packageList; do
 		# file set should exist so this shouldn't happen but report and skip checks anyway
 		if ! [ -d "$fileSet" ]; then
 			if ! $incompatibleVersion && ! [ -z $fileList ]; then
-				logMessage "ERROR: $package $version missing file set - skipping"
+				logMessage "ERROR $package: $version missing file set - skipping"
 			fi
 			continue
 		fi
@@ -1252,9 +1265,6 @@ for package in $packageList; do
 				fi
 			done # for file
 
-			# if all replacement files are in place, mark the file set COMPLETE
-			#	so _checkFileSets can skip all checks
-			# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
 			if [ -f "$fileSet/INCOMPLETE" ]; then
 				rm -f "$fileSet/COMPLETE"
 			else
@@ -1275,6 +1285,32 @@ for package in $packageList; do
 		warningText="$packageWarnings WARNINGS"
 	fi
 	logMessage "$package complete  $errorText $warningText"
+
+	# report errors for file sets and patch files
+	for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
+		IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
+		fileSet="$workingFiles/$version"
+
+		# if all replacement files are in place, mark the file set COMPLETE
+		#	so _checkFileSets can skip all checks
+		# COMPLETE tells _checkFileSets to skip all checks and accept the file set as is
+		if [ -f "$fileSet/INCOMPLETE" ]; then
+			rm -f "$fileSet/COMPLETE"
+			logMessage "  INCOMPLETE file set $version"
+		else
+			touch "$fileSet/COMPLETE"
+		fi
+		if [ -f "$fileSet/INCOMPATIBLE_VERSION" ]; then
+			logMessage "  INCOMPATIBLE VERSION $version"
+		fi
+		if [ -f "$fileSet/UNUSED_FILE_SET" ]; then
+			logMessage "  UNUSED file set $version"
+		fi
+	done
+	if [ -f "$patchSourceDir/INCOMPLETE" ]; then
+		logMessage "  MISSING patch files"
+	fi
+
 
 	workingName=$(basename $workingDirectory)
 	backupName=$(basename $backupDirectory)

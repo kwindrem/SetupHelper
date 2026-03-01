@@ -799,6 +799,7 @@ for package in $packageList; do
 					patchFile="${patchOrig/.orig/.patch}"
 
 					if ! [ -f "$patchResult" ]; then
+						logMessage "WARNING $package: missing $( basename $patchResult) - skipping patch update"
 						continue
 					fi
 
@@ -888,7 +889,7 @@ for package in $packageList; do
 			altOrigFile=""
 		fi
 
-		# locate groups of file sets with matching stock(or .orig) files
+		# locate groups of file sets with matching stock (or .orig) files
 		(( start = 0 ))
 		while (( start < $allFileSetsLength )); do
 			# locate one group of file sets that will use the same replacement file
@@ -1290,6 +1291,7 @@ for package in $packageList; do
 	for (( i1 = 0; i1 < $allFileSetsLength; i1++ )); do
 		IFS=':' read version versionNumber <<< "${allFileSets[$i1]}"
 		fileSet="$workingFiles/$version"
+		if ! [ -e "$fileSet" ]; then continue; fi
 
 		# if all replacement files are in place, mark the file set COMPLETE
 		#	so _checkFileSets can skip all checks

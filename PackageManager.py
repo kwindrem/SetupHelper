@@ -1509,7 +1509,7 @@ class PackageClass:
 		self.AutoInstallOk = False
 		self.DependencyErrors = []
 		self.FileConflicts = []
-		self.PatchCheckErrors = []
+		self.LastPatchErrorUpdate = 0
 		self.ConflictsResolvable = True
 
 		self.ActionNeeded = ''
@@ -1817,7 +1817,7 @@ class PackageClass:
 				toPackage.AutoInstallOk = fromPackage.AutoInstallOk
 				toPackage.DependencyErrors = fromPackage.DependencyErrors
 				toPackage.FileConflicts = fromPackage.FileConflicts
-				toPackage.PatchCheckErrors = fromPackage.PatchCheckErrors
+				toPackage.LastPatchErrorUpdate = fromPackage.LastPatchErrorUpdate
 				toPackage.lastScriptPrecheck = fromPackage.lastScriptPrecheck
 				toPackage.lastGitHubRefresh = fromPackage.lastGitHubRefresh
 				toPackage.ActionNeeded = fromPackage.ActionNeeded
@@ -1835,6 +1835,11 @@ class PackageClass:
 			toPackage.SetInstalledVersion ("?")
 			toPackage.SetPackageVersion ("?")
 			toPackage.SetIncompatible ("")
+			toPackage.LastPatchErrorUpdate = 0
+			toPackage.lastScriptPrecheck = 0
+			toPackage.lastGitHubRefresh = 0
+			toPackage.ActionNeeded = NONE
+			
 
 			# remove the Settings and service paths for the package being removed
 			DbusIf.RemoveDbusSettings ( [toPackage.packageNamePath, toPackage.gitHubUserPath, toPackage.gitHubBranchPath] )
@@ -2102,33 +2107,40 @@ class PackageClass:
 				self.SetIncompatible ("package conflict", details, resolvable=resolveOk)
 				compatible = False
 
-			# check for and report patch errors if there are no other errors
-			else:
-				patchCheckErrors = []
-				if os.path.exists (packageDir + "/patchErrors"):
-					# rebuild patch errors list
-					with open ( packageDir + "/patchErrors" ) as file:
-						for line in file:
-							patchCheckErrors.append ( line )
-							compatible = False
-					patchCheckErrors = list ( set ( patchCheckErrors ) )
-				if patchCheckErrors != self.PatchCheckErrors:
-					self.PatchCheckErrors = patchCheckErrors
-					if len (patchCheckErrors) > 0:
-						for line in patchCheckErrors:
-							patchFailure = line.strip()
-							details += patchFailure + "\n"
-							logging.warning (packageName + " patch check error: " + patchFailure + " ")
-						self.SetIncompatible ("patch error", details )
-					else:
-						logging.info (packageName + " patch check reported no errors")
-
 			# make sure script checks are run once at boot
 			#	(eg patched errors, but there are others)
 			if self.lastScriptPrecheck == 0:
 				doScriptPreChecks = True
 			self.lastScriptPrecheck = time.time ()
 		# end if doConflictChecks
+
+		# force patch error rebuild if other errors used Incompatible fields
+		if not compatible or self.DownloadPending:
+			self.LastPatchErrorUpdate = 0
+		# check for and report patch errors if there are no other errors
+		elif compatible and not self.InstallPending and not self.DownloadPending:
+			if os.path.exists (packageDir + "/patchErrors"):
+				compatible = False
+				lastPatchErrorUpdate = os.path.getmtime (packageDir + "/patchErrors")
+				# if patchErrors file has updated, rebuild error list
+				if lastPatchErrorUpdate != self.LastPatchErrorUpdate:
+					self.LastPatchErrorUpdate = lastPatchErrorUpdate
+					details = ""
+					patchCheckErrors = []
+					with open ( packageDir + "/patchErrors" ) as file:
+						for line in file:
+							patchCheckErrors.append ( line )
+					patchCheckErrors = list ( set ( patchCheckErrors ) )
+					if len (patchCheckErrors) > 0:
+						for line in patchCheckErrors:
+							patchFailure = line.strip()
+							details += patchFailure + "\n"
+							logging.warning (packageName + " patch check error: " + patchFailure + " ")
+					else:
+						logging.info (packageName + " patch check reported no errors")
+					self.SetIncompatible ("patch error", details )
+			else:
+				self.LastPatchErrorUpdate = 0
 
 		# if no incompatibilities found, clear incompatible dbus parameters
 		#	so the GUI will allow installs
@@ -2858,6 +2870,7 @@ class InstallPackagesClass (threading.Thread):
 			errorMessage = "setup must be run from the command line"
 		elif returnCode == EXIT_FILE_SET_ERROR:
 			errorMessage = "incomplete file set for " + VenusVersion
+
 		elif returnCode == EXIT_ROOT_FULL:
 			errorMessage = "no room on root partition "
 		elif returnCode == EXIT_DATA_FULL:

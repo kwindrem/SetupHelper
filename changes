@@ -1,3 +1,6 @@
+v9.3:
+	fixed: patch error on RPI 5
+
 v9.2:
 	fixed: install failure during manual install does not force an uninstall
 	add support for v3.70~71

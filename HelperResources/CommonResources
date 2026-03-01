@@ -36,11 +36,6 @@ restartGeneratorService=false
 restartSystemCalc=false
 restartDigitalinputs=false
 
-# use local patch executable - BusyBox version has bugs
-# include options that are used in all calls
-patch="/data/SetupHelper/patch --force --silent --reject-file=/dev/null"
-
-
 # file lists are populated by getFileLists called from_chckFileSets and autoinstall
 #	so these are global
 fileList=()
@@ -1565,7 +1560,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 		# create patched files for all qml files for the change to QtQuick 2
 		versionStringToNumber "v3.60~18"
 		if (( $venusVersionNumber >= $versionNumber )); then
-			logMessage "patching QtQuick 1.1 to QtQuick 2 in all .qml replacements"
+			logMessage "changing QtQuick 1.1 to QtQuick 2 in all .qml replacements"
 			for file in ${fileListVersionIndependent[@]};  do
 				baseName=$( basename "$file" )
 				if ! [[ "$baseName" == *.qml ]]; then continue; fi
@@ -1593,6 +1588,26 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 	#	the patch is applied to .orig file if exists
 	#	rather than reverse patching the active file
 	#	this maintains compatibility with packages installed with older versions of SetupHelper
+
+	# use local patch executable - BusyBox version has bugs and does not support all options
+	# include options that are used in all calls
+	# RPI 5 builds use a different binary format so choose the version that works
+	if $( /data/SetupHelper/patch -v &> /dev/null ); then
+		patch="/data/SetupHelper/patch --force --silent --reject-file=/dev/null"
+	elif $( /data/SetupHelper/patchBookworm -v &> /dev/null ); then
+		patch="/data/SetupHelper/patchBookworm --force --silent --reject-file=/dev/null"
+	else
+		patch=""
+		echo "patch executable incompatible with this OS version" > "$scriptDir/patchErrors"
+		setInstallFailed $EXIT_PATCH_ERROR "patch executable incompatible with this OS version - can't continue"
+		# pre-checks only - direct exit
+		if [ $scriptAction == 'CHECK' ]; then
+			exit $EXIT_PATCH_ERROR
+		# script will exit since we are still in pre-checks !!
+		else
+			endScript
+		fi
+	fi
 
 	if ! $installFailed && ! [ -z "$fileListPatched" ]; then
 		patchErrors=()

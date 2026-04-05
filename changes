@@ -1,3 +1,6 @@
+v9.4:
+	added support for Raspberry PI 5 platform
+
 v9.3:
 	fixed: patch error on RPI 5
 

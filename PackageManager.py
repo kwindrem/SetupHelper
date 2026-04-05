@@ -4079,6 +4079,8 @@ def main():
 			Platform = "Raspberry Pi 2/3"
 		elif machine == "raspberrypi4":
 			Platform = "Raspberry Pi 4"
+		elif machine == "raspberrypi5":
+			Platform = "Raspberry Pi 5"
 		elif machine == "ekrano":
 			Platform = "Ekrano GX"
 		else:

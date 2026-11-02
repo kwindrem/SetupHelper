@@ -4,7 +4,8 @@ import QtQuick 1.1
 import com.victron.velib 1.0
 import "utils.js" as Utils
 
-MbItem {
+MbItem
+{
 	id: root
 
 	property int packageIndex
@@ -30,6 +31,10 @@ MbItem {
     VBusItem { id: osVersionItem; bind: Utils.path("com.victronenergy.platform", "/Firmware/Installed/Version" ) }
     property string osVersion: osVersionItem.valid ? osVersionItem.value : vePlatform.version
 
+	property VBusItem installedVersionItem: VBusItem { bind: getServiceBind ("InstalledVersion") }
+	property string installedVersion: installedVersionItem.valid ? installedVersionItem.text : ""
+	property bool installedValid: installedVersion != "" && installedVersion != "--"
+
 	onClicked: pageStack.push ("/opt/victronenergy/gui/qml/PageSettingsPackageEdit.qml", {newPackageIndex: packageIndex})
 
 
@@ -45,6 +50,8 @@ MbItem {
 		else if (incompatibleReason != ""
 				&& incompatibleReason.toLowerCase().indexOf ("warning") == -1 )
 			return incompatibleReason
+		else if (installedValid)
+			return installedVersion + qsTr (" installed")
 		else
 			return ""
 	}
@@ -58,19 +65,14 @@ MbItem {
 		return Utils.path(servicePrefix, "/Package/", packageIndex, "/", param)
 	}
 
-    MbRowSmall
+	// needed to make list elements the correct size !!!
+	height: versionColumn.height + 2
+    Row
     {
-        description: ""
-
-        anchors.verticalCenter: parent.verticalCenter
+		leftPadding: 3
 		Column
 		{
-			width: root.width - gitHubVersion.width - packageVersion.width - installedVersion.width - 20
-			Text // puts a bit of space above package name
-			{
-				text: " "
-                font.pixelSize: 6
-			}
+			width: root.width - versionColumn.width - 6;
 			Text
 			{
 				text:packageName.valid ? packageName.value : ""
@@ -80,76 +82,57 @@ MbItem {
 			}
 			Text
 			{
-				text: statusText ()
+				text: statusText () 
 				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
 				font.pixelSize: 10
 				horizontalAlignment: Text.AlignLeft
+				width: parent.width
+				wrapMode: Text.Wrap
 			}
 		}
 		Column
 		{
-			Text // puts a bit of space above version boxes
+			id: versionColumn
+			Row
 			{
-				text: " "
-                font.pixelSize: 3
+				height: 23
+				spacing: 3
+				anchors.right: parent.right
+				Text
+				{
+					text: "GitHub:"
+					color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
+					font.pixelSize: 9
+					anchors.verticalCenter: parent.verticalCenter 
+				}
+				MbTextBlock
+				{
+					id: gitHubVersion
+					item { bind: getServiceBind("GitHubVersion") }
+					height: 20; width: 200
+					anchors.verticalCenter: parent.verticalCenter 
+				}
 			}
-			Text
+			Row
 			{
-				text: "GitHub"
-				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-                font.pixelSize: 10
-			}
-			MbTextBlock
-			{
-				id: gitHubVersion
-				item { bind: getServiceBind("GitHubVersion") }
-				height: 20; width: 99
-			}
-			Text // puts a bit of space below version boxes - only needed in one column
-			{
-				text: " "
-                font.pixelSize: 6
-			}
-        }
-		Column
-		{
-			Text // puts a bit of space above version boxes
-			{
-				text: " "
-                font.pixelSize: 3
-			}
-			Text
-			{
-				text: qsTr ("Stored")
-				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-                font.pixelSize: 10
-			}
-			MbTextBlock
-			{
-				id: packageVersion
-				item { bind: getServiceBind("PackageVersion") }
-				height: 20; width: 99
-			}
-		}
-		Column
-		{
-			Text // puts a bit of space above version boxes
-			{
-				text: " "
-                font.pixelSize: 3
-			}
-			Text
-			{
-				text: qsTr ("Installed")
-				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-                font.pixelSize: 10
-			}
-			MbTextBlock
-			{
-				id: installedVersion
-				item { bind: getServiceBind("InstalledVersion") }
-				height: 20; width: 99
+				height: 23
+				spacing: 3
+				anchors.right: parent.right
+				Text
+				{
+					text: qsTr ("Stored:")
+					color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
+					font.pixelSize: 9
+					anchors.verticalCenter: parent.verticalCenter 
+				}
+				MbTextBlock
+				{
+					id: packageVersion
+					item { bind: getServiceBind("PackageVersion") }
+					height: 20; width: 200
+					anchors.verticalCenter: parent.verticalCenter 
+				}
 			}
 		}
-    }
+	}
 }

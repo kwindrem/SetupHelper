@@ -25,3 +25,9 @@ gatt-exec-server      pulquero      latest
 dbus-pi               pulquero      latest
 FroniusSmartmeter     SirUli        main
 RemoteGPIO            Lucifer06     main
+victron-mpi5006-touch misko903      latest
+inverter-control      victron-venus latest
+dbus-mqtt-battery     victron-venus latest
+dbus-tasmota-pv       victron-venus latest
+TsBuckBoost           mcgyver78     latest
+dbus-maxxfan          mcgyver78     latest

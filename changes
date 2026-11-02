@@ -1,3 +1,17 @@
+v9.5:
+	incorporate new "-beta" version string used starting with v3.90 firmware
+		also supports b* B* for beta
+		also supports a* A* t* T* for alpha / testing
+		also supports d* D* for development
+		with or without a preceding -
+	adjust PackageMenu version displays for longer strings
+	add to default packages list:
+		victron-mpi5006-touch misko903 latest
+		inverter-control      victron-venus latest
+		dbus-mqtt-battery     victron-venus latest
+		dbus-tasmota-pv       victron-venus latest
+		victron-mpi5006-touch misko903      latest
+		dbus-maxxfan          mcgyver78     latest
 v9.4:
 	added support for Raspberry PI 5 platform
 

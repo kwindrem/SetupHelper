@@ -30,9 +30,11 @@ MbPage {
 	property VBusItem platform: VBusItem { bind: Utils.path(servicePrefix, "/Platform") }
 	property VBusItem incompatibleResolvableItem: VBusItem { bind: getServiceBind ( "IncompatibleResolvable") }
 	
-	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value.substring (0,1) === "v"
-	property bool packageValid: packageVersion.item.valid && packageVersion.item.value.substring (0,1) === "v"
-	property bool installedValid: installedVersion.item.valid && installedVersion.item.value.substring (0,1) === "v"
+	property VBusItem installedVersionItem: VBusItem { bind: getServiceBind ("InstalledVersion") }
+	property string installedVersion: installedVersionItem.valid ? installedVersionItem.text : ""
+	property bool installedValid: installedVersion != "" && installedVersion != "--"
+	property bool gitHubValid: gitHubVersion.item.valid && gitHubVersion.item.value != "" && gitHubVersion.item.value != "--"
+	property bool packageValid: packageVersion.item.valid && packageVersion.item.value != "" && packageVersion.item.value != "--"
 	property bool downloadOk: gitHubValid && gitHubVersion.item.value != ""
 	property bool installOk: ! incompatible
 	property string requestedAction: ''
@@ -268,59 +270,48 @@ MbPage {
 
 	model: VisibleItemModel
 	{
-		MbItemText
+		MbItemValue
 		{
-			id: packageNameBox
-			text: packageName + " versions"
+			description:
+			{
+				if (installedValid)
+					return packageName
+				else
+					return packageName + qsTr (" (not installed)")
+			}
+
+			item.bind: Utils.path( getServiceBind("InstalledVersion") )
 		}
 		Row
 		{
 			height: 25
-			spacing: 1
-			// leftPadding: 7; rightPadding: 5; can't use in earlier Qt versions
-			// use dummy text field for left spacing instead
 			Text
 			{
-				text: "  "
-				font.pixelSize: 10
-			}
-			Text
-			{
-				text: "GitHub:"
+				text: " GitHub:"
 				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-				font.pixelSize: 10
+				font.pixelSize: 9
+				anchors.verticalCenter: parent.verticalCenter 
 			}
 			MbTextBlock
 			{
 				id: gitHubVersion
 				item { bind: getServiceBind("GitHubVersion") }
-				height: 25; width: 112
+				height: 20; width: 200
+				anchors.verticalCenter: parent.verticalCenter 
 			}
 			Text
 			{
-				text: qsTr (" stored:")
+				text: qsTr ("  Stored:")
 				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-				font.pixelSize: 10
+				font.pixelSize: 9
+				anchors.verticalCenter: parent.verticalCenter 
 			}
 			MbTextBlock
 			{
 				id: packageVersion
 				item { bind: getServiceBind("PackageVersion") }
-				height: 25; width: 112
-			}
-			Text
-			{
-				text: qsTr (" installed:")
-				color: isCurrentItem ? root.style.textColorSelected : root.style.textColor
-				horizontalAlignment: Text.AlignRight
-				font.pixelSize: 10
-			}
-			MbTextBlock
-			{
-				id: installedVersion
-				item { bind: getServiceBind("InstalledVersion") }
-				height: 25
-				width: 112
+				height: 20; width: 200
+				anchors.verticalCenter: parent.verticalCenter 
 			}
 		}
 		MbEditBox

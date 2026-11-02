@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#!/usr/bin/env python
 #
 #	PackageManager.py
 #	Kevin Windrem
@@ -390,12 +389,9 @@ global GuiRestart	# initialized in main, set in PushAction and InstallPackage, u
 global WaitForGitHubVersions # initialized in main, set in UpdateGitHubVersion used in mainLoop 
 global InitializePackageManager # initialized/used in main, set in PushAction, MediaScan run, used in mainloop
 
-
 # convert a version string to an integer to make comparisions easier
-# the Victron format for version numbers is: vX.Y~Z-large-W
+# the Victron format for version numbers is: vX.Y~Z or vX.Y-betaZ (as of v3.90)
 # the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
-# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
-#	large builds now have the same version number as the "normal" build
 #
 # the version string passed to this function allows for quite a bit of flexibility
 #	any alpha characters are permitted prior to the first digit
@@ -403,12 +399,14 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 #		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
 #	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
 #	any non-numeric character can be used to separate main versions
-#	special significance is assigned to single caracter separators between the numeric strings
-#		b or ~ indicates a beta release
-#		a indicates an alpha release
-#		d indicates an development release
-# 		these offset the pre-release number so that b/~ has higher numeric value than any a
+#	special significance is assigned to last separator STARTING with any of the following
+#		(ignoring initial '-' if it exits)
+#		~, b, B indicates a beta release
+#		a, A , t or T indicates an alpha release (t for testing)
+#		d or D indicates an development release
+# 		these offset the pre-release number so that b/~ has higher numeric value than any a or t
 #			and a has higher value than d separator
+#    for example: -beta, B, Beta, Bfoo, betazzz would all signify a beta relase
 #
 # a blank version or one without at least one number part is considered invalid
 # alpha and beta seperators require at least two number parts
@@ -417,7 +415,6 @@ global InitializePackageManager # initialized/used in main, set in PushAction, M
 #	returns the version number or 0 if string does not parse into needed sections
 
 def VersionToNumber (version):
-	version = version.replace ("large","L")
 	numberParts = re.split (r'\D+', version)
 	otherParts = re.split (r'\d+', version)
 	# discard blank elements
@@ -435,14 +432,15 @@ def VersionToNumber (version):
 		return 0
 	versionNumber = 0
 	releaseType='release'
-	if numberPartsLength >= 2:
-		if 'b' in otherParts or '~' in otherParts:
+	if numberPartsLength >= 2 and len (otherParts) >= 2:
+		relType = otherParts [-2].lstrip ("-")
+		if relType.startswith ( ('~', 'b', 'B') ):
 			releaseType = 'beta'
 			versionNumber += 60000
-		elif 'a' in otherParts:
+		elif relType.startswith ( ('a', 'A', 't', 'T') ):
 			releaseType = 'alpha'
 			versionNumber += 30000
-		elif 'd' in otherParts:
+		elif relType.startswith ( ('d', 'D') ):
 			releaseType = 'develop'
 
 	# if release all parts contribute to the main version number
@@ -450,7 +448,7 @@ def VersionToNumber (version):
 	if releaseType == 'release':
 		versionNumber += 90000
 	# if pre-release, last part will be the pre release part
-	#	and others part will be part the main version number
+	#	and other parts will be part the main version number
 	else:
 		numberPartsLength -= 1
 		if numberParts [numberPartsLength] != "":

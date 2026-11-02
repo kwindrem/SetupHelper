@@ -247,10 +247,8 @@ updateRootToReadWrite ()
 
 
 # convert a version string to an integer to make comparisions easier
-# the Victron format for version numbers is: vX.Y~Z-large-W
+# the Victron format for version numbers is: vX.Y~Z or vX.Y-betaZ (as of v3.90)
 # the ~Z portion indicates a pre-release version so a version without it is "newer" than a version with it
-# the -W portion has been abandoned but was like the ~Z for large builds and is IGNORED !!!!
-#	large builds now have the same version number as the "normal" build
 #
 # the version string passed to this function allows for quite a bit of flexibility
 #	any alpha characters are permitted prior to the first digit
@@ -258,15 +256,18 @@ updateRootToReadWrite ()
 #		each with up to 4 digits each -- MORE THAN 4 digits is indeterminate
 #	that is: v0.0.0d0  up to v9999.9999.9999b9999 and then v9999.9999.9999 as the highest priority
 #	any non-numeric character can be used to separate main versions
-#	special significance is assigned to single caracter separators between the numeric strings
-#		b or ~ indicates a beta release
-#		a indicates an alpha release
-#		d indicates an development release
-# 		these offset the pre-release number so that b/~ has higher numeric value than any a
+#	special significance is assigned to last separator STARTING with any of the following
+#		(ignoring initial '-' if it exits)
+#		~, b, B indicates a beta release
+#		a, A , t or T indicates an alpha release (t for testing)
+#		d or D indicates an development release
+# 		these offset the pre-release number so that b/~ has higher numeric value than any a or t
 #			and a has higher value than d separator
+#    for example: -beta, B, Beta, Bfoo, betazzz would all signify a beta relase
 #
 # a blank version or one without at least one number part is considered invalid
 # alpha and beta seperators require at least two number parts
+#	if only one number part is found the prerelease seperator is IGNORED
 #
 # returns 0 if conversion succeeeded, 1 if not
 # the value integer is returned in $versionNumber
@@ -302,22 +303,30 @@ function versionStringToNumber ()
 	fi
 	if (( $numberPartsLength >= 2 )); then
 		read -a otherParts <<< $(echo $version | tr -s '0-9' ' ')
-	
-		for other in ${otherParts[@]}; do
-			case $other in
-				'b' | '~')
+		otherPartsLength=${#otherParts[@]}
+		if (( $otherPartsLength >= 1 )); then
+			# test first character of release type string
+			#	ignore '-' if present
+			releaseStr=${otherParts[otherPartsLength - 1]}
+			if [[ "${releaseStr:0:1}" == "-" ]]; then
+				releaseChar="${releaseStr:1:1}"
+			else
+				releaseChar="${releaseStr:0:1}"
+			fi
+			case $releaseChar in
+				'~' | 'b' | 'B')
 					type='beta'
 					(( number += 60000 ))
-					break ;;
-				'a')
+					;;
+				'a' | 'A')
 					type='alpha'
 					(( number += 30000 ))
-					break ;;
-				'd')
+					;;
+				'd' | 'D')
 					type='develop'
-					break ;;
+					;;
 			esac
-		done
+		fi
 	fi
 
 	# if release all parts contribute to the main version number

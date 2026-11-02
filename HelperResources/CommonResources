@@ -1699,7 +1699,7 @@ if [ $scriptAction != 'UNINSTALL' ]; then
 					patchErrors+=( "$baseName patch unsuccesful" )
 					rm -f "$forwardPatched"
 				fi
-			elif ! $skipPatch ; then
+			elif ! $skipPatch ; then	#### TODO: - skipPatch is ALWAYS FALSE - is this an error ????
 				patchErrors+=( "$baseName no patch source" )
 			fi
 			rm -f "$tempActiveFile"

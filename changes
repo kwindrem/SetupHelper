@@ -1,3 +1,6 @@
+v9.6:
+	fixed: missing blind install files
+
 v9.5:
 	incorporate new "-beta" version string used starting with v3.90 firmware
 		also supports b* B* for beta

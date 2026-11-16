@@ -69,7 +69,8 @@ MbItem
 	height: versionColumn.height + 2
     Row
     {
-		leftPadding: 3
+		//leftPadding: 3 - doesn't work for older versions
+		Text { text: " " }
 		Column
 		{
 			width: root.width - versionColumn.width - 6;

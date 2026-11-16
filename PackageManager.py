@@ -144,7 +144,9 @@ EXIT_ERROR =				255 # generic error
 #									nanopi			Multi/Easy Solar GX
 #									raspberrypi2	Raspberry Pi 2/3
 #									raspberrypi4	Raspberry Pi 4
-#									ekrano			Ekrano GX
+#									raspberrypi5	Raspberry Pi 5
+#									ekrano			Ekrano GX / Nucleo GX
+#									am62xx			Cerbo GX Mk3
 #
 #		/ActionNeeded				informs GUI if further action is needed following a manual operation
 #									the operator has the option to defer reboots and GUI restarts (by choosing "Later")
@@ -4062,7 +4064,7 @@ def main():
 	else:
 		machine = file.readline().strip()
 		if machine == "einstein":
-			Platform = "Cerbo GX"
+			Platform = "Cerbo"
 		if machine == "cerbosgx":
 			Platform = "Cerbo SGX"
 		elif machine == "bealglebone":
@@ -4070,9 +4072,9 @@ def main():
 		elif machine == "ccgx":
 			Platform = "CCGX"
 		elif machine == "canvu500":
-			Platform = "CanVu 500"
+			Platform = "CanVu"
 		elif machine == "nanopi":
-			Platform = "Multi/Easy Solar GX"
+			Platform = "Multi/Easy Solar"
 		elif machine == "raspberrypi2":
 			Platform = "Raspberry Pi 2/3"
 		elif machine == "raspberrypi4":
@@ -4080,7 +4082,9 @@ def main():
 		elif machine == "raspberrypi5":
 			Platform = "Raspberry Pi 5"
 		elif machine == "ekrano":
-			Platform = "Ekrano GX"
+			Platform = "Ekrano/Nucleo"
+		elif machine == "am62xx":
+			Platform = "Cerbo Mk3"
 		else:
 			Platform = machine
 		file.close()

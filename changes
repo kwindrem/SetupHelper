@@ -1,3 +1,6 @@
+v9.7:
+	fixed: white screen in v3.31 and possibly other firmware versions
+	add Nucleo and Cerbo Mk3 platforms (just showing the correct name in PackageManager)
 v9.6:
 	fixed: missing blind install files
 

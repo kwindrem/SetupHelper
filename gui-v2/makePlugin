@@ -1,0 +1,63 @@
+#!/bin/bash
+
+# makePlugin builds gui-v2/PackageManager.json, the PackageManager menus for gui-v2,
+#	from the QML files in gui-v2/PackageManager
+#
+# the compiled PackageManager.json is part of the package
+#	so it does not need to be built on the GX device
+#	(Venus OS images no longer include the gui-v2 plugin compiler)
+#
+# usage: gui-v2/makePlugin <gui-v2 source directory>
+#
+#	the gui-v2 source (https://github.com/victronenergy/gui-v2) provides tools/gui-v2-plugin-compiler.py
+#	python3 and the Qt 6 tools rcc, lupdate and lrelease must be in PATH
+#		they are part of Qt, and also of the PySide6-Essentials Python package
+#
+# the plugin uses the Victron.GuiPlugins module that was added in gui-v2 v1.4.4 (Venus OS v3.90)
+#	the GUI ignores the plugin if it is older than minGuiVersion
+
+minGuiVersion="v1.4.4"
+pluginName="PackageManager"
+mainPage="PageSettingsPackageManager.qml"
+
+scriptDir="$( cd "$(dirname "$0")" >/dev/null 2>&1 || exit 1 ; pwd -P )"
+packageDir="$( dirname "$scriptDir" )"
+
+if [ -z "$1" ]; then
+	echo "usage: $0 <gui-v2 source directory>"
+	exit 1
+fi
+compiler="$1/tools/gui-v2-plugin-compiler.py"
+if [ ! -f "$compiler" ]; then
+	echo "$compiler not found"
+	exit 1
+fi
+
+# rcc stores file times in the plugin: use a fixed time so the same sources
+#	always give the same PackageManager.json (and installs replace it only when it really changed)
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1735689600}"
+
+# plugin version = package version without the leading "v"
+version="$( head -n 1 "$packageDir/version" )"
+version="${version#v}"
+
+# the compiler names the plugin after the directory it runs in
+#	and leaves its intermediate files there, so it runs in a temporary copy
+tempDir="$( mktemp -d )"
+workDir="$tempDir/$pluginName"
+mkdir "$workDir"
+cp "$scriptDir/$pluginName/"*.qml "$workDir"
+
+( cd "$workDir" && python3 "$compiler" --settings "$mainPage" --version "$version" \
+		--min-required-version "$minGuiVersion" )
+result=$?
+
+if [ $result -eq 0 ] && [ -f "$workDir/$pluginName.json" ]; then
+	cp "$workDir/$pluginName.json" "$scriptDir/$pluginName.json"
+	echo "built $scriptDir/$pluginName.json"
+else
+	echo "plugin build failed"
+	result=1
+fi
+rm -rf "$tempDir"
+exit $result

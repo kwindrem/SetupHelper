@@ -1067,6 +1067,153 @@ restartGuiV2Service ()
 	fi
 }
 
+
+# gui-v2 plugins
+#
+# a package may include compiled gui-v2 plugins in its gui-v2 directory: gui-v2/<pluginName>.json
+#	(built with gui-v2's tools/gui-v2-plugin-compiler.py, e.g. with SetupHelper's gui-v2/makePlugin)
+#
+# endScript installs them as gui-v2 "apps" on Venus OS v3.90 and newer:
+#	/data/apps/available/<pluginName>/gui-v2/<pluginName>.json
+#	and the link /data/apps/enabled/<pluginName> -> /data/apps/available/<pluginName>
+#	and removes them when the package is uninstalled
+#
+# gui-v2 on the local display watches these directories
+#	and loads, updates or removes the plugins without a GUI restart
+# the remote console (gui-v2 in the browser) gets them via MQTT from dbus-flashmq
+#	so they are also installed on systems that run gui-v2 only in the remote console
+#	(e.g. a Raspberry Pi without a local gui-v2)
+# the plugins are on /data so they survive firmware updates
+#
+# plugins written for the Victron.GuiPlugins module need gui-v2 v1.4.4 (Venus OS v3.90) or newer
+#	the GUI ignores a plugin that needs a newer gui-v2 (from gui-v2 v1.3, Venus OS v3.80)
+#	but the v3.70 GUI does not check, so plugins are installed only on v3.90 and newer
+
+guiV2PluginsFirstVenusVersion="v3.90~1"
+guiV2AppsAvailableDir="/data/apps/available"
+guiV2AppsEnabledDir="/data/apps/enabled"
+installedGuiV2PluginsList="$installedFilesDir/installedGuiV2Plugins-$packageName"
+
+# returns 0 if this system can use gui-v2 plugins
+#	gui-v2 on the local display (/opt/victronenergy/gui-v2)
+#	or in the remote console (/var/www/venus/gui-v2), on Venus OS v3.90 or newer
+
+guiV2PluginsSupported ()
+{
+	if [ ! -d "/opt/victronenergy/gui-v2" ] && [ ! -d "/var/www/venus/gui-v2" ]; then
+		return 1
+	fi
+	if [ -z "$venusVersionNumber" ]; then
+		return 1
+	fi
+	local venusNumber=$venusVersionNumber
+	versionStringToNumber $guiV2PluginsFirstVenusVersion
+	if (( venusNumber >= versionNumber )); then
+		return 0
+	else
+		return 1
+	fi
+}
+
+# lists the names of the gui-v2 plugins included in the package (one per line)
+#	gui-v2 plugin names contain only letters, digits and underscores (no spaces)
+
+getPackageGuiV2Plugins ()
+{
+	local pluginFile
+	for pluginFile in "$scriptDir/gui-v2/"*.json ; do
+		if [ -f "$pluginFile" ]; then
+			basename "$pluginFile" .json
+		fi
+	done
+}
+
+installGuiV2Plugins ()
+{
+	local pluginNames=( $( getPackageGuiV2Plugins ) )
+	local installedPlugins=()
+	local pluginName
+	local appDir
+	local pluginDir
+	local enabledLink
+
+	if (( ${#pluginNames[@]} == 0 )); then
+		return
+	fi
+	if ! guiV2PluginsSupported ; then
+		logMessage "gui-v2 plugins not installed: they need gui-v2 and Venus OS v3.90 or newer"
+		# remove plugins left from an install on newer firmware
+		uninstallGuiV2Plugins
+		return
+	fi
+
+	for pluginName in "${pluginNames[@]}"; do
+		appDir="$guiV2AppsAvailableDir/$pluginName"
+		pluginDir="$appDir/gui-v2"
+		enabledLink="$guiV2AppsEnabledDir/$pluginName"
+		# never replace an app that was not installed as a link
+		if [ -e "$enabledLink" ] && [ ! -L "$enabledLink" ]; then
+			logMessage "WARNING: $enabledLink is not a link - gui-v2 plugin $pluginName not installed"
+			continue
+		fi
+		mkdir -p "$pluginDir"
+		# replace the plugin only if it changed
+		#	gui-v2 reloads a plugin when its directory changes
+		#	so the new file is renamed into place (gui-v2 only reads *.json files)
+		if ! cmp -s "$scriptDir/gui-v2/$pluginName.json" "$pluginDir/$pluginName.json" ; then
+			logMessage "installing gui-v2 plugin $pluginName"
+			cp -f "$scriptDir/gui-v2/$pluginName.json" "$pluginDir/.$pluginName.json.new"
+			mv -f "$pluginDir/.$pluginName.json.new" "$pluginDir/$pluginName.json"
+		fi
+		if [ "$( readlink "$enabledLink" )" != "$appDir" ]; then
+			mkdir -p "$guiV2AppsEnabledDir"
+			ln -sfn "$appDir" "$enabledLink"
+		fi
+		installedPlugins+=( "$pluginName" )
+	done
+
+	# remember the installed plugins for the uninstall
+	if (( ${#installedPlugins[@]} == 0 )); then
+		rm -f "$installedGuiV2PluginsList"
+	else
+		printf "%s\n" "${installedPlugins[@]}" > "$installedGuiV2PluginsList"
+	fi
+}
+
+# removes the gui-v2 plugins installed from this package
+#	those in the installed plugins list and those included in the package
+
+uninstallGuiV2Plugins ()
+{
+	local pluginNames=( $( getPackageGuiV2Plugins ) )
+	local pluginName
+	local appDir
+
+	if [ -f "$installedGuiV2PluginsList" ]; then
+		pluginNames+=( $( cat "$installedGuiV2PluginsList" ) )
+	fi
+	if (( ${#pluginNames[@]} > 1 )); then
+		pluginNames=( $( printf "%s\n" "${pluginNames[@]}" | sort -u ) )
+	fi
+
+	for pluginName in "${pluginNames[@]}"; do
+		appDir="$guiV2AppsAvailableDir/$pluginName"
+		# the link goes first, so gui-v2 removes the plugin
+		if [ -L "$guiV2AppsEnabledDir/$pluginName" ] \
+				&& [ "$( readlink "$guiV2AppsEnabledDir/$pluginName" )" == "$appDir" ]; then
+			logMessage "removing gui-v2 plugin $pluginName"
+			rm -f "$guiV2AppsEnabledDir/$pluginName"
+		fi
+		if [ -f "$appDir/gui-v2/$pluginName.json" ]; then
+			rm -f "$appDir/gui-v2/$pluginName.json"
+			# remove the app directories only if nothing else is in them
+			rmdir "$appDir/gui-v2" 2> /dev/null
+			rmdir "$appDir" 2> /dev/null
+		fi
+	done
+	rm -f "$installedGuiV2PluginsList"
+}
+
 # determine how the setup script should exit based on $scriptAction and other flags
 # services may be restarted here also
 #
@@ -1105,6 +1252,9 @@ endScript ()
 			esac
 			shift
 		done
+
+		# gui-v2 plugins included in the package (gui-v2/*.json)
+		installGuiV2Plugins
 
 		# assume that if we get this far, any command line opitons have already been set
 		touch "$setupOptionsDir/optionsSet"
@@ -1153,6 +1303,7 @@ endScript ()
 		# ALWAYS attempt to uninstall files and services
 		uninstallAllFiles
 		uninstallAllServices
+		uninstallGuiV2Plugins
 
         # flag package not installed since package is being removed
         rm -f "$installedVersionFile"

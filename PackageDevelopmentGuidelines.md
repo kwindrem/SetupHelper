@@ -871,7 +871,7 @@ previously and on parameters passed when calling the function:
 
 - The following parameters are passed from the caller. All optional:
 
-  - **INSTALL_FILES** causes endScript to install/uninstall based on fileList, fileListVersionIndependent and fileListPatched lists.
+  - **INSTALL_FILES** causes endScript to install/uninstall based on fileList, fileListVersionIndependent and fileListPatched lists, and to install the gui-v2 plugins in the package's gui-v2 directory (see **gui-v2 plugins**).
 
   - **INSTALL_SERVICE** causes endScript to install/uninstall services located in the package services directory.
   
@@ -989,17 +989,27 @@ file per plugin: **gui-v2/\<pluginName\>.json**. The plugin name must
 start with a letter and contain only letters, digits and underscores,
 and it must be the name the plugin was compiled with.
 
-**endScript** installs them on Venus OS v3.90 and newer, without any code
-in the setup script:
+**installAllFiles** installs them on Venus OS v3.90 and newer together
+with the package's other files, so they are installed when the setup
+script passes **INSTALL_FILES** to **endScript** or calls
+**installAllFiles** itself. A setup script that installs its files with
+**updateActiveFile** calls can call **installGuiV2Plugins** instead.
+For each plugin:
 
 - the plugin is copied to /data/apps/available/\<pluginName\>/gui-v2/
 - the link /data/apps/enabled/\<pluginName\> is created
-- the installed plugins are remembered in
-/etc/venus/installedModifications/installedGuiV2Plugins-\<packageName\>
+- like other modified files, the plugin file is added to the installed
+files list and gets a .package file naming the package (and a .NO_ORIG
+or .orig file)
 
-When the package is uninstalled, the link and the plugin file are
-removed. An install on older firmware removes plugins left from an
-install on newer firmware.
+The install fails, and the package is uninstalled, if another package
+already installed a plugin with the same name, or if
+/data/apps/enabled/\<pluginName\> exists and is not a link to this app
+(package conflict).
+
+When the package is uninstalled, **uninstallAllFiles** removes the
+plugin file, the link and the empty app directories. An install on
+older firmware removes plugins left from an install on newer firmware.
 
 gui-v2 watches these directories and loads, updates or removes plugins
 without a GUI restart. It also serves them to the remote console. The

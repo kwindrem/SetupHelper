@@ -871,7 +871,7 @@ previously and on parameters passed when calling the function:
 
 - The following parameters are passed from the caller. All optional:
 
-  - **INSTALL_FILES** causes endScript to install/uninstall based on fileList, fileListVersionIndependent and fileListPatched lists.
+  - **INSTALL_FILES** causes endScript to install/uninstall based on fileList, fileListVersionIndependent and fileListPatched lists, and to install the gui-v2 plugins in the package's gui-v2 directory (see **gui-v2 plugins**).
 
   - **INSTALL_SERVICE** causes endScript to install/uninstall services located in the package services directory.
   
@@ -974,6 +974,62 @@ The following is a list of exit codes returned when endScript exits:
 
 - EXIT_ERROR=255 install failed - unknown error
 
+## gui-v2 plugins
+
+gui-v2 (the new GUI) can not be modified by replacing files like the
+Classic UI. Instead, gui-v2 loads plugins: pages written with the
+**Victron.GuiPlugins** QML module and compiled into one .json file.
+A plugin can add a page under Settings > Integrations > UI Plugins,
+pages for a device in the device list, a page in the navigation bar, or
+a card in the Controls or Switches pane. See gui-v2's guide:
+https://github.com/victronenergy/gui-v2/blob/main/.github/gui-plugins.md
+
+A package can include compiled plugins in its **gui-v2** directory, one
+file per plugin: **gui-v2/\<pluginName\>.json**. The plugin name must
+start with a letter and contain only letters, digits and underscores,
+and it must be the name the plugin was compiled with.
+
+**installAllFiles** installs them on Venus OS v3.90 and newer together
+with the package's other files, so they are installed when the setup
+script passes **INSTALL_FILES** to **endScript** or calls
+**installAllFiles** itself. A setup script that installs its files with
+**updateActiveFile** calls can call **installGuiV2Plugins** instead.
+For each plugin:
+
+- the plugin is copied to /data/apps/available/\<pluginName\>/gui-v2/
+- the link /data/apps/enabled/\<pluginName\> is created
+- like other modified files, the plugin file is added to the installed
+files list and gets a .package file naming the package (and a .NO_ORIG
+or .orig file)
+
+The install fails, and the package is uninstalled, if another package
+already installed a plugin with the same name, or if
+/data/apps/enabled/\<pluginName\> exists and is not a link to this app
+(package conflict).
+
+When the package is uninstalled, **uninstallAllFiles** removes the
+plugin file, the link and the empty app directories. An install on
+older firmware removes plugins left from an install on newer firmware.
+
+gui-v2 watches these directories and loads, updates or removes plugins
+without a GUI restart. It also serves them to the remote console. The
+plugins are on /data, so they are not affected by firmware updates.
+Plugin files are not GUI v1 files: they do not need
+**GUI_V1_NOT_REQUIRED**.
+
+Plugins that use **Victron.GuiPlugins** need gui-v2 v1.4.4 (Venus OS
+v3.90) or newer. Compile them with
+**--min-required-version v1.4.4**, so gui-v2 ignores the plugin on an
+older version.
+
+Venus OS images do not include the plugin compiler, so the compiled
+.json file must be part of the package. **gui-v2/makePlugin** in
+SetupHelper builds SetupHelper's own plugin from the QML files in
+**gui-v2/PackageManager** and can serve as an example. It needs a copy
+of the gui-v2 source (for tools/gui-v2-plugin-compiler.py), python3 and
+the Qt 6 tools rcc, lupdate and lrelease (part of Qt, and of the
+PySide6-Essentials Python package).
+
 ## PackageManager
 
 Package Manager includes a set of menus on the GX device menu system
@@ -984,6 +1040,21 @@ management.
 
 A PackageManager is a python program that runs as a service to do the
 actual work and to interface with the menus.
+
+The menus described below are those of the Classic UI (GUI v1). On Venus
+OS v3.90 and newer, the same menus are also available in gui-v2 at
+**Settings > Integrations > UI Plugins > PackageManager**, on the local
+display and in the remote console. They are a gui-v2 plugin built from
+the QML files in **gui-v2/PackageManager** (see **gui-v2 plugins**
+above). They use the same PackageManager service and settings, with
+these differences:
+
+- each action (download, install, uninstall, remove, resolve conflicts,
+reboot, initialize) asks for confirmation in a dialog instead of the
+Proceed / Cancel buttons
+- the Package editor has no Previous / Next buttons: go back to the
+Active packages list to select another package
+- the Add package menu stays open when the package has been added
 
 ### Package Manager menu
 

@@ -938,6 +938,9 @@ installAllFiles ()
 			updateActiveFile "$file"
 		done
 	fi
+
+	# gui-v2 plugins included in the package (gui-v2/*.json)
+	installGuiV2Plugins
 }
 
 # uninstall files from
@@ -949,6 +952,9 @@ installAllFiles ()
 
 uninstallAllFiles ()
 {
+	# gui-v2 plugins first (they are also in the installed files list)
+	uninstallGuiV2Plugins
+
 	local restoreFilesList=()
 	# add installdeFilesList if present (might be empty but that's fine)
 	if [ -f "$installedFilesList" ]; then
@@ -1067,12 +1073,275 @@ restartGuiV2Service ()
 	fi
 }
 
+
+# gui-v2 plugins
+#
+# a package may include compiled gui-v2 plugins in its gui-v2 directory: gui-v2/<pluginName>.json
+#	(built with gui-v2's tools/gui-v2-plugin-compiler.py, e.g. with SetupHelper's gui-v2/makePlugin)
+#
+# installAllFiles installs them as gui-v2 "apps" on Venus OS v3.90 and newer:
+#	/data/apps/available/<pluginName>/gui-v2/<pluginName>.json
+#	and the link /data/apps/enabled/<pluginName> -> /data/apps/available/<pluginName>
+#	so they are installed when the setup script passes INSTALL_FILES to endScript
+#	or calls installAllFiles (or installGuiV2Plugins) itself
+# uninstallAllFiles removes them
+#
+# plugin files are handled like other replacement files (see updateGuiV2Plugin):
+#	they are added to the installed files list
+#	and a .package file next to the plugin file names the package that installed it
+#	a plugin or app name already used by another package or app is a package conflict
+#
+# gui-v2 on the local display watches these directories
+#	and loads, updates or removes the plugins without a GUI restart
+# the remote console (gui-v2 in the browser) gets them via MQTT from dbus-flashmq
+#	so they are also installed on systems that run gui-v2 only in the remote console
+#	(e.g. a Raspberry Pi without a local gui-v2)
+# the plugins (and their .package files) are on /data so they survive firmware updates
+#
+# plugins written for the Victron.GuiPlugins module need gui-v2 v1.4.4 (Venus OS v3.90) or newer
+#	the GUI ignores a plugin that needs a newer gui-v2 (from gui-v2 v1.3, Venus OS v3.80)
+#	but the v3.70 GUI does not check, so plugins are installed only on v3.90 and newer
+
+guiV2PluginsFirstVenusVersion="v3.90~1"
+guiV2AppsAvailableDir="/data/apps/available"
+guiV2AppsEnabledDir="/data/apps/enabled"
+
+# returns 0 if this system can use gui-v2 plugins
+#	gui-v2 on the local display (/opt/victronenergy/gui-v2)
+#	or in the remote console (/var/www/venus/gui-v2), on Venus OS v3.90 or newer
+
+guiV2PluginsSupported ()
+{
+	if [ ! -d "/opt/victronenergy/gui-v2" ] && [ ! -d "/var/www/venus/gui-v2" ]; then
+		return 1
+	fi
+	if [ -z "$venusVersionNumber" ]; then
+		return 1
+	fi
+	local venusNumber=$venusVersionNumber
+	versionStringToNumber $guiV2PluginsFirstVenusVersion
+	if (( venusNumber >= versionNumber )); then
+		return 0
+	else
+		return 1
+	fi
+}
+
+# lists the names of the gui-v2 plugins included in the package (one per line)
+#	gui-v2 plugin names contain only letters, digits and underscores (no spaces)
+
+getPackageGuiV2Plugins ()
+{
+	local pluginFile
+	for pluginFile in "$scriptDir/gui-v2/"*.json ; do
+		if [ -f "$pluginFile" ]; then
+			basename "$pluginFile" .json
+		fi
+	done
+}
+
+
+# updateGuiV2Plugin installs one gui-v2 plugin from the package's gui-v2 directory
+#
+# this is updateActiveFile adapted to gui-v2 plugins:
+#	same conflict check (.package file), backup (.orig / .NO_ORIG) and installed files list
+#	failures call setInstallFailed so further install steps are skipped
+#		and the package is uninstalled
+# the differences:
+#	the active file is /data/apps/available/<pluginName>/gui-v2/<pluginName>.json
+#		and its directory is created if needed
+#	an existing /data/apps/enabled/<pluginName> that is not a link to this app
+#		is a package conflict
+#	the new plugin file is copied to a hidden name, then renamed into place
+#		gui-v2 watches the directory (not the file) and reads only *.json files,
+#		so it reloads the plugin once, with the complete file
+#	the existing file is backed up only when this package installs the plugin for the first time
+#		so an uninstall never restores an older version of this package's own plugin
+#	the app is then enabled with the link /data/apps/enabled/<pluginName>
+#
+# $1 is the plugin name
+#
+# global thisFileUpdated is set to true if the plugin file was updated, false if not
+# returns 0 if the plugin file was updated, 1 if not
+
+updateGuiV2Plugin ()
+{
+	thisFileUpdated=false
+
+	# don't do any work if install has already failed
+	if $installFailed ; then
+		return 1
+	fi
+
+	local pluginName="$1"
+	local sourceFile="$scriptDir/gui-v2/$pluginName.json"
+	local appDir="$guiV2AppsAvailableDir/$pluginName"
+	local pluginDir="$appDir/gui-v2"
+	local activeFile="$pluginDir/$pluginName.json"
+	local newFile="$pluginDir/.$pluginName.json.new"
+	local enabledLink="$guiV2AppsEnabledDir/$pluginName"
+	local packageList="$activeFile.package"
+	local previousPackage
+	local installedByThisPackage=false
+
+	if ! [ -f "$sourceFile" ]; then
+		setInstallFailed "$EXIT_FILE_SET_ERROR" "gui-v2 plugin $sourceFile does not exist"
+		return 1
+	fi
+
+	# can't continue if another app uses this name
+	if [ -e "$enabledLink" ] || [ -L "$enabledLink" ]; then
+		if ! [ -L "$enabledLink" ] || [ "$( readlink "$enabledLink" )" != "$appDir" ]; then
+			setInstallFailed "$EXIT_PACKAGE_CONFLICT" "gui-v2 app $enabledLink already exists"
+			return 1
+		fi
+	fi
+
+	# can't continue if another package installed this plugin
+	if [ -f "$packageList" ]; then
+		for previousPackage in $( cat "$packageList" ); do
+			if [ "$packageName" == "$previousPackage" ]; then
+				installedByThisPackage=true
+			else
+				setInstallFailed "$EXIT_PACKAGE_CONFLICT" "gui-v2 plugin $pluginName was already installed by $previousPackage"
+				return 1
+			fi
+		done
+	fi
+
+	if ! mkdir -p "$pluginDir" ; then
+		setInstallFailed "$EXIT_ERROR" "can't create $pluginDir"
+		return 1
+	fi
+
+	# add file to installed files list (used by uninstallAll)
+	if ! [ -e "$installedFilesList" ] \
+			|| (( $( grep -c "$activeFile" "$installedFilesList" ) == 0 )); then
+		echo "$activeFile" >> "$installedFilesList"
+	fi
+	echo "$packageName" > "$packageList"
+
+	# update the plugin file if needed
+	if ! [ -f "$activeFile" ] || ! cmp -s "$sourceFile" "$activeFile" ; then
+		logMessage "installing gui-v2 plugin $pluginName"
+		if ! $installedByThisPackage ; then
+			backupActiveFile "$activeFile"
+		fi
+		if cp "$sourceFile" "$newFile" && chmod +r "$newFile" && mv -f "$newFile" "$activeFile" ; then
+			updateRestartFlags "$activeFile"
+			thisFileUpdated=true
+		else
+			rm -f "$newFile"
+			setInstallFailed "$EXIT_ERROR" "can't install gui-v2 plugin $pluginName"
+			return 1
+		fi
+	fi
+
+	# enable the app - gui-v2 then loads the plugin
+	if ! [ -L "$enabledLink" ]; then
+		logMessage "enabling gui-v2 app $pluginName"
+		if ! mkdir -p "$guiV2AppsEnabledDir" || ! ln -s "$appDir" "$enabledLink" ; then
+			setInstallFailed "$EXIT_ERROR" "can't enable gui-v2 app $pluginName"
+			return 1
+		fi
+	fi
+
+	if $thisFileUpdated; then
+		return 0
+	else
+		return 1
+	fi
+} # end updateGuiV2Plugin ()
+
+
+# installGuiV2Plugins installs all gui-v2 plugins included in the package
+#	called from installAllFiles
+# on systems without gui-v2 plugin support, nothing is installed
+#	and plugins left from an install on newer firmware are removed
+
+installGuiV2Plugins ()
+{
+	# don't do any work if install has already failed
+	if $installFailed ; then
+		return
+	fi
+
+	local pluginNames=( $( getPackageGuiV2Plugins ) )
+	local pluginName
+
+	if (( ${#pluginNames[@]} == 0 )); then
+		return
+	fi
+	if ! guiV2PluginsSupported ; then
+		logMessage "gui-v2 plugins not installed - they need gui-v2 and Venus OS v3.90 or newer"
+		uninstallGuiV2Plugins
+		return
+	fi
+
+	logMessage "installing gui-v2 plugins"
+	for pluginName in "${pluginNames[@]}"; do
+		if $installFailed ; then break; fi
+		updateGuiV2Plugin "$pluginName"
+	done
+}
+
+
+# uninstallGuiV2Plugins removes the gui-v2 plugins installed by this package
+#	called from uninstallAllFiles (and from installGuiV2Plugins, see above)
+#
+# plugins are taken from the installed files list and from the package's gui-v2 directory
+#	(a firmware update erases the installed files list but not the plugins on /data)
+#	only plugins whose .package file names this package are removed
+# restoreActiveFile removes the plugin file, or restores the file that was there before the install
+# if the plugin file is gone, the app is disabled (link removed) and its empty directories are removed
+
+uninstallGuiV2Plugins ()
+{
+	local activeFiles=()
+	local activeFile
+	local pluginName
+	local appDir
+	local enabledLink
+
+	if [ -f "$installedFilesList" ]; then
+		activeFiles=( $( grep "^$guiV2AppsAvailableDir/" "$installedFilesList" ) )
+	fi
+	for pluginName in $( getPackageGuiV2Plugins ); do
+		activeFiles+=( "$guiV2AppsAvailableDir/$pluginName/gui-v2/$pluginName.json" )
+	done
+	if (( ${#activeFiles[@]} > 1 )); then
+		activeFiles=( $( printf "%s\n" "${activeFiles[@]}" | sort -u ) )
+	fi
+
+	for activeFile in "${activeFiles[@]}"; do
+		# not installed by this package
+		if ! [ -f "$activeFile.package" ] || ! grep -qxF "$packageName" "$activeFile.package" ; then
+			continue
+		fi
+		appDir=$( dirname "$( dirname "$activeFile" )" )
+		pluginName=$( basename "$appDir" )
+		enabledLink="$guiV2AppsEnabledDir/$pluginName"
+
+		logMessage "uninstalling gui-v2 plugin $pluginName"
+		restoreActiveFile "$activeFile"
+		if ! [ -e "$activeFile" ]; then
+			if [ -L "$enabledLink" ] && [ "$( readlink "$enabledLink" )" == "$appDir" ]; then
+				rm -f "$enabledLink"
+			fi
+			# remove the app directories only if nothing else is in them
+			rmdir "$appDir/gui-v2" 2> /dev/null
+			rmdir "$appDir" 2> /dev/null
+		fi
+	done
+}
+
 # determine how the setup script should exit based on $scriptAction and other flags
 # services may be restarted here also
 #
 # endScript accepts these optional parameters which determines if files and/or services are installed
 #
 #	'INSTALL_FILES' causes files from the file lists to be installed
+#		and the gui-v2 plugins in the package's gui-v2 directory
 #	'INSTALL_SERVICES' causes services in the services directory to be installed
 #		all services must be in the package's services directory
 #	'ADD_DBUS_SETTINGS' will add/update dBus settings from the DbusSettingsList

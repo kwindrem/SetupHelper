@@ -136,6 +136,14 @@ However, using the PackageManager menus is by far easier.
 
 Once SetupHelper is installed, updates to it and other packages can be performed through the Classic UI using the PackageManager menus.
 
+> [!NOTE]
+> On Venus OS v3.90 and newer, the PackageManager menus are also available in gui-v2 (the new GUI),
+> on the local display and in the remote console:
+> **Settings > Integrations > UI Plugins > PackageManager**
+>
+> SetupHelper installs these menus as a gui-v2 plugin (in /data/apps, so they survive firmware updates).
+> On older firmware, use the menus in the Classic UI (at the bottom of the Settings menu).
+
 > [!CAUTION]
 >  Package Manager allows uninstalling SetupHelper.
 >

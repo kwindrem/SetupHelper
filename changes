@@ -1,3 +1,8 @@
+v9.8:
+	add PackageManager menus for gui-v2 (Venus OS v3.90 and newer):
+		Settings > Integrations > UI Plugins > PackageManager
+	packages can include gui-v2 plugins (gui-v2/*.json)
+		installed with the package files (INSTALL_FILES / installAllFiles)
 v9.7:
 	fixed: white screen in v3.31 and possibly other firmware versions
 	add Nucleo and Cerbo Mk3 platforms (just showing the correct name in PackageManager)
